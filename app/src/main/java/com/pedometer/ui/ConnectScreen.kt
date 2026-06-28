@@ -71,7 +71,22 @@ fun ConnectScreen(
         val progress = (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f)
 
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectTapGestures {
+                        // Tap ring → open today detail
+                        val todayData = com.pedometer.health.DayStepData(
+                            date = java.time.LocalDate.now().toString(),
+                            totalSteps = currentSteps.toInt(),
+                            walkSteps = state.todayWalkSteps,
+                            runSteps = state.todayRunSteps,
+                            walkMinutes = 0,
+                            runMinutes = 0,
+                        )
+                        selectedDay = todayData
+                    }
+                },
             contentAlignment = Alignment.Center,
         ) {
             StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 14f)
