@@ -61,5 +61,7 @@ dependencies {
     implementation("com.google.protobuf:protobuf-javalite:4.28.3")
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
 
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha10")
+
     testImplementation("junit:junit:4.13.2")
 }

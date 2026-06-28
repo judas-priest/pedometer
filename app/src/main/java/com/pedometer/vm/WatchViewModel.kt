@@ -15,6 +15,7 @@ import com.pedometer.bt.SppConnection
 import com.pedometer.health.HealthService
 import com.pedometer.health.DayStepData
 import com.pedometer.health.PhoneStepCounter
+import com.pedometer.health.HealthConnectReader
 import com.pedometer.health.StepProviderReader
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
@@ -45,6 +46,8 @@ data class WatchState(
     val todayRunSteps: Int = 0,
     val todayWalkMinutes: Int = 0,
     val stepHistory: List<DayStepData> = emptyList(),
+    val healthConnectSteps: Long = 0,
+    val healthConnectHR: Int = 0,
 )
 
 enum class ConnectionStatus {
@@ -71,6 +74,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var weatherService: WeatherService? = null
     private var notificationService: NotificationService? = null
     private val phoneStepCounter = PhoneStepCounter(app)
+    private val healthConnectReader = HealthConnectReader(app)
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -97,6 +101,22 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "StepProvider failed", e)
+            }
+        }
+
+        // Read Health Connect data
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (healthConnectReader.isAvailable()) {
+                    val hcSteps = healthConnectReader.readTodaySteps()
+                    val hcHR = healthConnectReader.readLatestHeartRate()
+                    _state.value = _state.value.copy(
+                        healthConnectSteps = hcSteps,
+                        healthConnectHR = hcHR,
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Health Connect failed", e)
             }
         }
 

@@ -103,13 +103,20 @@ fun ConnectScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MetricCard(
-                title = "Heart Rate",
-                value = if (state.heartRate > 0) "${state.heartRate}" else "--",
-                unit = "bpm",
-                color = HeartRed,
-                modifier = Modifier.weight(1f),
-            )
+            run {
+                val hr = when {
+                    state.heartRate > 0 -> state.heartRate
+                    state.healthConnectHR > 0 -> state.healthConnectHR
+                    else -> 0
+                }
+                MetricCard(
+                    title = "Heart Rate",
+                    value = if (hr > 0) "$hr" else "--",
+                    unit = "bpm",
+                    color = HeartRed,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             MetricCard(
                 title = "Active",
                 value = "${state.todayWalkMinutes}",
