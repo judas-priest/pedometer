@@ -169,6 +169,63 @@ object StepProviderReader {
         }
     }
 
+    fun probeAllPaths(context: Context) {
+        val paths = listOf(
+            "/day_statistic", "/hour_statistic", "/minute_statistic",
+            "/day_step", "/hour_step", "/minute_step",
+            "/step_detail", "/step_summary", "/step_history",
+            "/calorie", "/calories", "/day_calorie",
+            "/sleep", "/sleep_data", "/heart_rate",
+            "/activity", "/sport", "/workout",
+        )
+        for (path in paths) {
+            try {
+                val uri = Uri.parse("content://$AUTHORITY$path")
+                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                if (cursor != null) {
+                    Log.i(TAG, "PROBE '$path': ${cursor.count} rows, cols=${cursor.columnNames.joinToString()}")
+                    if (cursor.moveToFirst()) {
+                        val row = (0 until cursor.columnCount).joinToString(" | ") { i ->
+                            "${cursor.getColumnName(i)}=${cursor.getString(i)}"
+                        }
+                        Log.i(TAG, "  FIRST: $row")
+                    }
+                    cursor.close()
+                }
+            } catch (e: Exception) {
+                // silent
+            }
+        }
+
+        // Also try call methods
+        val methods = listOf(
+            "method_get_today_step_count",
+            "method_get_current_step",
+            "method_call_by_assistantscreen_and_health_from_table_day_step_data",
+            "method_call_by_assistantscreen_and_health_from_table_hour_step_data",
+            "method_call_by_assistantscreen_and_health_from_table_minute_step_data",
+        )
+        for (method in methods) {
+            try {
+                val extras = android.os.Bundle().apply {
+                    putString("day_date", java.time.LocalDate.now().format(DATE_FMT))
+                }
+                val result = context.contentResolver.call(
+                    Uri.parse("content://$AUTHORITY"), method, null, extras
+                )
+                if (result != null && result.keySet().isNotEmpty()) {
+                    Log.i(TAG, "CALL '$method': keys=${result.keySet()}")
+                    for (key in result.keySet()) {
+                        val v = result.get(key)
+                        Log.i(TAG, "  $key = $v (${v?.javaClass?.simpleName})")
+                    }
+                }
+            } catch (e: Exception) {
+                // silent
+            }
+        }
+    }
+
     private fun getIntSafe(cursor: android.database.Cursor, col: String): Int {
         val idx = cursor.getColumnIndex(col)
         return if (idx >= 0) cursor.getInt(idx) else 0
