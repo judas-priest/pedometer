@@ -57,9 +57,8 @@ fun ConnectScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp),
     ) {
         // Step ring hero
         val stepGoal = 6000
@@ -72,16 +71,14 @@ fun ConnectScreen(
         val progress = (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f)
 
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            StepRing(progress = progress, color = StepGreen, size = 200f, strokeWidth = 16f)
+            StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 14f)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "$currentSteps",
-                    fontSize = 48.sp,
+                    fontSize = 40.sp,
                     fontWeight = FontWeight.Bold,
                     color = StepGreen,
                 )
