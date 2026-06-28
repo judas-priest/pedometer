@@ -144,8 +144,11 @@ object StepProviderReader {
                     runMinutes = (curr.runMinutes - prev.runMinutes).coerceAtLeast(0),
                 ))
             } else {
-                // Reboot happened — curr.totalSteps IS the daily count (from 0)
-                result.add(curr)
+                // Reboot happened — steps reset to 0, but minutes may still be cumulative
+                result.add(curr.copy(
+                    walkMinutes = (curr.walkMinutes - prev.walkMinutes).coerceAtLeast(0),
+                    runMinutes = (curr.runMinutes - prev.runMinutes).coerceAtLeast(0),
+                ))
             }
         }
         return result
