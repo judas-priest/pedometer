@@ -74,7 +74,7 @@ fun ConnectScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 24.dp),
+                .padding(vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             StepRing(progress = progress, color = StepGreen, size = 200f, strokeWidth = 16f)

@@ -17,7 +17,7 @@
 
     <application
         android:name=".PedometerApp"
-        android:label="Pedometer"
+        android:label="Шагомер"
         android:theme="@style/Theme.Pedometer">
 
         <activity
