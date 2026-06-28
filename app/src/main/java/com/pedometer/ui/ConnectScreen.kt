@@ -70,7 +70,7 @@ fun ConnectScreen(
         }
         val progress = (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f)
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
         Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
@@ -91,7 +91,7 @@ fun ConnectScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
 
         // Metric cards grid
         Row(
