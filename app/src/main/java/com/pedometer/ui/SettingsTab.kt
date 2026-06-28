@@ -6,13 +6,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.pedometer.health.UserProfile
 import com.pedometer.vm.ConnectionStatus
 import com.pedometer.vm.WatchState
 
@@ -23,6 +25,7 @@ fun SettingsTab(
     onMacChange: (String) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
+    onProfileChange: (UserProfile) -> Unit = {},
 ) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -30,17 +33,122 @@ fun SettingsTab(
         if (results.values.all { it }) onConnect()
     }
 
+    val profile = state.profile
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
-        Text("Настройки", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(24.dp))
+        Text("Настройки", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(16.dp))
 
-        // Watch section
+        // Profile
+        Text("Профиль", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                var heightText by remember { mutableStateOf(profile.heightCm.toString()) }
+                var weightText by remember { mutableStateOf(profile.weightKg.toString()) }
+                var goalText by remember { mutableStateOf(profile.stepGoal.toString()) }
+
+                OutlinedTextField(
+                    value = heightText,
+                    onValueChange = {
+                        heightText = it
+                        it.toIntOrNull()?.let { h ->
+                            onProfileChange(profile.copy(heightCm = h))
+                        }
+                    },
+                    label = { Text("Рост (см)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = weightText,
+                    onValueChange = {
+                        weightText = it
+                        it.toIntOrNull()?.let { w ->
+                            onProfileChange(profile.copy(weightKg = w))
+                        }
+                    },
+                    label = { Text("Вес (кг)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Пол:", modifier = Modifier.width(50.dp))
+                    FilterChip(
+                        selected = profile.isMale,
+                        onClick = { onProfileChange(profile.copy(isMale = true)) },
+                        label = { Text("М") },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    FilterChip(
+                        selected = !profile.isMale,
+                        onClick = { onProfileChange(profile.copy(isMale = false)) },
+                        label = { Text("Ж") },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = goalText,
+                    onValueChange = {
+                        goalText = it
+                        it.toIntOrNull()?.let { g ->
+                            onProfileChange(profile.copy(stepGoal = g))
+                        }
+                    },
+                    label = { Text("Цель шагов") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Background service
+        Text("Фоновый процесс", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Фоновый сбор данных", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Почасовой график, cadence, этажи. Расходует батарею",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = profile.backgroundServiceEnabled,
+                        onCheckedChange = {
+                            onProfileChange(profile.copy(backgroundServiceEnabled = it))
+                        },
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Watch
         Text("Часы", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
 
@@ -113,21 +221,16 @@ fun SettingsTab(
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+
         Text("О приложении", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Шагомер", style = MaterialTheme.typography.titleSmall)
-                Text("Версия 0.1.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Данные: OPLUS StepProvider, телефонный сенсор, Health Connect",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("Версия 0.2.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }

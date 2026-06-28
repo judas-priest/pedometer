@@ -61,7 +61,7 @@ fun ConnectScreen(
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         // Step ring hero
-        val stepGoal = 6000
+        val stepGoal = state.profile.stepGoal
         // Priority: Health Connect (accurate daily) > StepProvider > phone sensor session
         val currentSteps = when {
             state.healthConnectSteps > 0 -> state.healthConnectSteps
@@ -120,15 +120,11 @@ fun ConnectScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             run {
-                val hr = when {
-                    state.heartRate > 0 -> state.heartRate
-                    state.healthConnectHR > 0 -> state.healthConnectHR
-                    else -> 0
-                }
+                val totalSteps = state.todayWalkSteps + state.todayRunSteps
                 MetricCard(
-                    title = "Пульс",
-                    value = if (hr > 0) "$hr" else "--",
-                    unit = "уд/мин",
+                    title = "Калории",
+                    value = "%.0f".format(state.profile.calcCalories(totalSteps)),
+                    unit = "ккал",
                     color = HeartRed,
                     modifier = Modifier.weight(1f),
                 )
@@ -137,7 +133,7 @@ fun ConnectScreen(
                 val totalSteps = state.todayWalkSteps + state.todayRunSteps
                 MetricCard(
                     title = "Дистанция",
-                    value = "%.1f".format(totalSteps * 0.0007),
+                    value = "%.2f".format(state.profile.calcDistance(totalSteps)),
                     unit = "км",
                     color = StandBlue,
                     modifier = Modifier.weight(1f),
@@ -385,9 +381,9 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 MetricCard(
-                    title = "Дистанция",
-                    value = "%.1f".format(day.totalSteps * 0.0007),
-                    unit = "км",
+                    title = "Калории",
+                    value = "%.0f".format(com.pedometer.health.UserProfile().calcCalories(day.totalSteps)),
+                    unit = "ккал",
                     color = CalorieOrange,
                     modifier = Modifier.weight(1f),
                 )

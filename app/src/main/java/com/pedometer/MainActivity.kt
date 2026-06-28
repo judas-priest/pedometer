@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
                                 onMacChange = vm::updateMacAddress,
                                 onConnect = vm::connect,
                                 onDisconnect = vm::disconnect,
+                                onProfileChange = vm::updateProfile,
                             )
                         }
                     }

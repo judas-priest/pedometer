@@ -17,6 +17,7 @@ import com.pedometer.health.DayStepData
 import com.pedometer.health.PhoneStepCounter
 import com.pedometer.health.HealthConnectReader
 import com.pedometer.health.StepProviderReader
+import com.pedometer.health.UserProfile
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.weather.WeatherService
@@ -48,6 +49,7 @@ data class WatchState(
     val stepHistory: List<DayStepData> = emptyList(),
     val healthConnectSteps: Long = 0,
     val healthConnectHR: Int = 0,
+    val profile: UserProfile = UserProfile(),
 )
 
 enum class ConnectionStatus {
@@ -75,6 +77,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var notificationService: NotificationService? = null
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
+    private var userProfile = UserProfile.load(app)
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -82,6 +85,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             authKey = prefs.getString(KEY_AUTH, "") ?: "",
             macAddress = prefs.getString(KEY_MAC, "") ?: "",
         )
+
+        _state.value = _state.value.copy(profile = userProfile)
 
         // Load step history from OPLUS StepProvider
         viewModelScope.launch(Dispatchers.IO) {
@@ -131,6 +136,21 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             phoneStepCounter.totalStepsSinceBoot.collect { total ->
                 _state.value = _state.value.copy(phoneStepsSinceBoot = total)
             }
+        }
+    }
+
+    fun updateProfile(profile: UserProfile) {
+        userProfile = profile
+        UserProfile.save(getApplication(), profile)
+        _state.value = _state.value.copy(profile = profile)
+
+        // Start/stop background service
+        val context = getApplication<Application>()
+        val intent = android.content.Intent(context, com.pedometer.service.StepCounterService::class.java)
+        if (profile.backgroundServiceEnabled) {
+            context.startForegroundService(intent)
+        } else {
+            context.stopService(intent)
         }
     }
 
