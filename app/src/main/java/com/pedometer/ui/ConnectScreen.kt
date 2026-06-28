@@ -107,54 +107,12 @@ fun ConnectScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // Metric cards grid
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            MetricCard(
-                title = "Ходьба",
-                value = "${state.todayWalkSteps}",
-                unit = "шагов",
-                color = StepGreen,
-                modifier = Modifier.weight(1f),
-            )
-            MetricCard(
-                title = "Бег",
-                value = "${state.todayRunSteps}",
-                unit = "шагов",
-                color = CalorieOrange,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            run {
-                val totalSteps = state.todayWalkSteps + state.todayRunSteps
-                MetricCard(
-                    title = "Калории",
-                    value = "%.0f".format(state.profile.calcCalories(totalSteps)),
-                    unit = "ккал",
-                    color = HeartRed,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            run {
-                val totalSteps = state.todayWalkSteps + state.todayRunSteps
-                MetricCard(
-                    title = "Дистанция",
-                    value = "%.2f".format(state.profile.calcDistance(totalSteps)),
-                    unit = "км",
-                    color = StandBlue,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
+        StepMetricCards(
+            walkSteps = state.todayWalkSteps,
+            runSteps = state.todayRunSteps,
+            totalSteps = (state.todayWalkSteps + state.todayRunSteps),
+            profile = state.profile,
+        )
 
         // Step history bar chart
         if (state.stepHistory.isNotEmpty()) {
@@ -220,6 +178,30 @@ fun MetricCard(title: String, value: String, unit: String, color: Color, modifie
                 Text(unit, style = MaterialTheme.typography.bodySmall, color = color.copy(alpha = 0.7f))
             }
         }
+    }
+}
+
+@Composable
+fun StepMetricCards(
+    walkSteps: Int,
+    runSteps: Int,
+    totalSteps: Int,
+    profile: com.pedometer.health.UserProfile,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        MetricCard(title = "Ходьба", value = "$walkSteps", unit = "шагов", color = StepGreen, modifier = Modifier.weight(1f))
+        MetricCard(title = "Бег", value = "$runSteps", unit = "шагов", color = CalorieOrange, modifier = Modifier.weight(1f))
+    }
+    Spacer(Modifier.height(12.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        MetricCard(title = "Калории", value = "%.0f".format(profile.calcCalories(totalSteps)), unit = "ккал", color = HeartRed, modifier = Modifier.weight(1f))
+        MetricCard(title = "Дистанция", value = "%.2f".format(profile.calcDistance(totalSteps)), unit = "км", color = StandBlue, modifier = Modifier.weight(1f))
     }
 }
 
@@ -362,47 +344,12 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, profile: com.pedomete
 
             Spacer(Modifier.height(16.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                MetricCard(
-                    title = "Ходьба",
-                    value = "${day.walkSteps}",
-                    unit = "шаг.",
-                    color = StepGreen,
-                    modifier = Modifier.weight(1f),
-                )
-                MetricCard(
-                    title = "Бег",
-                    value = "${day.runSteps}",
-                    unit = "шаг.",
-                    color = CalorieOrange,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                MetricCard(
-                    title = "Всего",
-                    value = "${day.totalSteps}",
-                    unit = "шагов",
-                    color = StandBlue,
-                    modifier = Modifier.weight(1f),
-                )
-                MetricCard(
-                    title = "Калории",
-                    value = "%.0f".format(profile.calcCalories(day.totalSteps)),
-                    unit = "ккал",
-                    color = CalorieOrange,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            StepMetricCards(
+                walkSteps = day.walkSteps,
+                runSteps = day.runSteps,
+                totalSteps = day.totalSteps,
+                profile = profile,
+            )
         }
     }
 }
