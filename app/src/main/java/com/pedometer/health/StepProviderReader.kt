@@ -77,13 +77,15 @@ object StepProviderReader {
                         "${cursor.getColumnName(i)}=${cursor.getString(i)}"
                     }
                     Log.i(TAG, "  RAW: $allVals")
+                    // day_offset* = correct daily values
+                    // day_step* = cumulative since boot (NOT daily)
                     data = DayStepData(
                         date = dateStr,
-                        totalSteps = getIntSafe(cursor, "day_step"),
-                        walkSteps = getIntSafe(cursor, "day_step_walk"),
-                        runSteps = getIntSafe(cursor, "day_step_run"),
-                        walkMinutes = getIntSafe(cursor, "day_offset_walk"),
-                        runMinutes = getIntSafe(cursor, "day_offset_run"),
+                        totalSteps = getIntSafe(cursor, "day_offset"),
+                        walkSteps = getIntSafe(cursor, "day_offset_walk"),
+                        runSteps = getIntSafe(cursor, "day_offset_run"),
+                        walkMinutes = 0,
+                        runMinutes = 0,
                     )
                 }
                 cursor.close()
@@ -123,56 +125,8 @@ object StepProviderReader {
 
     fun readHistory(context: Context, days: Int = 7): List<DayStepData> {
         val today = LocalDate.now()
-        // Read raw cumulative data for days+1 to compute daily diffs
-        val rawDays = (0..days).mapNotNull { offset ->
+        return (0 until days).mapNotNull { offset ->
             readDay(context, today.minusDays(offset.toLong()))
-        }
-
-        // Convert cumulative to daily by computing differences
-        val result = mutableListOf<DayStepData>()
-        for (i in 0 until rawDays.size - 1) {
-            val curr = rawDays[i]
-            val prev = rawDays[i + 1]
-            val dailySteps = curr.totalSteps - prev.totalSteps
-            if (dailySteps >= 0) {
-                // Normal day (no reboot)
-                result.add(curr.copy(
-                    totalSteps = dailySteps,
-                    walkSteps = (curr.walkSteps - prev.walkSteps).coerceAtLeast(0),
-                    runSteps = (curr.runSteps - prev.runSteps).coerceAtLeast(0),
-                    walkMinutes = (curr.walkMinutes - prev.walkMinutes).coerceAtLeast(0),
-                    runMinutes = (curr.runMinutes - prev.runMinutes).coerceAtLeast(0),
-                ))
-            } else {
-                // Reboot happened — steps reset to 0, but minutes may still be cumulative
-                result.add(curr.copy(
-                    walkMinutes = (curr.walkMinutes - prev.walkMinutes).coerceAtLeast(0),
-                    runMinutes = (curr.runMinutes - prev.runMinutes).coerceAtLeast(0),
-                ))
-            }
-        }
-        return result
-    }
-
-    fun readTodayActual(context: Context): DayStepData? {
-        val today = LocalDate.now()
-        val todayRaw = readDay(context, today) ?: return null
-        val yesterdayRaw = readDay(context, today.minusDays(1))
-
-        if (yesterdayRaw == null) return todayRaw
-
-        val diff = todayRaw.totalSteps - yesterdayRaw.totalSteps
-        return if (diff >= 0) {
-            todayRaw.copy(
-                totalSteps = diff,
-                walkSteps = (todayRaw.walkSteps - yesterdayRaw.walkSteps).coerceAtLeast(0),
-                runSteps = (todayRaw.runSteps - yesterdayRaw.runSteps).coerceAtLeast(0),
-                walkMinutes = (todayRaw.walkMinutes - yesterdayRaw.walkMinutes).coerceAtLeast(0),
-                runMinutes = (todayRaw.runMinutes - yesterdayRaw.runMinutes).coerceAtLeast(0),
-            )
-        } else {
-            // Reboot happened today — raw value is already daily
-            todayRaw
         }
     }
 
