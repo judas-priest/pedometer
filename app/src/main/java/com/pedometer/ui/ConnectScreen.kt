@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -74,7 +76,7 @@ fun ConnectScreen(
                     color = StepGreen,
                 )
                 Text(
-                    "/ $stepGoal steps",
+                    "/ $stepGoal шагов",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -87,16 +89,16 @@ fun ConnectScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             MetricCard(
-                title = "Walking",
+                title = "Ходьба",
                 value = "${state.todayWalkSteps}",
-                unit = "${state.todayWalkMinutes} min",
+                unit = "${state.todayWalkMinutes} мин",
                 color = StepGreen,
                 modifier = Modifier.weight(1f),
             )
             MetricCard(
-                title = "Running",
+                title = "Бег",
                 value = "${state.todayRunSteps}",
-                unit = "steps",
+                unit = "шагов",
                 color = CalorieOrange,
                 modifier = Modifier.weight(1f),
             )
@@ -115,17 +117,17 @@ fun ConnectScreen(
                     else -> 0
                 }
                 MetricCard(
-                    title = "Heart Rate",
+                    title = "Пульс",
                     value = if (hr > 0) "$hr" else "--",
-                    unit = "bpm",
+                    unit = "уд/мин",
                     color = HeartRed,
                     modifier = Modifier.weight(1f),
                 )
             }
             MetricCard(
-                title = "Active",
+                title = "Активность",
                 value = "${state.todayWalkMinutes}",
-                unit = "min",
+                unit = "мин",
                 color = StandBlue,
                 modifier = Modifier.weight(1f),
             )
@@ -135,7 +137,7 @@ fun ConnectScreen(
         if (state.stepHistory.isNotEmpty()) {
             Spacer(Modifier.height(24.dp))
             Text(
-                "This Week",
+                "За неделю",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -147,7 +149,7 @@ fun ConnectScreen(
 
         // Watch connection section
         Text(
-            "Watch",
+            "Часы",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -161,7 +163,7 @@ fun ConnectScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Redmi Watch 5 Lite", style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    if (state.macAddress.isNotBlank()) state.macAddress else "Not configured",
+                                    if (state.macAddress.isNotBlank()) state.macAddress else "Не настроено",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -181,7 +183,7 @@ fun ConnectScreen(
                                 },
                                 enabled = state.authKey.isNotBlank() && state.macAddress.isNotBlank(),
                             ) {
-                                Text("Connect")
+                                Text("Подключить")
                             }
                         }
                     }
@@ -190,7 +192,7 @@ fun ConnectScreen(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(12.dp))
                             Text(
-                                if (state.connectionStatus == ConnectionStatus.Connecting) "Connecting..." else "Authenticating...",
+                                if (state.connectionStatus == ConnectionStatus.Connecting) "Подключение..." else "Авторизация...",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -199,12 +201,12 @@ fun ConnectScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    if (state.model.isNotBlank()) state.model else "Connected",
+                                    if (state.model.isNotBlank()) state.model else "Подключено",
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 if (state.batteryLevel >= 0) {
                                     Text(
-                                        "Battery ${state.batteryLevel}%${if (state.batteryCharging) " charging" else ""}",
+                                        "Заряд ${state.batteryLevel}%${if (state.batteryCharging) " заряжается" else ""}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -216,7 +218,7 @@ fun ConnectScreen(
                                     containerColor = MaterialTheme.colorScheme.errorContainer,
                                 ),
                             ) {
-                                Text("Disconnect")
+                                Text("Отключить")
                             }
                         }
                     }
@@ -228,7 +230,7 @@ fun ConnectScreen(
         Spacer(Modifier.height(8.dp))
         var showSettings by remember { mutableStateOf(state.macAddress.isBlank()) }
         TextButton(onClick = { showSettings = !showSettings }) {
-            Text(if (showSettings) "Hide settings" else "Settings")
+            Text(if (showSettings) "Скрыть настройки" else "Настройки")
         }
         if (showSettings) {
             OutlinedTextField(
@@ -308,20 +310,44 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
     val maxSteps = (history.maxOfOrNull { it.totalSteps } ?: goal).coerceAtLeast(goal)
     val barColor = StepGreen
     val goalColor = StepGreen.copy(alpha = 0.3f)
+    val days = history.reversed().take(7)
+    var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Selected day info
+            if (selectedDay != null) {
+                val d = selectedDay!!
+                Text(
+                    "${d.date}: ${d.totalSteps} шагов (${d.walkSteps} ходьба, ${d.runSteps} бег)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = StepGreen,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp)
+                    .pointerInput(days) {
+                        detectTapGestures { offset ->
+                            val barCount = days.size
+                            if (barCount == 0) return@detectTapGestures
+                            val barWidth = size.width / (barCount * 2f)
+                            val spacing = barWidth
+                            val tappedIndex = ((offset.x - spacing / 2) / (barWidth + spacing)).toInt()
+                            if (tappedIndex in days.indices) {
+                                selectedDay = days[tappedIndex]
+                            }
+                        }
+                    }
             ) {
-                val barCount = history.size.coerceAtMost(7)
+                val barCount = days.size
                 if (barCount == 0) return@Canvas
                 val barWidth = size.width / (barCount * 2f)
                 val spacing = barWidth
 
-                // Goal line
                 val goalY = size.height * (1f - goal.toFloat() / maxSteps)
                 drawLine(
                     color = goalColor,
@@ -330,10 +356,15 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
                     strokeWidth = 2f,
                 )
 
-                history.reversed().take(7).forEachIndexed { i, day ->
+                days.forEachIndexed { i, day ->
                     val barHeight = (day.totalSteps.toFloat() / maxSteps) * size.height
                     val x = i * (barWidth + spacing) + spacing / 2
-                    val color = if (day.totalSteps >= goal) barColor else barColor.copy(alpha = 0.5f)
+                    val isSelected = selectedDay?.date == day.date
+                    val color = when {
+                        isSelected -> barColor
+                        day.totalSteps >= goal -> barColor.copy(alpha = 0.8f)
+                        else -> barColor.copy(alpha = 0.4f)
+                    }
                     drawRoundRect(
                         color = color,
                         topLeft = Offset(x, size.height - barHeight),
@@ -345,11 +376,13 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
 
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                history.reversed().take(7).forEach { day ->
+                days.forEach { day ->
+                    val isSelected = selectedDay?.date == day.date
                     Text(
                         day.date.takeLast(2),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (isSelected) StepGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     )
                 }
             }
