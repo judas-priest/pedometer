@@ -200,10 +200,8 @@ class ProtocolHandler(
         Log.d(TAG, "sendCommand type=${command.type} subtype=${command.subtype} forAuth=$forAuth encrypted=${!forAuth && authService.isInitialized} dataLen=${data.size}")
 
         val packet: ByteArray = if (useV2) {
-            val encrypt: ((ByteArray) -> ByteArray)? = if (!forAuth && authService.isInitialized) {
-                { authService.encrypt(it, 0) }
-            } else null
-            PacketV2.encodeDataPacket(channel, packetSeqV2.getAndIncrement(), data, encrypt)
+            // Send as plaintext with opCode=1 to test if watch accepts unencrypted commands
+            PacketV2.encodeDataPacket(channel, packetSeqV2.getAndIncrement(), data, null)
         } else {
             val dataType = if (forAuth) PacketV1.DATA_TYPE_AUTH else PacketV1.DATA_TYPE_ENCRYPTED
             var payload = data

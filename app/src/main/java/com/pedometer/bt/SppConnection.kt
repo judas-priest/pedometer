@@ -111,7 +111,9 @@ class SppConnection(
             while (running) {
                 val n = inputStream?.read(buf) ?: -1
                 if (n < 0) break
-                onData(buf.copyOf(n))
+                val received = buf.copyOf(n)
+                Log.d(TAG, "RAW RX ${received.size} bytes: ${received.take(32).joinToString(":") { "%02x".format(it) }}${if (received.size > 32) "..." else ""}")
+                onData(received)
             }
         } catch (e: IOException) {
             if (running) Log.e(TAG, "Read error", e)

@@ -13,6 +13,7 @@ import com.pedometer.bt.BleConnection
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
 import com.pedometer.health.HealthService
+import com.pedometer.health.PhoneStepCounter
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.weather.WeatherService
@@ -36,6 +37,8 @@ data class WatchState(
     val calories: Int = 0,
     val heartRate: Int = 0,
     val standingHours: Int = 0,
+    val phoneSteps: Long = 0,
+    val phoneStepsSinceBoot: Long = 0,
 )
 
 enum class ConnectionStatus {
@@ -61,6 +64,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var musicService: MusicService? = null
     private var weatherService: WeatherService? = null
     private var notificationService: NotificationService? = null
+    private val phoneStepCounter = PhoneStepCounter(app)
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -68,6 +72,19 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             authKey = prefs.getString(KEY_AUTH, "") ?: "",
             macAddress = prefs.getString(KEY_MAC, "") ?: "",
         )
+
+        // Start phone step counter
+        phoneStepCounter.start()
+        viewModelScope.launch {
+            phoneStepCounter.stepsSinceStart.collect { steps ->
+                _state.value = _state.value.copy(phoneSteps = steps)
+            }
+        }
+        viewModelScope.launch {
+            phoneStepCounter.totalStepsSinceBoot.collect { total ->
+                _state.value = _state.value.copy(phoneStepsSinceBoot = total)
+            }
+        }
     }
 
     fun updateAuthKey(key: String) {
@@ -238,6 +255,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        phoneStepCounter.stop()
         disconnect()
     }
 }

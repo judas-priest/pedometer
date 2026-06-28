@@ -16,26 +16,46 @@ fun HealthDashboard(state: WatchState) {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Health", style = MaterialTheme.typography.titleLarge)
+        Text("Phone Sensors", style = MaterialTheme.typography.titleLarge)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            StatCard(title = "Steps", value = "${state.steps}", modifier = Modifier.weight(1f))
             StatCard(
-                title = "Heart Rate",
-                value = if (state.heartRate > 0) "${state.heartRate} bpm" else "--",
+                title = "Steps (phone)",
+                value = "${state.phoneStepsSinceBoot}",
+                modifier = Modifier.weight(1f),
+            )
+            StatCard(
+                title = "Session",
+                value = "${state.phoneSteps}",
                 modifier = Modifier.weight(1f),
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            StatCard(title = "Calories", value = "${state.calories} kcal", modifier = Modifier.weight(1f))
-            StatCard(title = "Standing", value = "${state.standingHours} hrs", modifier = Modifier.weight(1f))
+        if (state.connectionStatus == com.pedometer.vm.ConnectionStatus.Connected) {
+            Text("Watch", style = MaterialTheme.typography.titleLarge)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                StatCard(title = "Steps", value = "${state.steps}", modifier = Modifier.weight(1f))
+                StatCard(
+                    title = "Heart Rate",
+                    value = if (state.heartRate > 0) "${state.heartRate} bpm" else "--",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                StatCard(title = "Calories", value = "${state.calories} kcal", modifier = Modifier.weight(1f))
+                StatCard(title = "Standing", value = "${state.standingHours} hrs", modifier = Modifier.weight(1f))
+            }
         }
     }
 }

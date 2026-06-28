@@ -47,10 +47,14 @@ sealed class PacketV2(val packetType: Int, val sequenceNumber: Int) {
         }
 
         fun opCodeForChannel(channel: Channel): Int = when (channel) {
-            Channel.Authentication, Channel.Data -> OPCODE_PLAINTEXT
+            Channel.Authentication -> OPCODE_PLAINTEXT
+            Channel.Data -> OPCODE_PLAINTEXT
             Channel.ProtobufCommand, Channel.Activity -> OPCODE_ENCRYPTED
             else -> OPCODE_PLAINTEXT
         }
+
+        // Force plaintext for debugging — change back after fix
+        fun opCodeForChannelPlaintext(channel: Channel): Int = OPCODE_PLAINTEXT
 
         fun crc16arc(data: ByteArray): Int {
             var crc = 0
