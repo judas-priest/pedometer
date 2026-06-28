@@ -100,7 +100,7 @@ fun ConnectScreen(
             MetricCard(
                 title = "Ходьба",
                 value = "${state.todayWalkSteps}",
-                unit = "${state.todayWalkMinutes} мин",
+                unit = "шагов",
                 color = StepGreen,
                 modifier = Modifier.weight(1f),
             )
@@ -133,13 +133,16 @@ fun ConnectScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
-            MetricCard(
-                title = "Активность",
-                value = "${state.todayWalkMinutes}",
-                unit = "мин",
-                color = StandBlue,
-                modifier = Modifier.weight(1f),
-            )
+            run {
+                val totalSteps = state.todayWalkSteps + state.todayRunSteps
+                MetricCard(
+                    title = "Дистанция",
+                    value = "%.1f".format(totalSteps * 0.0007),
+                    unit = "км",
+                    color = StandBlue,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         // Step history bar chart
@@ -355,14 +358,14 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
                 MetricCard(
                     title = "Ходьба",
                     value = "${day.walkSteps}",
-                    unit = "${day.walkMinutes} мин",
+                    unit = "шаг.",
                     color = StepGreen,
                     modifier = Modifier.weight(1f),
                 )
                 MetricCard(
                     title = "Бег",
                     value = "${day.runSteps}",
-                    unit = "${day.runMinutes} мин",
+                    unit = "шаг.",
                     color = CalorieOrange,
                     modifier = Modifier.weight(1f),
                 )
@@ -382,9 +385,9 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 MetricCard(
-                    title = "Активность",
-                    value = "${day.walkMinutes + day.runMinutes}",
-                    unit = "мин",
+                    title = "Дистанция",
+                    value = "%.1f".format(day.totalSteps * 0.0007),
+                    unit = "км",
                     color = CalorieOrange,
                     modifier = Modifier.weight(1f),
                 )
