@@ -12,6 +12,7 @@ import com.pedometer.auth.AuthService
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
 import com.pedometer.health.HealthService
+import com.pedometer.music.MusicService
 import com.pedometer.proto.CommandHelper
 import com.pedometer.proto.XiaomiProto
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var protocolHandler: ProtocolHandler? = null
     private var authService: AuthService? = null
     private var healthService: HealthService? = null
+    private var musicService: MusicService? = null
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -107,6 +109,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
                         requestDeviceInfo()
                         healthService?.startRealtimeStats()
+                        musicService?.sendCurrentMusicInfo()
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
                 )
@@ -121,6 +124,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 healthService = health
+
+                val music = MusicService(getApplication(), handler)
+                musicService = music
 
                 if (!conn.connect(device)) {
                     _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
@@ -139,6 +145,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun disconnect() {
         healthService?.stopRealtimeStats()
         healthService = null
+        musicService = null
         connection?.disconnect()
         connection = null
         protocolHandler = null
@@ -155,6 +162,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         when (cmd.type) {
             CommandHelper.TYPE_SYSTEM -> handleSystemCommand(cmd)
             CommandHelper.TYPE_HEALTH -> healthService?.handleCommand(cmd)
+            MusicService.COMMAND_TYPE -> musicService?.handleCommand(cmd)
             else -> Log.d(TAG, "Unhandled command type=${cmd.type}")
         }
     }
