@@ -13,6 +13,7 @@ import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
 import com.pedometer.health.HealthService
 import com.pedometer.music.MusicService
+import com.pedometer.notification.NotificationService
 import com.pedometer.weather.WeatherService
 import com.pedometer.proto.CommandHelper
 import com.pedometer.proto.XiaomiProto
@@ -57,6 +58,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var healthService: HealthService? = null
     private var musicService: MusicService? = null
     private var weatherService: WeatherService? = null
+    private var notificationService: NotificationService? = null
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -133,6 +135,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val weather = WeatherService(handler)
                 weatherService = weather
 
+                val notif = NotificationService(handler)
+                notificationService = notif
+
                 if (!conn.connect(device)) {
                     _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
                     return@launch
@@ -152,6 +157,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         healthService = null
         musicService = null
         weatherService = null
+        notificationService = null
         connection?.disconnect()
         connection = null
         protocolHandler = null
@@ -170,6 +176,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             CommandHelper.TYPE_HEALTH -> healthService?.handleCommand(cmd)
             MusicService.COMMAND_TYPE -> musicService?.handleCommand(cmd)
             WeatherService.COMMAND_TYPE -> weatherService?.handleCommand(cmd)
+            NotificationService.COMMAND_TYPE -> notificationService?.handleCommand(cmd)
             else -> Log.d(TAG, "Unhandled command type=${cmd.type}")
         }
     }
