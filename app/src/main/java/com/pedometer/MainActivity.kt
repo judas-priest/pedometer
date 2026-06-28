@@ -53,14 +53,8 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     Box(modifier = Modifier.padding(padding)) {
                         when (selectedTab) {
-                            0 -> ConnectScreen(
-                                state = state,
-                                onAuthKeyChange = vm::updateAuthKey,
-                                onMacChange = vm::updateMacAddress,
-                                onConnect = vm::connect,
-                                onDisconnect = vm::disconnect,
-                            )
-                            1 -> com.pedometer.ui.ActivityTab()
+                            0 -> ConnectScreen(state = state)
+                            1 -> com.pedometer.ui.ActivityTab(state = state)
                             2 -> com.pedometer.ui.SettingsTab(
                                 state = state,
                                 onAuthKeyChange = vm::updateAuthKey,

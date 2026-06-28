@@ -12,6 +12,9 @@ import com.pedometer.auth.AuthService
 import com.pedometer.bt.BleConnection
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
+import com.pedometer.data.DailySteps
+import com.pedometer.data.HourlySteps
+import com.pedometer.data.StepDatabase
 import com.pedometer.health.HealthService
 import com.pedometer.health.DayStepData
 import com.pedometer.health.PhoneStepCounter
@@ -24,8 +27,10 @@ import com.pedometer.weather.WeatherService
 import com.pedometer.proto.CommandHelper
 import com.pedometer.proto.XiaomiProto
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class WatchState(
@@ -50,6 +55,7 @@ data class WatchState(
     val healthConnectSteps: Long = 0,
     val healthConnectHR: Int = 0,
     val profile: UserProfile = UserProfile(),
+    val todayHourlySteps: List<HourlySteps> = emptyList(),
 )
 
 enum class ConnectionStatus {
@@ -88,24 +94,49 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
         _state.value = _state.value.copy(profile = userProfile)
 
-        // Load step history from OPLUS StepProvider
+        // Periodically refresh step data from StepProvider (every 10s while active)
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                Log.i(TAG, "Reading StepProvider...")
-                val today = StepProviderReader.readToday(app)
-                Log.i(TAG, "StepProvider today: $today")
-                val history = StepProviderReader.readHistory(app, 7)
-                Log.i(TAG, "StepProvider history: ${history.size} days")
-                if (today != null) {
-                    _state.value = _state.value.copy(
-                        todayWalkSteps = today.walkSteps,
-                        todayRunSteps = today.runSteps,
-                        todayWalkMinutes = today.walkMinutes,
-                        stepHistory = history,
-                    )
+            while (isActive) {
+                try {
+                    val today = StepProviderReader.readToday(app)
+                    val history = StepProviderReader.readHistory(app, 30)
+                    if (today != null) {
+                        _state.value = _state.value.copy(
+                            todayWalkSteps = today.walkSteps,
+                            todayRunSteps = today.runSteps,
+                            todayWalkMinutes = today.walkMinutes,
+                            stepHistory = history,
+                        )
+                        // Persist daily data to Room
+                        val dao = StepDatabase.get(app).stepDao()
+                        dao.upsertDaily(DailySteps(
+                            date = today.date,
+                            totalSteps = today.totalSteps,
+                            walkSteps = today.walkSteps,
+                            runSteps = today.runSteps,
+                            calories = userProfile.calcCalories(today.totalSteps),
+                            distanceKm = userProfile.calcDistance(today.totalSteps),
+                        ))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "StepProvider failed", e)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "StepProvider failed", e)
+                delay(10_000)
+            }
+        }
+
+        // Periodically refresh hourly step data from Room DB (every 10s)
+        viewModelScope.launch(Dispatchers.IO) {
+            val dao = StepDatabase.get(app).stepDao()
+            while (isActive) {
+                try {
+                    val today = java.time.LocalDate.now().toString()
+                    val hourly = dao.getHourlyForDay(today)
+                    _state.value = _state.value.copy(todayHourlySteps = hourly)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Hourly steps read failed", e)
+                }
+                delay(10_000)
             }
         }
 

@@ -12,6 +12,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 class HealthConnectReader(private val context: Context) {
     companion object {
@@ -19,6 +20,7 @@ class HealthConnectReader(private val context: Context) {
 
         val PERMISSIONS = setOf(
             HealthPermission.getReadPermission(StepsRecord::class),
+            HealthPermission.getWritePermission(StepsRecord::class),
             HealthPermission.getReadPermission(HeartRateRecord::class),
         )
     }
@@ -78,6 +80,26 @@ class HealthConnectReader(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read heart rate from Health Connect", e)
             0
+        }
+    }
+
+    suspend fun writeSteps(steps: Long, startTime: Instant, endTime: Instant): Boolean {
+        val hc = getClient() ?: return false
+        return try {
+            val zone = ZoneId.systemDefault()
+            val record = StepsRecord(
+                count = steps,
+                startTime = startTime,
+                endTime = endTime,
+                startZoneOffset = zone.rules.getOffset(startTime),
+                endZoneOffset = zone.rules.getOffset(endTime),
+            )
+            hc.insertRecords(listOf(record))
+            Log.i(TAG, "Wrote $steps steps to Health Connect")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write steps to Health Connect", e)
+            false
         }
     }
 

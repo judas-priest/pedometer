@@ -1,7 +1,12 @@
 package com.pedometer.ui
 
 import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -12,8 +17,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.pedometer.health.UserProfile
 import com.pedometer.vm.ConnectionStatus
 import com.pedometer.vm.WatchState
@@ -27,10 +34,20 @@ fun SettingsTab(
     onDisconnect: () -> Unit,
     onProfileChange: (UserProfile) -> Unit = {},
 ) {
+    val context = LocalContext.current
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         if (results.values.all { it }) onConnect()
+    }
+
+    val activityRecognitionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            onProfileChange(state.profile.copy(backgroundServiceEnabled = true))
+        }
     }
 
     val profile = state.profile
@@ -138,10 +155,76 @@ fun SettingsTab(
                     }
                     Switch(
                         checked = profile.backgroundServiceEnabled,
-                        onCheckedChange = {
-                            onProfileChange(profile.copy(backgroundServiceEnabled = it))
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                val hasPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                                    ContextCompat.checkSelfPermission(
+                                        context, Manifest.permission.ACTIVITY_RECOGNITION
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                if (hasPermission) {
+                                    onProfileChange(profile.copy(backgroundServiceEnabled = true))
+                                } else {
+                                    activityRecognitionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                                }
+                            } else {
+                                onProfileChange(profile.copy(backgroundServiceEnabled = false))
+                            }
                         },
                     )
+                }
+            }
+        }
+
+        // Battery & ColorOS survival tips
+        if (profile.backgroundServiceEnabled) {
+            val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as PowerManager
+            val isWhitelisted = pm.isIgnoringBatteryOptimizations(context.packageName)
+
+            if (!isWhitelisted) {
+                Spacer(Modifier.height(8.dp))
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Оптимизация батареи", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Отключите оптимизацию чтобы сервис не убивался системой",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        FilledTonalButton(onClick = {
+                            context.startActivity(Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:${context.packageName}"),
+                            ))
+                        }) {
+                            Text("Отключить оптимизацию")
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Автозапуск (ColorOS)", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Для стабильной работы:\n" +
+                            "1. Откройте настройки приложения\n" +
+                            "2. Включите «Автозапуск»\n" +
+                            "3. В «Расход батареи» → «Без ограничений»\n" +
+                            "4. Закрепите приложение в недавних (свайп вниз)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = {
+                        context.startActivity(Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}"),
+                        ))
+                    }) {
+                        Text("Настройки приложения")
+                    }
                 }
             }
         }

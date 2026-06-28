@@ -1,9 +1,5 @@
 package com.pedometer.ui
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -12,6 +8,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +23,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pedometer.vm.ConnectionStatus
+import com.pedometer.data.HourlySteps
 import com.pedometer.vm.WatchState
 
 private val StepGreen = Color(0xFF4CAF50)
@@ -35,23 +34,19 @@ private val StandBlue = Color(0xFF42A5F5)
 @Composable
 fun ConnectScreen(
     state: WatchState,
-    onAuthKeyChange: (String) -> Unit,
-    onMacChange: (String) -> Unit,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
 ) {
     var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
 
     if (selectedDay != null) {
         androidx.activity.compose.BackHandler { selectedDay = null }
-        DayDetailScreen(day = selectedDay!!, profile = state.profile, onBack = { selectedDay = null })
+        val isToday = selectedDay!!.date == java.time.LocalDate.now().toString()
+        DayDetailScreen(
+            day = selectedDay!!,
+            profile = state.profile,
+            hourlySteps = if (isToday) state.todayHourlySteps else emptyList(),
+            onBack = { selectedDay = null },
+        )
         return
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        if (results.values.all { it }) onConnect()
     }
 
     Column(
@@ -60,25 +55,35 @@ fun ConnectScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
-        // Step ring hero
+        // 3-ring hero
         val stepGoal = state.profile.stepGoal
-        // Priority: Health Connect (accurate daily) > StepProvider > phone sensor session
         val currentSteps = when {
             state.healthConnectSteps > 0 -> state.healthConnectSteps
             state.todayWalkSteps + state.todayRunSteps > 0 -> (state.todayWalkSteps + state.todayRunSteps).toLong()
             else -> state.phoneSteps
         }
-        val progress = (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f)
+        val totalStepsInt = currentSteps.toInt()
+        val caloriesGoal = 300.0
+        val calories = state.profile.calcCalories(totalStepsInt)
+        val distanceGoal = state.profile.calcDistance(stepGoal)
+        val distance = state.profile.calcDistance(totalStepsInt)
+
+        val stepsProgress = if (stepGoal > 0) (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f) else 0f
+        val caloriesProgress = if (caloriesGoal > 0) (calories / caloriesGoal).coerceIn(0.0, 1.0).toFloat() else 0f
+        val distanceProgress = if (distanceGoal > 0.01) (distance / distanceGoal).coerceIn(0.0, 1.0).toFloat() else 0f
+
+        val animSteps by animateFloatAsState(stepsProgress, tween(1000, easing = FastOutSlowInEasing), label = "steps")
+        val animCalories by animateFloatAsState(caloriesProgress, tween(1000, easing = FastOutSlowInEasing), label = "cal")
+        val animDistance by animateFloatAsState(distanceProgress, tween(1000, easing = FastOutSlowInEasing), label = "dist")
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .pointerInput(Unit) {
                     detectTapGestures {
-                        // Tap ring → open today detail
                         val todayData = com.pedometer.health.DayStepData(
                             date = java.time.LocalDate.now().toString(),
-                            totalSteps = currentSteps.toInt(),
+                            totalSteps = totalStepsInt,
                             walkSteps = state.todayWalkSteps,
                             runSteps = state.todayRunSteps,
                             walkMinutes = 0,
@@ -89,7 +94,12 @@ fun ConnectScreen(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 14f)
+            ActivityRings(
+                stepsProgress = animSteps,
+                caloriesProgress = animCalories,
+                distanceProgress = animDistance,
+                size = 180f,
+            )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "$currentSteps",
@@ -114,19 +124,34 @@ fun ConnectScreen(
             profile = state.profile,
         )
 
-        // Step history bar chart
+        // Step history with period tabs
         if (state.stepHistory.isNotEmpty()) {
             Spacer(Modifier.height(24.dp))
-            Text(
-                "За неделю",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            StepHistoryChart(history = state.stepHistory, goal = stepGoal, onDayTap = { selectedDay = it })
-        }
 
-        Spacer(Modifier.height(24.dp))
+            var selectedPeriod by remember { mutableIntStateOf(0) }
+            val periods = listOf("Неделя", "Месяц")
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                periods.forEachIndexed { index, label ->
+                    FilterChip(
+                        selected = selectedPeriod == index,
+                        onClick = { selectedPeriod = index },
+                        label = { Text(label) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+
+            val displayHistory = when (selectedPeriod) {
+                0 -> state.stepHistory.reversed().take(7)
+                1 -> state.stepHistory.reversed().take(30)
+                else -> state.stepHistory.reversed().take(7)
+            }
+            StepHistoryChart(history = displayHistory, goal = stepGoal, onDayTap = { selectedDay = it })
+        }
 
         Spacer(Modifier.height(24.dp))
     }
@@ -159,6 +184,55 @@ fun StepRing(progress: Float, color: Color, size: Float, strokeWidth: Float) {
             size = arcSize,
             style = stroke,
         )
+    }
+}
+
+@Composable
+fun ActivityRings(
+    stepsProgress: Float,
+    caloriesProgress: Float,
+    distanceProgress: Float,
+    size: Float,
+) {
+    val colors = listOf(StepGreen, CalorieOrange, StandBlue)
+    val progresses = listOf(stepsProgress, caloriesProgress, distanceProgress)
+
+    Canvas(modifier = Modifier.size(size.dp)) {
+        val strokeWidth = 12.dp.toPx()
+        val gap = 6.dp.toPx()
+
+        progresses.forEachIndexed { index, progress ->
+            val inset = (strokeWidth + gap) * index + strokeWidth / 2
+            val arcSize = Size(
+                this.size.width - inset * 2,
+                this.size.height - inset * 2,
+            )
+            val topLeft = Offset(inset, inset)
+            val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+
+            // Track
+            drawArc(
+                color = colors[index].copy(alpha = 0.15f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = stroke,
+            )
+            // Progress
+            if (progress > 0f) {
+                drawArc(
+                    color = colors[index],
+                    startAngle = -90f,
+                    sweepAngle = 360f * progress,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = stroke,
+                )
+            }
+        }
     }
 }
 
@@ -207,7 +281,7 @@ fun StepMetricCards(
 
 @Composable
 fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int, onDayTap: (com.pedometer.health.DayStepData) -> Unit = {}) {
-    val maxSteps = (history.maxOfOrNull { it.totalSteps } ?: goal).coerceAtLeast(goal)
+    val maxSteps = (history.maxOfOrNull { it.totalSteps } ?: goal).coerceAtLeast(goal).coerceAtLeast(1)
     val barColor = StepGreen
     val goalColor = StepGreen.copy(alpha = 0.3f)
     val days = history.reversed().take(7)
@@ -282,7 +356,12 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int,
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DayDetailScreen(day: com.pedometer.health.DayStepData, profile: com.pedometer.health.UserProfile = com.pedometer.health.UserProfile(), onBack: () -> Unit) {
+fun DayDetailScreen(
+    day: com.pedometer.health.DayStepData,
+    profile: com.pedometer.health.UserProfile = com.pedometer.health.UserProfile(),
+    hourlySteps: List<HourlySteps> = emptyList(),
+    onBack: () -> Unit,
+) {
     val dateFormatted = try {
         val ld = java.time.LocalDate.parse(day.date)
         val months = arrayOf("", "января", "февраля", "марта", "апреля", "мая", "июня",
@@ -324,7 +403,7 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, profile: com.pedomete
         ) {
             Spacer(Modifier.height(8.dp))
 
-            val progress = (day.totalSteps.toFloat() / profile.stepGoal).coerceIn(0f, 1f)
+            val progress = if (profile.stepGoal > 0) (day.totalSteps.toFloat() / profile.stepGoal).coerceIn(0f, 1f) else 0f
             Box(contentAlignment = Alignment.Center) {
                 StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 14f)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -350,6 +429,65 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, profile: com.pedomete
                 totalSteps = day.totalSteps,
                 profile = profile,
             )
+
+            if (hourlySteps.isNotEmpty()) {
+                Spacer(Modifier.height(24.dp))
+                HourlyStepChart(hourlySteps = hourlySteps)
+            }
+        }
+    }
+}
+
+@Composable
+fun HourlyStepChart(hourlySteps: List<HourlySteps>) {
+    val hourMap = hourlySteps.associate { it.hour to it.steps }
+    val maxSteps = (hourMap.values.maxOrNull() ?: 1).coerceAtLeast(1)
+
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "По часам",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+            ) {
+                val barCount = 24
+                val gap = 2.dp.toPx()
+                val barWidth = (size.width - gap * (barCount - 1)) / barCount
+
+                for (hour in 0 until barCount) {
+                    val steps = hourMap[hour] ?: 0
+                    val barHeight = if (maxSteps > 0) (steps.toFloat() / maxSteps) * size.height else 0f
+                    val x = hour * (barWidth + gap)
+
+                    drawRoundRect(
+                        color = StepGreen.copy(alpha = if (steps > 0) 0.7f else 0.15f),
+                        topLeft = Offset(x, size.height - barHeight.coerceAtLeast(if (steps > 0) 2f else 0f)),
+                        size = Size(barWidth, barHeight.coerceAtLeast(if (steps > 0) 2f else 0f)),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                listOf("0", "6", "12", "18", "24").forEach {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
