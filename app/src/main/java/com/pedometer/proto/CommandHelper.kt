@@ -15,6 +15,14 @@ object CommandHelper {
     const val SYS_DEVICE_INFO = 2
     const val SYS_CLOCK = 3
 
+    const val TYPE_HEALTH = 8
+
+    const val HEALTH_ACTIVITY_FETCH_TODAY = 1
+    const val HEALTH_ACTIVITY_FETCH_PAST = 2
+    const val HEALTH_REALTIME_STATS_START = 45
+    const val HEALTH_REALTIME_STATS_STOP = 46
+    const val HEALTH_REALTIME_STATS_EVENT = 47
+
     fun buildNonceCommand(nonce: ByteArray): XiaomiProto.Command {
         return XiaomiProto.Command.newBuilder()
             .setType(TYPE_AUTH)
@@ -55,6 +63,33 @@ object CommandHelper {
         return XiaomiProto.Command.newBuilder()
             .setType(TYPE_SYSTEM)
             .setSubtype(SYS_BATTERY)
+            .build()
+    }
+
+    fun buildRealtimeStatsStart(): XiaomiProto.Command {
+        return XiaomiProto.Command.newBuilder()
+            .setType(TYPE_HEALTH)
+            .setSubtype(HEALTH_REALTIME_STATS_START)
+            .build()
+    }
+
+    fun buildRealtimeStatsStop(): XiaomiProto.Command {
+        return XiaomiProto.Command.newBuilder()
+            .setType(TYPE_HEALTH)
+            .setSubtype(HEALTH_REALTIME_STATS_STOP)
+            .build()
+    }
+
+    fun buildActivityFetchToday(): XiaomiProto.Command {
+        return XiaomiProto.Command.newBuilder()
+            .setType(TYPE_HEALTH)
+            .setSubtype(HEALTH_ACTIVITY_FETCH_TODAY)
+            .setHealth(
+                XiaomiProto.Health.newBuilder()
+                    .setActivitySyncRequestToday(
+                        XiaomiProto.ActivitySyncRequestToday.newBuilder().setUnknown1(0)
+                    )
+            )
             .build()
     }
 
