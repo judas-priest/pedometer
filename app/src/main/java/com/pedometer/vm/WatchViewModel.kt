@@ -87,7 +87,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 Log.i(TAG, "Reading StepProvider...")
-                val today = StepProviderReader.readToday(app)
+                val today = StepProviderReader.readTodayActual(app)
                 Log.i(TAG, "StepProvider today: $today")
                 val history = StepProviderReader.readHistory(app, 7)
                 Log.i(TAG, "StepProvider history: ${history.size} days")

@@ -51,11 +51,10 @@ fun ConnectScreen(
     ) {
         // Step ring hero
         val stepGoal = 6000
-        // Priority: StepProvider today > Health Connect > phone sensor
-        val todayTotal = state.todayWalkSteps + state.todayRunSteps
+        // Priority: Health Connect (accurate daily) > StepProvider > phone sensor session
         val currentSteps = when {
-            todayTotal > 0 -> todayTotal.toLong()
             state.healthConnectSteps > 0 -> state.healthConnectSteps
+            state.todayWalkSteps + state.todayRunSteps > 0 -> (state.todayWalkSteps + state.todayRunSteps).toLong()
             else -> state.phoneSteps
         }
         val progress = (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f)

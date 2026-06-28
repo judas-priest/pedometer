@@ -28,26 +28,39 @@ object StepProviderReader {
     fun readDay(context: Context, date: LocalDate): DayStepData? {
         val dateStr = date.format(DATE_FMT)
 
-        // Try ContentProvider call() method first (how system uses it)
-        try {
-            val extras = android.os.Bundle().apply {
-                putString("day_date", dateStr)
-            }
-            val result = context.contentResolver.call(
-                Uri.parse("content://$AUTHORITY"),
-                "method_call_by_assistantscreen_and_health_from_table_day_step_data",
-                null,
-                extras,
-            )
-            if (result != null) {
-                val json = result.getString("result") ?: result.getString("data")
-                Log.i(TAG, "Call result for $dateStr: $json (keys: ${result.keySet()})")
-                if (json != null) {
-                    return parseDayJson(dateStr, json)
+        // Try call() methods — how system/lockscreen reads steps
+        val callMethods = listOf(
+            "method_call_by_assistantscreen_and_health_from_table_day_step_data",
+            "method_get_today_step",
+            "method_get_day_step",
+            "get_today_step_count",
+            "get_step_count",
+        )
+        for (method in callMethods) {
+            try {
+                val extras = android.os.Bundle().apply {
+                    putString("day_date", dateStr)
+                    putString("date", dateStr)
                 }
+                val result = context.contentResolver.call(
+                    Uri.parse("content://$AUTHORITY"),
+                    method,
+                    dateStr,
+                    extras,
+                )
+                if (result != null && result.keySet().isNotEmpty()) {
+                    Log.i(TAG, "Call '$method' for $dateStr: keys=${result.keySet()}")
+                    for (key in result.keySet()) {
+                        Log.i(TAG, "  $key = ${result.get(key)}")
+                    }
+                    val json = result.getString("result") ?: result.getString("data")
+                    if (json != null) {
+                        return parseDayJson(dateStr, json)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Call '$method' failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.d(TAG, "Call method failed for $dateStr: ${e.message}")
         }
 
         // Fallback: query
@@ -59,6 +72,11 @@ object StepProviderReader {
                 var data: DayStepData? = null
                 Log.i(TAG, "Query $dateStr: ${cursor.count} rows, cols=${cursor.columnNames.joinToString()}")
                 if (cursor.moveToFirst()) {
+                    // Log ALL values for debugging
+                    val allVals = (0 until cursor.columnCount).joinToString(" | ") { i ->
+                        "${cursor.getColumnName(i)}=${cursor.getString(i)}"
+                    }
+                    Log.i(TAG, "  RAW: $allVals")
                     data = DayStepData(
                         date = dateStr,
                         totalSteps = getIntSafe(cursor, "day_step"),
@@ -105,8 +123,49 @@ object StepProviderReader {
 
     fun readHistory(context: Context, days: Int = 7): List<DayStepData> {
         val today = LocalDate.now()
-        return (0 until days).mapNotNull { offset ->
+        // Read raw cumulative data for days+1 to compute daily diffs
+        val rawDays = (0..days).mapNotNull { offset ->
             readDay(context, today.minusDays(offset.toLong()))
+        }
+
+        // Convert cumulative to daily by computing differences
+        val result = mutableListOf<DayStepData>()
+        for (i in 0 until rawDays.size - 1) {
+            val curr = rawDays[i]
+            val prev = rawDays[i + 1]
+            val dailySteps = curr.totalSteps - prev.totalSteps
+            if (dailySteps >= 0) {
+                // Normal day (no reboot)
+                result.add(curr.copy(
+                    totalSteps = dailySteps,
+                    walkSteps = (curr.walkSteps - prev.walkSteps).coerceAtLeast(0),
+                    runSteps = (curr.runSteps - prev.runSteps).coerceAtLeast(0),
+                ))
+            } else {
+                // Reboot happened — curr.totalSteps IS the daily count (from 0)
+                result.add(curr)
+            }
+        }
+        return result
+    }
+
+    fun readTodayActual(context: Context): DayStepData? {
+        val today = LocalDate.now()
+        val todayRaw = readDay(context, today) ?: return null
+        val yesterdayRaw = readDay(context, today.minusDays(1))
+
+        if (yesterdayRaw == null) return todayRaw
+
+        val diff = todayRaw.totalSteps - yesterdayRaw.totalSteps
+        return if (diff >= 0) {
+            todayRaw.copy(
+                totalSteps = diff,
+                walkSteps = (todayRaw.walkSteps - yesterdayRaw.walkSteps).coerceAtLeast(0),
+                runSteps = (todayRaw.runSteps - yesterdayRaw.runSteps).coerceAtLeast(0),
+            )
+        } else {
+            // Reboot happened today — raw value is already daily
+            todayRaw
         }
     }
 
