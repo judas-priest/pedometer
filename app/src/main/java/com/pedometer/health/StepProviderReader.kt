@@ -140,6 +140,8 @@ object StepProviderReader {
                     totalSteps = dailySteps,
                     walkSteps = (curr.walkSteps - prev.walkSteps).coerceAtLeast(0),
                     runSteps = (curr.runSteps - prev.runSteps).coerceAtLeast(0),
+                    walkMinutes = (curr.walkMinutes - prev.walkMinutes).coerceAtLeast(0),
+                    runMinutes = (curr.runMinutes - prev.runMinutes).coerceAtLeast(0),
                 ))
             } else {
                 // Reboot happened — curr.totalSteps IS the daily count (from 0)
@@ -162,6 +164,8 @@ object StepProviderReader {
                 totalSteps = diff,
                 walkSteps = (todayRaw.walkSteps - yesterdayRaw.walkSteps).coerceAtLeast(0),
                 runSteps = (todayRaw.runSteps - yesterdayRaw.runSteps).coerceAtLeast(0),
+                walkMinutes = (todayRaw.walkMinutes - yesterdayRaw.walkMinutes).coerceAtLeast(0),
+                runMinutes = (todayRaw.runMinutes - yesterdayRaw.runMinutes).coerceAtLeast(0),
             )
         } else {
             // Reboot happened today — raw value is already daily

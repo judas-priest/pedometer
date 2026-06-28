@@ -325,15 +325,15 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(16.dp))
 
             val progress = (day.totalSteps.toFloat() / 6000).coerceIn(0f, 1f)
             Box(contentAlignment = Alignment.Center) {
-                StepRing(progress = progress, color = StepGreen, size = 200f, strokeWidth = 16f)
+                StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 14f)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         "${day.totalSteps}",
-                        fontSize = 48.sp,
+                        fontSize = 40.sp,
                         fontWeight = FontWeight.Bold,
                         color = StepGreen,
                     )
@@ -345,7 +345,7 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
