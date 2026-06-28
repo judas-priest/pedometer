@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -313,19 +314,12 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
     val days = history.reversed().take(7)
     var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
 
+    if (selectedDay != null) {
+        DayDetailSheet(day = selectedDay!!, onDismiss = { selectedDay = null })
+    }
+
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Selected day info
-            if (selectedDay != null) {
-                val d = selectedDay!!
-                Text(
-                    "${d.date}: ${d.totalSteps} шагов (${d.walkSteps} ходьба, ${d.runSteps} бег)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = StepGreen,
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -385,6 +379,75 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DayDetailSheet(day: com.pedometer.health.DayStepData, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            Text(
+                day.date,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(24.dp))
+
+            // Step ring for this day
+            val progress = (day.totalSteps.toFloat() / 6000).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                StepRing(progress = progress, color = StepGreen, size = 140f, strokeWidth = 12f)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "${day.totalSteps}",
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = StepGreen,
+                    )
+                    Text(
+                        "шагов",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MetricCard(
+                    title = "Ходьба",
+                    value = "${day.walkSteps}",
+                    unit = "${day.walkMinutes} мин",
+                    color = StepGreen,
+                    modifier = Modifier.weight(1f),
+                )
+                MetricCard(
+                    title = "Бег",
+                    value = "${day.runSteps}",
+                    unit = "${day.runMinutes} мин",
+                    color = CalorieOrange,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
