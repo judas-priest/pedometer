@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pedometer.auth.AuthService
+import com.pedometer.bt.BleConnection
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
 import com.pedometer.health.HealthService
@@ -52,7 +53,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(WatchState())
     val state: StateFlow<WatchState> = _state
 
-    private var connection: SppConnection? = null
+    private var bleConnection: BleConnection? = null
+    private var sppConnection: SppConnection? = null
     private var protocolHandler: ProtocolHandler? = null
     private var authService: AuthService? = null
     private var healthService: HealthService? = null
@@ -98,22 +100,27 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val auth = AuthService(s.authKey)
                 authService = auth
 
-                val conn = SppConnection(
+                // Try SPP first (faster, proven to work), fall back to BLE
+                val spp = SppConnection(
                     onData = { data -> protocolHandler?.onDataReceived(data) },
                     onDisconnected = {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
                     }
                 )
-                connection = conn
+                sppConnection = spp
 
                 val handler = ProtocolHandler(
                     authService = auth,
-                    connection = conn,
+                    connection = { data -> spp.write(data) },
                     onAuthenticated = {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
-                        requestDeviceInfo()
-                        healthService?.startRealtimeStats()
-                        musicService?.sendCurrentMusicInfo()
+                        // Send commands with delays to avoid overwhelming the watch
+                        viewModelScope.launch(Dispatchers.IO) {
+                            Thread.sleep(500)
+                            requestDeviceInfo()
+                            Thread.sleep(1000)
+                            healthService?.startRealtimeStats()
+                        }
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
                 )
@@ -138,9 +145,29 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val notif = NotificationService(handler)
                 notificationService = notif
 
-                if (!conn.connect(device)) {
-                    _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
-                    return@launch
+                if (!spp.connect(device)) {
+                    Log.w(TAG, "SPP failed, trying BLE...")
+                    val ble = BleConnection(
+                        context = getApplication(),
+                        onData = { data -> protocolHandler?.onDataReceived(data) },
+                        onDisconnected = {
+                            _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
+                        }
+                    )
+                    bleConnection = ble
+                    // Swap writer to BLE
+                    // TODO: refactor to support dynamic writer swap
+                    ble.connect(device)
+                    var waitMs = 0
+                    while (!ble.isConnected && waitMs < 15000) {
+                        Thread.sleep(200)
+                        waitMs += 200
+                    }
+                    if (!ble.isConnected) {
+                        Log.e(TAG, "Both SPP and BLE failed")
+                        _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
+                        return@launch
+                    }
                 }
 
                 _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Authenticating)
@@ -158,8 +185,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         musicService = null
         weatherService = null
         notificationService = null
-        connection?.disconnect()
-        connection = null
+        sppConnection?.disconnect()
+        sppConnection = null
+        bleConnection?.disconnect()
+        bleConnection = null
         protocolHandler = null
         authService = null
         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)

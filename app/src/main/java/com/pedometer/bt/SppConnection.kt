@@ -25,25 +25,36 @@ class SppConnection(
     private var outputStream: OutputStream? = null
     @Volatile private var running = false
     private var device: BluetoothDevice? = null
-    var autoReconnect = true
+    var autoReconnect = false
 
     @SuppressLint("MissingPermission")
     fun connect(device: BluetoothDevice): Boolean {
         this.device = device
-        return try {
-            val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
-            s.connect()
-            socket = s
-            inputStream = s.inputStream
-            outputStream = s.outputStream
-            running = true
-            Thread({ readLoop() }, "spp-read").start()
-            Log.i(TAG, "Connected to ${device.address}")
-            true
-        } catch (e: IOException) {
-            Log.e(TAG, "Connection failed", e)
-            false
+        // Try standard SPP first, then reflection fallback
+        for (attempt in 1..3) {
+            try {
+                val s = if (attempt <= 1) {
+                    device.createRfcommSocketToServiceRecord(SPP_UUID)
+                } else {
+                    // Reflection fallback — bypasses SDP lookup
+                    Log.i(TAG, "Using reflection createRfcommSocket on attempt $attempt")
+                    val m = device.javaClass.getMethod("createRfcommSocket", Int::class.java)
+                    m.invoke(device, 1) as BluetoothSocket
+                }
+                s.connect()
+                socket = s
+                inputStream = s.inputStream
+                outputStream = s.outputStream
+                running = true
+                Thread({ readLoop() }, "spp-read").start()
+                Log.i(TAG, "Connected to ${device.address} on attempt $attempt")
+                return true
+            } catch (e: Exception) {
+                Log.e(TAG, "Connection attempt $attempt failed", e)
+                if (attempt < 3) Thread.sleep(2000)
+            }
         }
+        return false
     }
 
     @SuppressLint("MissingPermission")

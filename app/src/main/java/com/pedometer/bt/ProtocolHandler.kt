@@ -11,9 +11,13 @@ import java.nio.ByteOrder
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+fun interface ConnectionWriter {
+    fun write(data: ByteArray)
+}
+
 class ProtocolHandler(
     private val authService: AuthService,
-    private val connection: SppConnection,
+    private val connection: ConnectionWriter,
     private val onAuthenticated: () -> Unit,
     private val onCommand: (XiaomiProto.Command) -> Unit,
 ) {
@@ -112,12 +116,19 @@ class ProtocolHandler(
                 startAuth()
             }
             is PacketV2.DataPacket -> {
-                val decrypted = if (packet.opCode == PacketV2.OPCODE_ENCRYPTED && authService.isInitialized) {
-                    authService.decrypt(packet.payload)
-                } else {
+                Log.d(TAG, "V2 DataPacket: ch=${packet.channel} opCode=${packet.opCode} payloadLen=${packet.payload.size}")
+                val decrypted = try {
+                    if (packet.opCode == PacketV2.OPCODE_ENCRYPTED && authService.isInitialized) {
+                        authService.decrypt(packet.payload)
+                    } else {
+                        packet.payload
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Decryption failed! opCode=${packet.opCode} payloadLen=${packet.payload.size}", e)
                     packet.payload
                 }
                 connection.write(PacketV2.encodeAck(packet.sequenceNumber))
+                Log.d(TAG, "Decrypted ${decrypted.size} bytes, sent ACK for seq=${packet.sequenceNumber}")
                 handleProtobufPayload(decrypted)
             }
             is PacketV2.AckPacket -> Log.d(TAG, "ACK for ${packet.sequenceNumber}")
@@ -186,6 +197,7 @@ class ProtocolHandler(
     fun sendCommand(command: XiaomiProto.Command, forAuth: Boolean = false) {
         val data = command.toByteArray()
         val channel = if (forAuth) Channel.Authentication else Channel.ProtobufCommand
+        Log.d(TAG, "sendCommand type=${command.type} subtype=${command.subtype} forAuth=$forAuth encrypted=${!forAuth && authService.isInitialized} dataLen=${data.size}")
 
         val packet: ByteArray = if (useV2) {
             val encrypt: ((ByteArray) -> ByteArray)? = if (!forAuth && authService.isInitialized) {
