@@ -44,7 +44,7 @@ fun ConnectScreen(
 
     if (selectedDay != null) {
         androidx.activity.compose.BackHandler { selectedDay = null }
-        DayDetailScreen(day = selectedDay!!, onBack = { selectedDay = null })
+        DayDetailScreen(day = selectedDay!!, profile = state.profile, onBack = { selectedDay = null })
         return
     }
 
@@ -300,7 +300,7 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int,
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
+fun DayDetailScreen(day: com.pedometer.health.DayStepData, profile: com.pedometer.health.UserProfile = com.pedometer.health.UserProfile(), onBack: () -> Unit) {
     val dateFormatted = try {
         val ld = java.time.LocalDate.parse(day.date)
         val months = arrayOf("", "января", "февраля", "марта", "апреля", "мая", "июня",
@@ -342,7 +342,7 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
         ) {
             Spacer(Modifier.height(8.dp))
 
-            val progress = (day.totalSteps.toFloat() / 6000).coerceIn(0f, 1f)
+            val progress = (day.totalSteps.toFloat() / profile.stepGoal).coerceIn(0f, 1f)
             Box(contentAlignment = Alignment.Center) {
                 StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 14f)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -353,7 +353,7 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
                         color = StepGreen,
                     )
                     Text(
-                        "/ 6000 шагов",
+                        "/ ${profile.stepGoal} шагов",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -397,7 +397,7 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
                 )
                 MetricCard(
                     title = "Калории",
-                    value = "%.0f".format(com.pedometer.health.UserProfile().calcCalories(day.totalSteps)),
+                    value = "%.0f".format(profile.calcCalories(day.totalSteps)),
                     unit = "ккал",
                     color = CalorieOrange,
                     modifier = Modifier.weight(1f),
