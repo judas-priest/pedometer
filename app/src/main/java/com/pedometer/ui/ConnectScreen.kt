@@ -123,6 +123,8 @@ fun ConnectScreen(
                     }
                 }
             }
+            Spacer(Modifier.height(12.dp))
+            HealthDashboard(state = state)
         }
     }
 }
