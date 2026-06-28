@@ -40,6 +40,14 @@ fun ConnectScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
+    var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
+
+    if (selectedDay != null) {
+        androidx.activity.compose.BackHandler { selectedDay = null }
+        DayDetailScreen(day = selectedDay!!, onBack = { selectedDay = null })
+        return
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
@@ -144,7 +152,7 @@ fun ConnectScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            StepHistoryChart(history = state.stepHistory, goal = stepGoal)
+            StepHistoryChart(history = state.stepHistory, goal = stepGoal, onDayTap = { selectedDay = it })
         }
 
         Spacer(Modifier.height(24.dp))
@@ -308,17 +316,12 @@ fun MetricCard(title: String, value: String, unit: String, color: Color, modifie
 }
 
 @Composable
-fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int) {
+fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int, onDayTap: (com.pedometer.health.DayStepData) -> Unit = {}) {
     val maxSteps = (history.maxOfOrNull { it.totalSteps } ?: goal).coerceAtLeast(goal)
     val barColor = StepGreen
     val goalColor = StepGreen.copy(alpha = 0.3f)
     val days = history.reversed().take(7)
     var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
-
-    if (selectedDay != null) {
-        DayDetailScreen(day = selectedDay!!, onBack = { selectedDay = null })
-        return
-    }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -335,6 +338,7 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
                             val tappedIndex = ((offset.x - spacing / 2) / (barWidth + spacing)).toInt()
                             if (tappedIndex in days.indices) {
                                 selectedDay = days[tappedIndex]
+                                onDayTap(days[tappedIndex])
                             }
                         }
                     }
@@ -422,9 +426,8 @@ fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
     ) { padding ->
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
