@@ -9,8 +9,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -315,7 +316,8 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
     var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
 
     if (selectedDay != null) {
-        DayDetailSheet(day = selectedDay!!, onDismiss = { selectedDay = null })
+        DayDetailScreen(day = selectedDay!!, onBack = { selectedDay = null })
+        return
     }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -386,49 +388,67 @@ fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DayDetailSheet(day: com.pedometer.health.DayStepData, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState()
+fun DayDetailScreen(day: com.pedometer.health.DayStepData, onBack: () -> Unit) {
+    val dateFormatted = try {
+        val ld = java.time.LocalDate.parse(day.date)
+        val months = arrayOf("", "января", "февраля", "марта", "апреля", "мая", "июня",
+            "июля", "августа", "сентября", "октября", "ноября", "декабря")
+        val dows = mapOf(
+            java.time.DayOfWeek.MONDAY to "пн", java.time.DayOfWeek.TUESDAY to "вт",
+            java.time.DayOfWeek.WEDNESDAY to "ср", java.time.DayOfWeek.THURSDAY to "чт",
+            java.time.DayOfWeek.FRIDAY to "пт", java.time.DayOfWeek.SATURDAY to "сб",
+            java.time.DayOfWeek.SUNDAY to "вс",
+        )
+        "${ld.dayOfMonth} ${months[ld.monthValue]}, ${dows[ld.dayOfWeek]}"
+    } catch (_: Exception) { day.date }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(dateFormatted) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад",
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                day.date,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
 
-            // Step ring for this day
             val progress = (day.totalSteps.toFloat() / 6000).coerceIn(0f, 1f)
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                StepRing(progress = progress, color = StepGreen, size = 140f, strokeWidth = 12f)
+            Box(contentAlignment = Alignment.Center) {
+                StepRing(progress = progress, color = StepGreen, size = 200f, strokeWidth = 16f)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         "${day.totalSteps}",
-                        fontSize = 36.sp,
+                        fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = StepGreen,
                     )
                     Text(
-                        "шагов",
-                        style = MaterialTheme.typography.bodySmall,
+                        "/ 6000 шагов",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -445,6 +465,28 @@ fun DayDetailSheet(day: com.pedometer.health.DayStepData, onDismiss: () -> Unit)
                     title = "Бег",
                     value = "${day.runSteps}",
                     unit = "${day.runMinutes} мин",
+                    color = CalorieOrange,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MetricCard(
+                    title = "Всего",
+                    value = "${day.totalSteps}",
+                    unit = "шагов",
+                    color = StandBlue,
+                    modifier = Modifier.weight(1f),
+                )
+                MetricCard(
+                    title = "Активность",
+                    value = "${day.walkMinutes + day.runMinutes}",
+                    unit = "мин",
                     color = CalorieOrange,
                     modifier = Modifier.weight(1f),
                 )
