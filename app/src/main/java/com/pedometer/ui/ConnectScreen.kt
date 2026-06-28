@@ -82,16 +82,16 @@ fun ConnectScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             MetricCard(
-                title = "Heart Rate",
-                value = if (state.heartRate > 0) "${state.heartRate}" else "--",
-                unit = "bpm",
-                color = HeartRed,
+                title = "Walking",
+                value = "${state.todayWalkSteps}",
+                unit = "${state.todayWalkMinutes} min",
+                color = StepGreen,
                 modifier = Modifier.weight(1f),
             )
             MetricCard(
-                title = "Calories",
-                value = "${state.calories}",
-                unit = "kcal",
+                title = "Running",
+                value = "${state.todayRunSteps}",
+                unit = "steps",
                 color = CalorieOrange,
                 modifier = Modifier.weight(1f),
             )
@@ -104,19 +104,31 @@ fun ConnectScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             MetricCard(
-                title = "Standing",
-                value = "${state.standingHours}",
-                unit = "hours",
-                color = StandBlue,
+                title = "Heart Rate",
+                value = if (state.heartRate > 0) "${state.heartRate}" else "--",
+                unit = "bpm",
+                color = HeartRed,
                 modifier = Modifier.weight(1f),
             )
             MetricCard(
-                title = "Session",
-                value = "${state.phoneSteps}",
-                unit = "steps",
-                color = StepGreen.copy(alpha = 0.7f),
+                title = "Active",
+                value = "${state.todayWalkMinutes}",
+                unit = "min",
+                color = StandBlue,
                 modifier = Modifier.weight(1f),
             )
+        }
+
+        // Step history bar chart
+        if (state.stepHistory.isNotEmpty()) {
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "This Week",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            StepHistoryChart(history = state.stepHistory, goal = stepGoal)
         }
 
         Spacer(Modifier.height(24.dp))
@@ -274,6 +286,60 @@ fun MetricCard(title: String, value: String, unit: String, color: Color, modifie
                 Text(value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = color)
                 Spacer(Modifier.width(4.dp))
                 Text(unit, style = MaterialTheme.typography.bodySmall, color = color.copy(alpha = 0.7f))
+            }
+        }
+    }
+}
+
+@Composable
+fun StepHistoryChart(history: List<com.pedometer.health.DayStepData>, goal: Int) {
+    val maxSteps = (history.maxOfOrNull { it.totalSteps } ?: goal).coerceAtLeast(goal)
+    val barColor = StepGreen
+    val goalColor = StepGreen.copy(alpha = 0.3f)
+
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+            ) {
+                val barCount = history.size.coerceAtMost(7)
+                if (barCount == 0) return@Canvas
+                val barWidth = size.width / (barCount * 2f)
+                val spacing = barWidth
+
+                // Goal line
+                val goalY = size.height * (1f - goal.toFloat() / maxSteps)
+                drawLine(
+                    color = goalColor,
+                    start = Offset(0f, goalY),
+                    end = Offset(size.width, goalY),
+                    strokeWidth = 2f,
+                )
+
+                history.reversed().take(7).forEachIndexed { i, day ->
+                    val barHeight = (day.totalSteps.toFloat() / maxSteps) * size.height
+                    val x = i * (barWidth + spacing) + spacing / 2
+                    val color = if (day.totalSteps >= goal) barColor else barColor.copy(alpha = 0.5f)
+                    drawRoundRect(
+                        color = color,
+                        topLeft = Offset(x, size.height - barHeight),
+                        size = Size(barWidth, barHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                history.reversed().take(7).forEach { day ->
+                    Text(
+                        day.date.takeLast(2),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

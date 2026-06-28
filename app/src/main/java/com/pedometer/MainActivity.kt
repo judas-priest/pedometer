@@ -15,8 +15,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Test OPLUS StepProvider
-        com.pedometer.health.StepProviderReader.tryPaths(this)
         setContent {
             PedometerTheme {
                 val vm: WatchViewModel = viewModel()

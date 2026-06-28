@@ -13,7 +13,9 @@ import com.pedometer.bt.BleConnection
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
 import com.pedometer.health.HealthService
+import com.pedometer.health.DayStepData
 import com.pedometer.health.PhoneStepCounter
+import com.pedometer.health.StepProviderReader
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.weather.WeatherService
@@ -39,6 +41,10 @@ data class WatchState(
     val standingHours: Int = 0,
     val phoneSteps: Long = 0,
     val phoneStepsSinceBoot: Long = 0,
+    val todayWalkSteps: Int = 0,
+    val todayRunSteps: Int = 0,
+    val todayWalkMinutes: Int = 0,
+    val stepHistory: List<DayStepData> = emptyList(),
 )
 
 enum class ConnectionStatus {
@@ -72,6 +78,27 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             authKey = prefs.getString(KEY_AUTH, "") ?: "",
             macAddress = prefs.getString(KEY_MAC, "") ?: "",
         )
+
+        // Load step history from OPLUS StepProvider
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.i(TAG, "Reading StepProvider...")
+                val today = StepProviderReader.readToday(app)
+                Log.i(TAG, "StepProvider today: $today")
+                val history = StepProviderReader.readHistory(app, 7)
+                Log.i(TAG, "StepProvider history: ${history.size} days")
+                if (today != null) {
+                    _state.value = _state.value.copy(
+                        todayWalkSteps = today.walkSteps,
+                        todayRunSteps = today.runSteps,
+                        todayWalkMinutes = today.walkMinutes,
+                        stepHistory = history,
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "StepProvider failed", e)
+            }
+        }
 
         // Start phone step counter
         phoneStepCounter.start()
