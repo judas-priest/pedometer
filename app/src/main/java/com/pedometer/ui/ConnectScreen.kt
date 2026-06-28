@@ -58,7 +58,7 @@ fun ConnectScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         // Step ring hero
         val stepGoal = 6000
