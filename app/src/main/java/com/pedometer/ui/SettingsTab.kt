@@ -33,6 +33,7 @@ fun SettingsTab(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onProfileChange: (UserProfile) -> Unit = {},
+    onOpenDebug: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -304,6 +305,15 @@ fun SettingsTab(
             }
         }
 
+        // BLE Debug button
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { onOpenDebug() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("BLE Debug")
+        }
+
         Spacer(Modifier.height(16.dp))
 
         Text("О приложении", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -311,7 +321,7 @@ fun SettingsTab(
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Шагомер", style = MaterialTheme.typography.titleSmall)
-                Text("Версия 0.2.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Версия 0.3.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(24.dp))

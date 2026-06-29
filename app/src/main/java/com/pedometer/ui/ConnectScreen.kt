@@ -55,7 +55,7 @@ fun ConnectScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
-        // 3-ring hero
+        // Step ring hero
         val stepGoal = state.profile.stepGoal
         val currentSteps = when {
             state.healthConnectSteps > 0 -> state.healthConnectSteps
@@ -63,18 +63,8 @@ fun ConnectScreen(
             else -> state.phoneSteps
         }
         val totalStepsInt = currentSteps.toInt()
-        val caloriesGoal = 300.0
-        val calories = state.profile.calcCalories(totalStepsInt)
-        val distanceGoal = state.profile.calcDistance(stepGoal)
-        val distance = state.profile.calcDistance(totalStepsInt)
-
-        val stepsProgress = if (stepGoal > 0) (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f) else 0f
-        val caloriesProgress = if (caloriesGoal > 0) (calories / caloriesGoal).coerceIn(0.0, 1.0).toFloat() else 0f
-        val distanceProgress = if (distanceGoal > 0.01) (distance / distanceGoal).coerceIn(0.0, 1.0).toFloat() else 0f
-
-        val animSteps by animateFloatAsState(stepsProgress, tween(1000, easing = FastOutSlowInEasing), label = "steps")
-        val animCalories by animateFloatAsState(caloriesProgress, tween(1000, easing = FastOutSlowInEasing), label = "cal")
-        val animDistance by animateFloatAsState(distanceProgress, tween(1000, easing = FastOutSlowInEasing), label = "dist")
+        val progress = if (stepGoal > 0) (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f) else 0f
+        val animProgress by animateFloatAsState(progress, tween(1000, easing = FastOutSlowInEasing), label = "steps")
 
         Box(
             modifier = Modifier
@@ -94,12 +84,7 @@ fun ConnectScreen(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            ActivityRings(
-                stepsProgress = animSteps,
-                caloriesProgress = animCalories,
-                distanceProgress = animDistance,
-                size = 180f,
-            )
+            StepRing(progress = animProgress, color = StepGreen, size = 160f, strokeWidth = 14f)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "$currentSteps",

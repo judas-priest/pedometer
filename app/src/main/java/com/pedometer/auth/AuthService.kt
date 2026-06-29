@@ -1,5 +1,6 @@
 package com.pedometer.auth
 
+import android.util.Log
 import org.bouncycastle.crypto.engines.AESEngine
 import org.bouncycastle.crypto.modes.CCMBlockCipher
 import org.bouncycastle.crypto.params.AEADParameters
@@ -38,6 +39,7 @@ class AuthService(authKeyHex: String) {
         if (!expectedHmac.contentEquals(watchHmac)) return false
 
         isInitialized = true
+        Log.i("AuthService", "Keys derived: encKey=${encryptionKey.joinToString("") { "%02x".format(it) }} decKey=${decryptionKey.joinToString("") { "%02x".format(it) }}")
         return true
     }
 

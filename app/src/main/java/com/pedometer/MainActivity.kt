@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.pedometer.debug.DebugScreen
 import com.pedometer.ui.ConnectScreen
 import com.pedometer.ui.theme.PedometerTheme
 import com.pedometer.vm.WatchViewModel
@@ -26,6 +27,13 @@ class MainActivity : ComponentActivity() {
                 val vm: WatchViewModel = viewModel()
                 val state by vm.state.collectAsState()
                 var selectedTab by remember { mutableIntStateOf(0) }
+                var showDebug by remember { mutableStateOf(false) }
+
+                if (showDebug) {
+                    androidx.activity.compose.BackHandler { showDebug = false }
+                    DebugScreen(mac = state.macAddress.ifBlank { "E8:E6:09:31:23:D8" })
+                    return@PedometerTheme
+                }
 
                 Scaffold(
                     bottomBar = {
@@ -62,6 +70,7 @@ class MainActivity : ComponentActivity() {
                                 onConnect = vm::connect,
                                 onDisconnect = vm::disconnect,
                                 onProfileChange = vm::updateProfile,
+                                onOpenDebug = { showDebug = true },
                             )
                         }
                     }

@@ -229,11 +229,13 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     connection = { data -> spp.write(data) },
                     onAuthenticated = {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
-                        // Send commands with delays to avoid overwhelming the watch
                         viewModelScope.launch(Dispatchers.IO) {
                             Thread.sleep(500)
+                            // Send time sync first (Gadgetbridge does this)
+                            sendCurrentTime()
+                            Thread.sleep(300)
                             requestDeviceInfo()
-                            Thread.sleep(1000)
+                            Thread.sleep(300)
                             healthService?.startRealtimeStats()
                         }
                     },
@@ -307,6 +309,36 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         protocolHandler = null
         authService = null
         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
+    }
+
+    private fun sendCurrentTime() {
+        val cal = java.util.GregorianCalendar.getInstance()
+        val tz = cal.timeZone
+        val offset = tz.getOffset(cal.timeInMillis)
+        val quarterHourOffset = (offset / 1000 / 60 / 15)
+        val dst = if (tz.inDaylightTime(cal.time)) (tz.dstSavings / 1000 / 60 / 15) else 0
+
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(CommandHelper.TYPE_SYSTEM)
+            .setSubtype(CommandHelper.SYS_CLOCK)
+            .setSystem(XiaomiProto.System.newBuilder()
+                .setClock(XiaomiProto.Clock.newBuilder()
+                    .setTime(XiaomiProto.Time.newBuilder()
+                        .setHour(cal.get(java.util.Calendar.HOUR_OF_DAY))
+                        .setMinute(cal.get(java.util.Calendar.MINUTE))
+                        .setSecond(cal.get(java.util.Calendar.SECOND))
+                        .setMillisecond(cal.get(java.util.Calendar.MILLISECOND)))
+                    .setDate(XiaomiProto.Date.newBuilder()
+                        .setYear(cal.get(java.util.Calendar.YEAR))
+                        .setMonth(cal.get(java.util.Calendar.MONTH) + 1)
+                        .setDay(cal.get(java.util.Calendar.DAY_OF_MONTH)))
+                    .setTimezone(XiaomiProto.TimeZone.newBuilder()
+                        .setZoneOffset(quarterHourOffset)
+                        .setDstOffset(dst)
+                        .setName(tz.id))))
+            .build()
+        Log.i(TAG, "Sending current time: ${cal.get(java.util.Calendar.HOUR_OF_DAY)}:${cal.get(java.util.Calendar.MINUTE)} tz=${tz.id}")
+        protocolHandler?.sendCommand(cmd)
     }
 
     private fun requestDeviceInfo() {

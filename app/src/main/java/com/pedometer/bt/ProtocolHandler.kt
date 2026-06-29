@@ -197,11 +197,13 @@ class ProtocolHandler(
     fun sendCommand(command: XiaomiProto.Command, forAuth: Boolean = false) {
         val data = command.toByteArray()
         val channel = if (forAuth) Channel.Authentication else Channel.ProtobufCommand
-        Log.d(TAG, "sendCommand type=${command.type} subtype=${command.subtype} forAuth=$forAuth encrypted=${!forAuth && authService.isInitialized} dataLen=${data.size}")
+        Log.d(TAG, "sendCommand type=${command.type} subtype=${command.subtype} forAuth=$forAuth encrypted=${!forAuth && authService.isInitialized} dataLen=${data.size} plainHex=${data.joinToString("") { "%02x".format(it) }}")
 
         val packet: ByteArray = if (useV2) {
-            // Send as plaintext with opCode=1 to test if watch accepts unencrypted commands
-            PacketV2.encodeDataPacket(channel, packetSeqV2.getAndIncrement(), data, null)
+            val encryptFn: ((ByteArray) -> ByteArray)? = if (!forAuth && authService.isInitialized) {
+                { msg -> authService.encrypt(msg, 0) }
+            } else null
+            PacketV2.encodeDataPacket(channel, packetSeqV2.getAndIncrement(), data, encryptFn)
         } else {
             val dataType = if (forAuth) PacketV1.DATA_TYPE_AUTH else PacketV1.DATA_TYPE_ENCRYPTED
             var payload = data
