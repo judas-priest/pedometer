@@ -314,10 +314,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             Thread.sleep(300)
                             healthService?.startRealtimeStats()
 
-                            // 7. Send weather
+                            // 7. Send weather + periodic updates
                             Thread.sleep(500)
                             fetchAndSendWeather()
                             Log.i(TAG, "POST-AUTH: init complete")
+
+                            // Periodic weather update every 30 min
+                            while (true) {
+                                delay(30 * 60 * 1000)
+                                if (_state.value.connectionStatus != ConnectionStatus.Connected) break
+                                fetchAndSendWeather()
+                            }
                         }
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
