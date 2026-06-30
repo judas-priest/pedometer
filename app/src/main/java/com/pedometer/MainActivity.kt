@@ -21,6 +21,7 @@ import com.pedometer.debug.DebugScreen
 import com.pedometer.music.MediaListenerService
 import com.pedometer.ui.ConnectScreen
 import com.pedometer.ui.NotificationAppsScreen
+import com.pedometer.ui.OnboardingScreen
 import com.pedometer.ui.theme.PedometerTheme
 import com.pedometer.vm.WatchViewModel
 import kotlinx.coroutines.launch
@@ -43,6 +44,18 @@ class MainActivity : ComponentActivity() {
                 val state by vm.state.collectAsState()
                 var showDebug by remember { mutableStateOf(false) }
                 var showNotificationApps by remember { mutableStateOf(false) }
+
+                // Onboarding on first launch
+                val prefs = remember { getSharedPreferences("app_prefs", MODE_PRIVATE) }
+                var showOnboarding by remember { mutableStateOf(!prefs.getBoolean("onboarding_done", false)) }
+
+                if (showOnboarding) {
+                    OnboardingScreen(onComplete = {
+                        prefs.edit().putBoolean("onboarding_done", true).apply()
+                        showOnboarding = false
+                    })
+                    return@PedometerTheme
+                }
 
                 if (showDebug) {
                     androidx.activity.compose.BackHandler { showDebug = false }
