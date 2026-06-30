@@ -17,22 +17,27 @@ class WeatherService(
 
     var onWeatherRequested: (() -> Unit)? = null
 
+    private fun locationKey(cityName: String): String {
+        return "accu:${Math.abs(cityName.hashCode()) % 1000000}"
+    }
+
     fun setLocation(cityName: String) {
-        // Must set location BEFORE sending weather
+        val key = locationKey(cityName)
         val cmd = XiaomiProto.Command.newBuilder()
             .setType(COMMAND_TYPE)
             .setSubtype(7) // set current location
             .setWeather(XiaomiProto.Weather.newBuilder()
                 .setLocation(XiaomiProto.WeatherLocation.newBuilder()
-                    .setCode(cityName)
+                    .setCode(key)
                     .setName(cityName)))
             .build()
         protocolHandler.sendCommand(cmd)
-        Log.i(TAG, "Set weather location: $cityName")
+        Log.i(TAG, "Set weather location: $cityName (key=$key)")
     }
 
     fun sendWeather(data: WeatherData) {
         val timestamp = SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(Date())
+        val key = locationKey(data.cityName)
 
         val current = XiaomiProto.WeatherCurrent.newBuilder()
             .setMetadata(
@@ -40,6 +45,7 @@ class WeatherService(
                     .setPublicationTimestamp(timestamp)
                     .setCityName(data.cityName)
                     .setLocationName(data.cityName)
+                    .setLocationKey(key)
             )
             .setWeatherCondition(data.weatherCode)
             .setTemperature(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("℃").setValue(data.temperature))

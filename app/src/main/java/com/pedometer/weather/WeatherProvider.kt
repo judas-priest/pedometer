@@ -112,7 +112,7 @@ object WeatherProvider {
                 DayForecast(
                     tempMin = minTemps.getDouble(i).toInt(),
                     tempMax = maxTemps.getDouble(i).toInt(),
-                    weatherCode = codes.getInt(i),
+                    weatherCode = wmoToXiaomiCondition(codes.getInt(i)),
                 )
             }
         } catch (e: Exception) {
@@ -138,7 +138,7 @@ object WeatherProvider {
                 humidity = currentVars?.optInt("relative_humidity_2m", 50) ?: 50,
                 windSpeed = current.getDouble("windspeed"),
                 windDirection = current.getInt("winddirection"),
-                weatherCode = current.getInt("weathercode"),
+                weatherCode = wmoToXiaomiCondition(current.getInt("weathercode")),
                 pressure = currentVars?.optDouble("pressure_msl", 1013.0)?.toFloat() ?: 1013f,
                 cityName = cityName.ifBlank { "%.2f,%.2f".format(lat, lon) },
             )
