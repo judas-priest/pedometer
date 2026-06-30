@@ -11,6 +11,7 @@
 - [ ] Periodic weather updates (every 30 min)
 
 ## Phase 2: Health Data Sync
+- [x] Health config init (SPO2, HR, standing, stress, goals, vitality)
 - [ ] Sleep data sync (activity fetch, parse sleep stages)
 - [ ] SpO2 data (config sub=8, allDayTracking=2)
 - [ ] Stress data
@@ -25,9 +26,9 @@
 - [ ] Show call duration on watch
 
 ## Phase 4: Find Phone
-- [ ] Handle find phone command from watch
-- [ ] Play loud sound on phone when triggered
-- [ ] Find watch (send vibrate command to watch)
+- [x] Handle find phone command from watch (system sub=18, findDevice=0)
+- [x] Play default ringtone for 10 seconds
+- [ ] Find watch (send vibrate command from phone)
 
 ## Phase 5: Notification Actions
 - [ ] Handle dismiss notification from watch
@@ -86,3 +87,5 @@
 
 ## Progress Log
 - 2026-06-30 21:20: Phase 1 weather — basic implementation done (Open-Meteo, auto-send after auth)
+- 2026-06-30 21:35: Phase 2 health — config init done (7 config queries)
+- 2026-06-30 21:40: Phase 4 find phone — ringtone plays when watch triggers find
