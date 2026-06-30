@@ -24,6 +24,7 @@ import com.pedometer.health.UserProfile
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.notification.WatchNotificationBridge
+import com.pedometer.weather.WeatherProvider
 import com.pedometer.weather.WeatherService
 import com.pedometer.proto.CommandHelper
 import com.pedometer.proto.XiaomiProto
@@ -309,7 +310,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
                             // 6. Start realtime stats (steps + HR)
                             healthService?.startRealtimeStats()
-                            Log.i(TAG, "POST-AUTH: init complete, realtime stats started")
+
+                            // 7. Send weather
+                            Thread.sleep(500)
+                            fetchAndSendWeather()
+                            Log.i(TAG, "POST-AUTH: init complete")
                         }
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
@@ -335,6 +340,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 musicService = music
 
                 val weather = WeatherService(handler)
+                weather.onWeatherRequested = {
+                    viewModelScope.launch(Dispatchers.IO) { fetchAndSendWeather() }
+                }
                 weatherService = weather
 
                 val notif = NotificationService(handler)
@@ -394,6 +402,24 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         ctx.stopService(android.content.Intent(ctx, com.pedometer.service.WatchConnectionService::class.java))
         autoReconnectEnabled = true // re-enable for next connect
         reconnectAttempts = 0
+    }
+
+    private fun fetchAndSendWeather() {
+        try {
+            // Default: Moscow. TODO: get from GPS or settings
+            val lat = 55.75
+            val lon = 37.62
+            val cityName = "Москва"
+
+            val data = WeatherProvider.fetch(lat, lon, cityName)
+            if (data != null) {
+                weatherService?.sendWeather(data)
+            } else {
+                Log.w(TAG, "Weather fetch returned null")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Weather failed", e)
+        }
     }
 
     private fun sendCurrentTime() {

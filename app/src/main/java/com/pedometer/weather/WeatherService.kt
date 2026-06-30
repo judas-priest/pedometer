@@ -12,56 +12,44 @@ class WeatherService(
 ) {
     companion object {
         private const val TAG = "WeatherService"
-        const val COMMAND_TYPE = 12
-        const val CMD_CURRENT = 1
-        const val CMD_FORECAST = 2
+        const val COMMAND_TYPE = 10
     }
 
-    fun sendCurrentWeather(
-        cityName: String,
-        temperature: Int,
-        condition: Int,
-        humidity: Int,
-    ) {
+    var onWeatherRequested: (() -> Unit)? = null
+
+    fun sendWeather(data: WeatherData) {
         val timestamp = SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(Date())
 
         val current = XiaomiProto.WeatherCurrent.newBuilder()
             .setMetadata(
                 XiaomiProto.WeatherMetadata.newBuilder()
                     .setPublicationTimestamp(timestamp)
-                    .setCityName(cityName)
-                    .setLocationName(cityName)
+                    .setCityName(data.cityName)
+                    .setLocationName(data.cityName)
             )
-            .setWeatherCondition(condition)
-            .setTemperature(
-                XiaomiProto.WeatherUnitValue.newBuilder()
-                    .setUnit("C")
-                    .setValue(temperature)
-            )
-            .setHumidity(
-                XiaomiProto.WeatherUnitValue.newBuilder()
-                    .setUnit("%")
-                    .setValue(humidity)
-            )
+            .setWeatherCondition(data.weatherCode)
+            .setTemperature(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("℃").setValue(data.temperature))
+            .setHumidity(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("%").setValue(data.humidity))
+            .setWind(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("").setValue(data.windSpeed.toInt()))
+            .setPressure(data.pressure * 100)
 
         val cmd = XiaomiProto.Command.newBuilder()
             .setType(COMMAND_TYPE)
-            .setSubtype(CMD_CURRENT)
+            .setSubtype(0) // set current weather
             .setWeather(XiaomiProto.Weather.newBuilder().setCurrent(current))
             .build()
 
         protocolHandler.sendCommand(cmd)
-        Log.i(TAG, "Sent weather: $cityName ${temperature}C condition=$condition")
+        Log.i(TAG, "Sent weather: ${data.cityName} ${data.temperature}°C humidity=${data.humidity}%")
     }
 
     fun handleCommand(cmd: XiaomiProto.Command) {
         when (cmd.subtype) {
             3 -> {
-                // Watch requesting weather update
-                Log.d(TAG, "Watch requested weather update")
-                // TODO: trigger weather fetch from API
+                Log.i(TAG, "Watch requested weather update")
+                onWeatherRequested?.invoke()
             }
-            else -> Log.d(TAG, "Unhandled weather subtype: ${cmd.subtype}")
+            else -> Log.d(TAG, "Weather subtype: ${cmd.subtype}")
         }
     }
 }
