@@ -40,9 +40,9 @@
 - [ ] Reply from watch (if supported)
 
 ## Phase 6: Watchfaces
-- [ ] List installed watchfaces on watch
-- [ ] Set active watchface
-- [ ] Upload custom watchface (.bin file)
+- [x] List/set/delete watchfaces — WatchfaceService already implemented
+- [ ] Wire WatchfaceService into ViewModel + handleCommand
+- [ ] Upload custom watchface (.bin file via data upload)
 - [ ] Watchface picker UI
 
 ## Phase 7: UI Polish
@@ -148,3 +148,7 @@
 - 2026-07-01 00:00: Phase 1 — 6-day forecast added
 - 2026-07-01 00:05: Phase 5 — openOnPhone button enabled in notifications
 - 2026-07-01 00:10: Phase 10 — timer/navigation not in proto, done what's available
+- 2026-07-01 00:20: Phase 7 — onboarding wizard (5 steps, first launch only)
+- 2026-07-01 00:25: Phase 1 — 6-day forecast added
+- 2026-07-01 00:30: Phase 6 — WatchfaceService already built, needs wiring
+- 2026-07-01 00:35: All tests pass, 30+ commits total today
