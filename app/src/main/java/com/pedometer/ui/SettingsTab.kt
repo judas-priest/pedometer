@@ -256,11 +256,30 @@ fun SettingsTab(
                 }
             }
         } else {
-            OutlinedButton(
-                onClick = { onOpenNotificationApps() },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Уведомления на часы")
+                OutlinedButton(
+                    onClick = { onOpenNotificationApps() },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Уведомления")
+                }
+                OutlinedButton(
+                    onClick = {
+                        com.pedometer.notification.WatchNotificationBridge.sendToWatch(
+                            id = 12345,
+                            packageName = "com.pedometer",
+                            appName = "Шагомер",
+                            title = "Тест",
+                            body = "Тестовое уведомление!",
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Тест")
+                }
             }
         }
 

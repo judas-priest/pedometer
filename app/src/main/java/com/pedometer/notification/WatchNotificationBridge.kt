@@ -26,14 +26,17 @@ object WatchNotificationBridge {
     ) {
         val handler = protocolHandler ?: return
 
+        val notifId = id and 0x7FFFFFFF // ensure positive
         val notification3 = XiaomiProto.Notification3.newBuilder()
-            .setId(id)
+            .setId(notifId)
             .setPackage(if (isCall) "phone" else packageName)
             .setTitle(title)
             .setBody(body)
             .setAppName(if (isCall) "phone" else appName)
+            .setUnknown4("")
             .setTimestamp(timestampFormat.format(Date()))
             .setIsCall(isCall)
+            .setKey("0|${packageName}|${notifId}|null|10000")
 
         val notification = XiaomiProto.Notification.newBuilder()
             .setNotification2(XiaomiProto.Notification2.newBuilder()
