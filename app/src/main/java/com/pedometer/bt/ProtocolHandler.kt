@@ -203,7 +203,9 @@ class ProtocolHandler(
             val encryptFn: ((ByteArray) -> ByteArray)? = if (!forAuth && authService.isInitialized) {
                 { msg -> authService.encrypt(msg, 0) }
             } else null
-            PacketV2.encodeDataPacket(channel, packetSeqV2.getAndIncrement(), data, encryptFn)
+            PacketV2.encodeDataPacket(channel, packetSeqV2.getAndIncrement(), data, encryptFn).also {
+                Log.d(TAG, "V2 TX ${it.size} bytes: ${it.joinToString(":") { "%02x".format(it) }}")
+            }
         } else {
             val dataType = if (forAuth) PacketV1.DATA_TYPE_AUTH else PacketV1.DATA_TYPE_ENCRYPTED
             var payload = data

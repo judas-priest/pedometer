@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.DirectionsRun
@@ -17,6 +19,7 @@ import com.pedometer.debug.DebugScreen
 import com.pedometer.ui.ConnectScreen
 import com.pedometer.ui.theme.PedometerTheme
 import com.pedometer.vm.WatchViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +29,6 @@ class MainActivity : ComponentActivity() {
             PedometerTheme {
                 val vm: WatchViewModel = viewModel()
                 val state by vm.state.collectAsState()
-                var selectedTab by remember { mutableIntStateOf(0) }
                 var showDebug by remember { mutableStateOf(false) }
 
                 if (showDebug) {
@@ -35,32 +37,40 @@ class MainActivity : ComponentActivity() {
                     return@PedometerTheme
                 }
 
+                val pagerState = rememberPagerState(pageCount = { 3 })
+                val scope = rememberCoroutineScope()
+
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
                             NavigationBarItem(
-                                selected = selectedTab == 0,
-                                onClick = { selectedTab = 0 },
+                                selected = pagerState.currentPage == 0,
+                                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
                                 icon = { Icon(Icons.Default.FavoriteBorder, contentDescription = null) },
                                 label = { Text("Здоровье") },
                             )
                             NavigationBarItem(
-                                selected = selectedTab == 1,
-                                onClick = { selectedTab = 1 },
+                                selected = pagerState.currentPage == 1,
+                                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                                 icon = { Icon(Icons.Default.DirectionsRun, contentDescription = null) },
                                 label = { Text("Активность") },
                             )
                             NavigationBarItem(
-                                selected = selectedTab == 2,
-                                onClick = { selectedTab = 2 },
+                                selected = pagerState.currentPage == 2,
+                                onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
                                 icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                                 label = { Text("Настройки") },
                             )
                         }
-                    }
+                    },
                 ) { padding ->
-                    Box(modifier = Modifier.padding(padding)) {
-                        when (selectedTab) {
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding),
+                    ) { page ->
+                        when (page) {
                             0 -> ConnectScreen(state = state)
                             1 -> com.pedometer.ui.ActivityTab(state = state)
                             2 -> com.pedometer.ui.SettingsTab(

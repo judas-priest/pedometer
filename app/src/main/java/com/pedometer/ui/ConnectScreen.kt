@@ -7,13 +7,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -31,6 +34,7 @@ private val HeartRed = Color(0xFFE53935)
 private val CalorieOrange = Color(0xFFFF9800)
 private val StandBlue = Color(0xFF42A5F5)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectScreen(
     state: WatchState,
@@ -40,11 +44,22 @@ fun ConnectScreen(
     if (selectedDay != null) {
         androidx.activity.compose.BackHandler { selectedDay = null }
         val isToday = selectedDay!!.date == java.time.LocalDate.now().toString()
+        val history = state.stepHistory
         DayDetailScreen(
             day = selectedDay!!,
             profile = state.profile,
             hourlySteps = if (isToday) state.todayHourlySteps else emptyList(),
             onBack = { selectedDay = null },
+            onPrevDay = {
+                val idx = history.indexOfFirst { it.date == selectedDay!!.date }
+                if (idx in 0 until history.size - 1) selectedDay = history[idx + 1]
+            },
+            onNextDay = {
+                val idx = history.indexOfFirst { it.date == selectedDay!!.date }
+                if (idx > 0) selectedDay = history[idx - 1]
+            },
+            hasPrev = history.indexOfFirst { it.date == selectedDay!!.date }.let { it in 0 until history.size - 1 },
+            hasNext = history.indexOfFirst { it.date == selectedDay!!.date } > 0,
         )
         return
     }
@@ -53,8 +68,13 @@ fun ConnectScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(top = 28.dp, start = 20.dp, end = 20.dp),
     ) {
+        Text(
+            "Здоровье",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+        )
         // Step ring hero
         val stepGoal = state.profile.stepGoal
         val currentSteps = when {
@@ -346,6 +366,10 @@ fun DayDetailScreen(
     profile: com.pedometer.health.UserProfile = com.pedometer.health.UserProfile(),
     hourlySteps: List<HourlySteps> = emptyList(),
     onBack: () -> Unit,
+    onPrevDay: () -> Unit = {},
+    onNextDay: () -> Unit = {},
+    hasPrev: Boolean = false,
+    hasNext: Boolean = false,
 ) {
     val dateFormatted = try {
         val ld = java.time.LocalDate.parse(day.date)
@@ -362,32 +386,70 @@ fun DayDetailScreen(
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 20.dp, top = 28.dp),
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Назад",
-                )
+            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
             }
+            Spacer(Modifier.width(4.dp))
             Text(
-                dateFormatted,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+                "Активность за день",
+                style = MaterialTheme.typography.titleMedium,
             )
         }
 
+        // Date navigation: < date >
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+        ) {
+            IconButton(
+                onClick = onPrevDay,
+                enabled = hasPrev,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Предыдущий день",
+                    modifier = Modifier.size(18.dp),
+                    tint = if (hasPrev) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                dateFormatted,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Spacer(Modifier.weight(1f))
+            IconButton(
+                onClick = onNextDay,
+                enabled = hasNext,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Следующий день",
+                    modifier = Modifier.size(18.dp),
+                    tint = if (hasNext) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                )
+            }
+        }
+
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(8.dp))
-
             val progress = if (profile.stepGoal > 0) (day.totalSteps.toFloat() / profile.stepGoal).coerceIn(0f, 1f) else 0f
             Box(contentAlignment = Alignment.Center) {
                 StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 14f)
@@ -415,10 +477,11 @@ fun DayDetailScreen(
                 profile = profile,
             )
 
-            if (hourlySteps.isNotEmpty()) {
-                Spacer(Modifier.height(24.dp))
-                HourlyStepChart(hourlySteps = hourlySteps)
-            }
+        if (hourlySteps.isNotEmpty()) {
+            Spacer(Modifier.height(24.dp))
+            HourlyStepChart(hourlySteps = hourlySteps)
+        }
+        Spacer(Modifier.height(24.dp))
         }
     }
 }
