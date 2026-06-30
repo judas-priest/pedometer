@@ -78,8 +78,8 @@
 - [ ] Navigation directions on watch
 - [ ] Timer/stopwatch sync
 - [x] World clock sync (UtilityService.setWorldClocks)
-- [ ] Custom vibration patterns
-- [ ] Meditation/breathing exercises with haptic feedback
+- [x] Custom vibration patterns (VibrationTest proto)
+- [x] Meditation/breathing exercise (4-7-8 pattern with haptic cues)
 
 ## Research Notes
 
