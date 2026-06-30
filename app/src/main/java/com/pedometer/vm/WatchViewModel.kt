@@ -94,6 +94,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
         _state.value = _state.value.copy(profile = userProfile)
 
+        // Auto-connect if MAC and key saved
+        val savedMac = _state.value.macAddress
+        val savedKey = _state.value.authKey
+        if (savedMac.isNotBlank() && savedKey.isNotBlank()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                delay(2000) // wait for UI to settle
+                Log.i(TAG, "Auto-connecting to $savedMac")
+                connect()
+            }
+        }
+
         // Periodically refresh step data from StepProvider (every 10s while active)
         viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
@@ -197,6 +208,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             .edit().putString(KEY_MAC, mac).apply()
     }
 
+    private var autoReconnectEnabled = true
+    private var reconnectAttempts = 0
+    private val maxReconnectAttempts = 3
+
     @SuppressLint("MissingPermission")
     fun connect() {
         val s = _state.value
@@ -204,6 +219,15 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         if (s.connectionStatus != ConnectionStatus.Disconnected) return
 
         _state.value = s.copy(connectionStatus = ConnectionStatus.Connecting)
+
+        // Start foreground service to keep connection alive
+        val context = getApplication<Application>()
+        try {
+            context.startForegroundService(
+                android.content.Intent(context, com.pedometer.service.WatchConnectionService::class.java))
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to start foreground service: ${e.message}")
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -220,6 +244,22 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     onData = { data -> protocolHandler?.onDataReceived(data) },
                     onDisconnected = {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
+                        // Auto-reconnect
+                        if (autoReconnectEnabled && reconnectAttempts < maxReconnectAttempts) {
+                            reconnectAttempts++
+                            val delayMs = 2000L * reconnectAttempts
+                            Log.i(TAG, "Auto-reconnect attempt $reconnectAttempts/$maxReconnectAttempts in ${delayMs}ms")
+                            viewModelScope.launch(Dispatchers.IO) {
+                                delay(delayMs)
+                                if (_state.value.connectionStatus == ConnectionStatus.Disconnected) {
+                                    connect()
+                                }
+                            }
+                        } else {
+                            // Stop foreground service
+                            val ctx = getApplication<Application>()
+                            ctx.stopService(android.content.Intent(ctx, com.pedometer.service.WatchConnectionService::class.java))
+                        }
                     }
                 )
                 sppConnection = spp
@@ -229,6 +269,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     connection = { data -> spp.write(data) },
                     onAuthenticated = {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
+                        reconnectAttempts = 0 // reset on successful connect
                         viewModelScope.launch(Dispatchers.IO) {
                             Thread.sleep(500)
                             Log.i(TAG, "POST-AUTH: initializing watch")
@@ -323,6 +364,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        autoReconnectEnabled = false // don't reconnect on manual disconnect
         healthService?.stopRealtimeStats()
         healthService = null
         musicService = null
@@ -335,6 +377,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         protocolHandler = null
         authService = null
         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
+        // Stop foreground service
+        val ctx = getApplication<Application>()
+        ctx.stopService(android.content.Intent(ctx, com.pedometer.service.WatchConnectionService::class.java))
+        autoReconnectEnabled = true // re-enable for next connect
+        reconnectAttempts = 0
     }
 
     private fun sendCurrentTime() {
