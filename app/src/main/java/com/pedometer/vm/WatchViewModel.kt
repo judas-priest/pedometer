@@ -23,6 +23,7 @@ import com.pedometer.health.StepProviderReader
 import com.pedometer.health.UserProfile
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
+import com.pedometer.notification.WatchNotificationBridge
 import com.pedometer.weather.WeatherService
 import com.pedometer.proto.CommandHelper
 import com.pedometer.proto.XiaomiProto
@@ -274,6 +275,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     onAuthenticated = {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
                         reconnectAttempts = 0 // reset on successful connect
+                        WatchNotificationBridge.protocolHandler = protocolHandler
                         viewModelScope.launch(Dispatchers.IO) {
                             Thread.sleep(500)
                             Log.i(TAG, "POST-AUTH: initializing watch")
@@ -374,6 +376,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         autoReconnectEnabled = false // don't reconnect on manual disconnect
+        WatchNotificationBridge.protocolHandler = null
         healthService?.stopRealtimeStats()
         healthService = null
         musicService = null
