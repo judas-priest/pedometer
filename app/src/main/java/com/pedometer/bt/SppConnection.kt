@@ -1,7 +1,9 @@
 package com.pedometer.bt
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.util.Log
 import java.io.IOException
@@ -30,13 +32,47 @@ class SppConnection(
     @SuppressLint("MissingPermission")
     fun connect(device: BluetoothDevice): Boolean {
         this.device = device
-        // Try standard SPP first, then reflection fallback
+
+        // Strategy: connect as client AND listen as server simultaneously
+        // Mi Fitness acts as server — watch connects TO it
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+
+        // Start server listener in background
+        var serverSocket: BluetoothServerSocket? = null
+        val serverThread = Thread({
+            try {
+                serverSocket = adapter.listenUsingRfcommWithServiceRecord("Pedometer", SPP_UUID)
+                Log.i(TAG, "RFCOMM server listening on UUID $SPP_UUID")
+                val accepted = serverSocket?.accept(30000) // 30s timeout
+                if (accepted != null && !running) {
+                    Log.i(TAG, "Watch connected to us as SERVER! remote=${accepted.remoteDevice.address}")
+                    socket = accepted
+                    inputStream = accepted.inputStream
+                    outputStream = accepted.outputStream
+                    running = true
+                    Thread({ readLoop() }, "spp-read").start()
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Server accept ended: ${e.message}")
+            } finally {
+                try { serverSocket?.close() } catch (_: Exception) {}
+            }
+        }, "spp-server")
+        serverThread.start()
+
+        // SERVER ONLY mode — wait for watch to connect to us
+        Log.i(TAG, "Waiting for watch to connect to our server (30s timeout)...")
+        try { serverThread.join(30000) } catch (_: Exception) {}
+        if (running) return true
+
+        // Fallback: try as client
+        Log.i(TAG, "Server accept timed out, trying as client...")
+        try { serverSocket?.close() } catch (_: Exception) {}
         for (attempt in 1..3) {
             try {
                 val s = if (attempt <= 1) {
                     device.createRfcommSocketToServiceRecord(SPP_UUID)
                 } else {
-                    // Reflection fallback — bypasses SDP lookup
                     Log.i(TAG, "Using reflection createRfcommSocket on attempt $attempt")
                     val m = device.javaClass.getMethod("createRfcommSocket", Int::class.java)
                     m.invoke(device, 2) as BluetoothSocket
@@ -47,10 +83,10 @@ class SppConnection(
                 outputStream = s.outputStream
                 running = true
                 Thread({ readLoop() }, "spp-read").start()
-                Log.i(TAG, "Connected to ${device.address} on attempt $attempt")
+                Log.i(TAG, "Connected to ${device.address} as CLIENT on attempt $attempt")
                 return true
             } catch (e: Exception) {
-                Log.e(TAG, "Connection attempt $attempt failed", e)
+                Log.e(TAG, "Client connection attempt $attempt failed", e)
                 if (attempt < 3) Thread.sleep(2000)
             }
         }

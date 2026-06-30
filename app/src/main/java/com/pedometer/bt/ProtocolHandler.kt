@@ -32,11 +32,16 @@ class ProtocolHandler(
     private val packetSeqV2 = AtomicInteger(0)
 
     fun start() {
-        // Skip version probe — go directly to V2 session config (like Mi Fitness)
-        Log.i(TAG, "Skipping version probe, sending V2 session config directly")
-        useV2 = true
-        authService.useV2Crypto = true
-        connection.write(PacketV2.encodeSessionConfig(0, PacketV2.SESSION_START_REQUEST))
+        val versionPacket = PacketV1(
+            channel = Channel.Version,
+            flag = true,
+            needsResponse = true,
+            opCode = PacketV1.OPCODE_READ,
+            frameSerial = 0,
+            dataType = PacketV1.DATA_TYPE_PLAIN,
+            payload = ByteArray(0),
+        ).encode()
+        connection.write(versionPacket)
     }
 
     fun onDataReceived(data: ByteArray) {
@@ -103,7 +108,10 @@ class ProtocolHandler(
 
         val packet = PacketV2.decode(bytes)
         skipBuffer(packetSize)
-        if (packet == null) return Unit
+        if (packet == null) {
+            Log.w(TAG, "V2 decode returned null for ${packetSize} bytes, first bytes: ${bytes.take(16).joinToString(":") { "%02x".format(it) }}")
+            return Unit
+        }
 
         when (packet) {
             is PacketV2.SessionConfigPacket -> {
