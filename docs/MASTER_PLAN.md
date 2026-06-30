@@ -24,7 +24,7 @@
 - [x] Accept call from watch (TelecomManager.acceptRingingCall)
 - [x] Reject call from watch (TelecomManager.endCall)
 - [x] Calls always forwarded (no whitelist needed)
-- [ ] Call state management (ringing → connected → ended)
+- [x] Call state management (detect call end via notification removal)
 - [ ] Show call duration on watch
 
 ## Phase 4: Find Phone
@@ -61,13 +61,14 @@
 - [ ] Background service persistence tests
 
 ## Phase 9: Voice Assistant (Bonus)
-- [ ] Intercept Alexa button press on watch
-- [ ] Capture audio stream via SPP
-- [ ] STT (speech-to-text) — Whisper or cloud API
-- [ ] Send to LLM (Claude/DeepSeek/Gemini)
-- [ ] TTS (text-to-speech) response
-- [ ] Send audio back to watch speaker
-- [ ] Or show text response on watch screen
+- [x] Research: feasible via Bluetooth SCO (HFP), not SPP
+- [x] VoiceAssistant skeleton (SCO setup, AudioRecord, 5s capture)
+- [x] Permissions: RECORD_AUDIO, MODIFY_AUDIO_SETTINGS
+- [ ] STT integration (Whisper API or local)
+- [ ] LLM integration (Claude/DeepSeek API)
+- [ ] TTS integration (Android TTS or cloud)
+- [ ] Trigger from watch (button press or notification)
+- [ ] Show text response on watch screen via notification
 
 ## Phase 10: Creative Bonus Features
 - [ ] Research watch hardware capabilities (sensors, speaker, mic, screen, button)
@@ -141,3 +142,6 @@
 - 2026-06-30 23:25: Phase 5 — "open on phone" action complete
 - 2026-06-30 23:30: Phase 10 — world clock, breathing vibration
 - 2026-06-30 23:35: All tests pass, version 1.0.0
+- 2026-06-30 23:45: Phase 3 — call state management (end detection)
+- 2026-06-30 23:50: Phase 9 — voice assistant research FEASIBLE, skeleton created
+- 2026-06-30 23:55: Phase 9 — SCO audio capture, permissions added
