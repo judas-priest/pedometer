@@ -31,7 +31,6 @@ class HealthService(
 
     fun initialize() {
         Log.i(TAG, "Initializing health configs")
-        // Query all health configs like Gadgetbridge
         sendSimpleCommand(CMD_CONFIG_SPO2_GET)
         sendSimpleCommand(CMD_CONFIG_HEART_RATE_GET)
         sendSimpleCommand(CMD_CONFIG_STANDING_REMINDER_GET)
@@ -39,6 +38,9 @@ class HealthService(
         sendSimpleCommand(CMD_CONFIG_GOAL_NOTIFICATION_GET)
         sendSimpleCommand(CMD_CONFIG_GOALS_GET)
         sendSimpleCommand(CMD_CONFIG_VITALITY_SCORE_GET)
+
+        // Fetch today's activity data
+        protocolHandler.sendCommand(CommandHelper.buildActivityFetchToday())
     }
 
     private fun sendSimpleCommand(subtype: Int) {
