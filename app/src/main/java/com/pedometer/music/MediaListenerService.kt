@@ -32,15 +32,16 @@ class MediaListenerService : NotificationListenerService() {
         val sbn = sbn ?: return
         val pkg = sbn.packageName ?: return
 
-        if (pkg !in getWhitelist(applicationContext)) return
-
         val notification = sbn.notification ?: return
+        val isCall = notification.category == Notification.CATEGORY_CALL
+
+        // Calls always forwarded, other apps need whitelist
+        if (!isCall && pkg !in getWhitelist(applicationContext)) return
         val extras = notification.extras ?: return
 
         var title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
         val appName = getAppName(pkg)
-        val isCall = notification.category == Notification.CATEGORY_CALL
 
         if (title.isBlank() && text.isBlank()) return
 
