@@ -89,6 +89,38 @@ object WeatherProvider {
         }
     }
 
+    data class DayForecast(
+        val tempMin: Int,
+        val tempMax: Int,
+        val weatherCode: Int,
+    )
+
+    fun fetchForecast(lat: Double, lon: Double): List<DayForecast> {
+        return try {
+            val url = URL("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&forecast_days=6")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 10000
+            val json = JSONObject(conn.inputStream.bufferedReader().readText())
+            conn.disconnect()
+
+            val daily = json.getJSONObject("daily")
+            val maxTemps = daily.getJSONArray("temperature_2m_max")
+            val minTemps = daily.getJSONArray("temperature_2m_min")
+            val codes = daily.getJSONArray("weathercode")
+
+            (0 until minOf(6, maxTemps.length())).map { i ->
+                DayForecast(
+                    tempMin = minTemps.getDouble(i).toInt(),
+                    tempMax = maxTemps.getDouble(i).toInt(),
+                    weatherCode = codes.getInt(i),
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Forecast fetch failed", e)
+            emptyList()
+        }
+    }
+
     fun fetch(lat: Double, lon: Double, cityName: String = ""): WeatherData? {
         return try {
             val url = URL("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true&current=relative_humidity_2m,pressure_msl")

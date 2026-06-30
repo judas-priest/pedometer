@@ -463,6 +463,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             val data = WeatherProvider.fetchWithLocation(getApplication())
             if (data != null) {
                 weatherService?.sendWeather(data)
+
+                // Also send 6-day forecast
+                val forecasts = WeatherProvider.fetchForecast(55.75, 37.62) // TODO: use same GPS coords
+                if (forecasts.isNotEmpty()) {
+                    weatherService?.sendForecast(data.cityName, forecasts)
+                }
             } else {
                 Log.w(TAG, "Weather fetch returned null")
             }

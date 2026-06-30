@@ -43,6 +43,36 @@ class WeatherService(
         Log.i(TAG, "Sent weather: ${data.cityName} ${data.temperature}°C humidity=${data.humidity}%")
     }
 
+    fun sendForecast(cityName: String, forecasts: List<WeatherProvider.DayForecast>) {
+        if (forecasts.isEmpty()) return
+        val timestamp = SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(Date())
+
+        val entries = XiaomiProto.ForecastEntries.newBuilder()
+        for (f in forecasts) {
+            entries.addEntry(XiaomiProto.ForecastEntry.newBuilder()
+                .setTemperatureRange(XiaomiProto.WeatherRange.newBuilder()
+                    .setFrom(f.tempMax).setTo(f.tempMin))
+                .setConditionRange(XiaomiProto.WeatherRange.newBuilder()
+                    .setFrom(f.weatherCode).setTo(f.weatherCode))
+                .setTemperatureSymbol("℃"))
+        }
+
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(COMMAND_TYPE)
+            .setSubtype(1) // daily forecast
+            .setWeather(XiaomiProto.Weather.newBuilder()
+                .setForecast(XiaomiProto.WeatherForecast.newBuilder()
+                    .setMetadata(XiaomiProto.WeatherMetadata.newBuilder()
+                        .setPublicationTimestamp(timestamp)
+                        .setCityName(cityName)
+                        .setLocationName(cityName))
+                    .setEntries(entries)))
+            .build()
+
+        protocolHandler.sendCommand(cmd)
+        Log.i(TAG, "Sent ${forecasts.size}-day forecast for $cityName")
+    }
+
     fun handleCommand(cmd: XiaomiProto.Command) {
         when (cmd.subtype) {
             3 -> {
