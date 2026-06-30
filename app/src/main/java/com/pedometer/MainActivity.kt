@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pedometer.debug.DebugScreen
 import com.pedometer.ui.ConnectScreen
+import com.pedometer.ui.NotificationAppsScreen
 import com.pedometer.ui.theme.PedometerTheme
 import com.pedometer.vm.WatchViewModel
 import kotlinx.coroutines.launch
@@ -30,10 +31,17 @@ class MainActivity : ComponentActivity() {
                 val vm: WatchViewModel = viewModel()
                 val state by vm.state.collectAsState()
                 var showDebug by remember { mutableStateOf(false) }
+                var showNotificationApps by remember { mutableStateOf(false) }
 
                 if (showDebug) {
                     androidx.activity.compose.BackHandler { showDebug = false }
                     DebugScreen(mac = state.macAddress.ifBlank { "E8:E6:09:31:23:D8" })
+                    return@PedometerTheme
+                }
+
+                if (showNotificationApps) {
+                    androidx.activity.compose.BackHandler { showNotificationApps = false }
+                    NotificationAppsScreen(onBack = { showNotificationApps = false })
                     return@PedometerTheme
                 }
 
@@ -81,6 +89,7 @@ class MainActivity : ComponentActivity() {
                                 onDisconnect = vm::disconnect,
                                 onProfileChange = vm::updateProfile,
                                 onOpenDebug = { showDebug = true },
+                                onOpenNotificationApps = { showNotificationApps = true },
                             )
                         }
                     }

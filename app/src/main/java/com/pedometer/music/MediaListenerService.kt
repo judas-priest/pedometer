@@ -9,28 +9,35 @@ import com.pedometer.notification.WatchNotificationBridge
 class MediaListenerService : NotificationListenerService() {
     companion object {
         private const val TAG = "MediaListenerService"
+        const val PREFS_NAME = "notification_whitelist"
+        const val KEY_PACKAGES = "packages"
 
-        // Whitelist of apps to forward notifications to watch
-        private val NOTIFICATION_WHITELIST = setOf(
-            "org.telegram.messenger",           // Telegram
-            "org.telegram.messenger.web",        // Telegram (web variant)
-            "org.telegram.plus",                 // Telegram Plus
-            "com.android.mms",                   // SMS
-            "com.google.android.apps.messaging", // Google Messages
-            "com.oneplus.mms",                   // OnePlus SMS
-            "com.coloros.mms",                    // ColorOS SMS
-            "com.messanger",                     // Custom messenger
-            "com.android.dialer",                // Phone
-            "com.google.android.dialer",         // Google Phone
-            "com.oplus.dialer",                  // OnePlus/ColorOS Phone
+        // Default apps if nothing configured
+        val DEFAULT_WHITELIST = setOf(
+            "org.telegram.messenger",
+            "org.telegram.messenger.web",
+            "com.android.mms",
+            "com.google.android.apps.messaging",
+            "com.android.dialer",
+            "com.google.android.dialer",
         )
+
+        fun getWhitelist(context: android.content.Context): Set<String> {
+            val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            return prefs.getStringSet(KEY_PACKAGES, null) ?: DEFAULT_WHITELIST
+        }
+
+        fun saveWhitelist(context: android.content.Context, packages: Set<String>) {
+            context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                .edit().putStringSet(KEY_PACKAGES, packages).apply()
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val sbn = sbn ?: return
         val pkg = sbn.packageName ?: return
 
-        if (pkg !in NOTIFICATION_WHITELIST) return
+        if (pkg !in getWhitelist(applicationContext)) return
 
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return

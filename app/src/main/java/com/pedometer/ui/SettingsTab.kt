@@ -34,6 +34,7 @@ fun SettingsTab(
     onDisconnect: () -> Unit,
     onProfileChange: (UserProfile) -> Unit = {},
     onOpenDebug: () -> Unit = {},
+    onOpenNotificationApps: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -229,7 +230,7 @@ fun SettingsTab(
             }
         }
 
-        // Notification Listener (for music control from watch)
+        // Notifications & Music
         Spacer(Modifier.height(8.dp))
         val nlEnabled = try {
             val cn = android.content.ComponentName(context, com.pedometer.music.MediaListenerService::class.java)
@@ -240,9 +241,9 @@ fun SettingsTab(
         if (!nlEnabled) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Управление музыкой", style = MaterialTheme.typography.titleSmall)
+                    Text("Уведомления и музыка", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Разрешите доступ к уведомлениям для управления плеером с часов",
+                        "Разрешите доступ к уведомлениям для пересылки на часы и управления плеером",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -253,6 +254,13 @@ fun SettingsTab(
                         Text("Разрешить")
                     }
                 }
+            }
+        } else {
+            OutlinedButton(
+                onClick = { onOpenNotificationApps() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Уведомления на часы")
             }
         }
 
