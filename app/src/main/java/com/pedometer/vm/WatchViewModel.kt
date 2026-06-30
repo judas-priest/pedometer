@@ -370,6 +370,23 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 val notif = NotificationService(handler)
+                notif.onCallAction = { accept ->
+                    try {
+                        val ctx = getApplication<Application>()
+                        val telecom = ctx.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
+                        if (accept) {
+                            @Suppress("MissingPermission")
+                            telecom.acceptRingingCall()
+                            Log.i(TAG, "Call ACCEPTED from watch")
+                        } else {
+                            @Suppress("MissingPermission")
+                            telecom.endCall()
+                            Log.i(TAG, "Call REJECTED from watch")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Call action failed: ${e.message}")
+                    }
+                }
                 notificationService = notif
 
                 if (!spp.connect(device)) {

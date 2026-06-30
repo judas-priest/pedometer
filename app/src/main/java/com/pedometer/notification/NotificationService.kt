@@ -51,15 +51,27 @@ class NotificationService(
         Log.d(TAG, "Sent notification: $appName - $title")
     }
 
+    var onCallAction: ((Boolean) -> Unit)? = null // true=accept, false=reject
+
     fun handleCommand(cmd: XiaomiProto.Command) {
         when (cmd.subtype) {
             CMD_NOTIFICATION_DISMISS -> {
-                Log.d(TAG, "Watch dismissed notification")
+                Log.i(TAG, "Watch dismissed notification")
+                if (cmd.hasNotification() && cmd.notification.hasNotificationDismiss()) {
+                    val ids = cmd.notification.notificationDismiss.notificationIdList
+                    for (nid in ids) {
+                        Log.d(TAG, "Dismiss ID: ${nid.id}")
+                    }
+                }
+                // If active call — reject
+                onCallAction?.invoke(false)
             }
             CMD_OPEN_ON_PHONE -> {
-                Log.d(TAG, "Watch requested open on phone")
+                Log.i(TAG, "Watch requested open on phone / accept call")
+                // If active call — accept
+                onCallAction?.invoke(true)
             }
-            else -> Log.d(TAG, "Unhandled notification subtype: ${cmd.subtype}")
+            else -> Log.d(TAG, "Notification subtype: ${cmd.subtype}")
         }
     }
 }
