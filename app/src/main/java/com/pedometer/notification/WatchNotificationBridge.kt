@@ -13,6 +13,7 @@ object WatchNotificationBridge {
     private const val CMD_NOTIFICATION_SEND = 0
 
     var protocolHandler: ProtocolHandler? = null
+    var notificationListener: android.service.notification.NotificationListenerService? = null
 
     private val timestampFormat = SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.ROOT)
 

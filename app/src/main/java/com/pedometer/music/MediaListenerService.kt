@@ -28,6 +28,18 @@ class MediaListenerService : NotificationListenerService() {
         }
     }
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        WatchNotificationBridge.notificationListener = this
+        Log.i(TAG, "NotificationListener connected")
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        WatchNotificationBridge.notificationListener = null
+        Log.i(TAG, "NotificationListener disconnected")
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val sbn = sbn ?: return
         val pkg = sbn.packageName ?: return

@@ -58,13 +58,21 @@ class NotificationService(
             CMD_NOTIFICATION_DISMISS -> {
                 Log.i(TAG, "Watch dismissed notification")
                 if (cmd.hasNotification() && cmd.notification.hasNotificationDismiss()) {
+                    val listener = WatchNotificationBridge.notificationListener
                     val ids = cmd.notification.notificationDismiss.notificationIdList
                     for (nid in ids) {
                         Log.d(TAG, "Dismiss ID: ${nid.id}")
+                        // Cancel notification on phone
+                        try {
+                            listener?.activeNotifications?.find { it.id == nid.id }?.let { sbn ->
+                                listener.cancelNotification(sbn.key)
+                                Log.i(TAG, "Cancelled notification: ${sbn.key}")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Cancel failed: ${e.message}")
+                        }
                     }
                 }
-                // If active call — reject
-                onCallAction?.invoke(false)
             }
             CMD_OPEN_ON_PHONE -> {
                 Log.i(TAG, "Watch requested open on phone / accept call")
