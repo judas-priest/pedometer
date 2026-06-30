@@ -278,6 +278,16 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
                         reconnectAttempts = 0 // reset on successful connect
                         WatchNotificationBridge.protocolHandler = protocolHandler
+
+                        // Periodic weather updates
+                        viewModelScope.launch(Dispatchers.IO) {
+                            delay(30 * 60 * 1000)
+                            while (_state.value.connectionStatus == ConnectionStatus.Connected) {
+                                try { fetchAndSendWeather() } catch (_: Exception) {}
+                                delay(30 * 60 * 1000)
+                            }
+                        }
+
                         viewModelScope.launch(Dispatchers.IO) {
                             Thread.sleep(500)
                             Log.i(TAG, "POST-AUTH: initializing watch")
@@ -314,17 +324,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             Thread.sleep(300)
                             healthService?.startRealtimeStats()
 
-                            // 7. Send weather + periodic updates
+                            // 7. Send weather
                             Thread.sleep(500)
-                            fetchAndSendWeather()
+                            try { fetchAndSendWeather() } catch (e: Exception) { Log.e(TAG, "Weather init failed", e) }
                             Log.i(TAG, "POST-AUTH: init complete")
-
-                            // Periodic weather update every 30 min
-                            while (true) {
-                                delay(30 * 60 * 1000)
-                                if (_state.value.connectionStatus != ConnectionStatus.Connected) break
-                                fetchAndSendWeather()
-                            }
                         }
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
