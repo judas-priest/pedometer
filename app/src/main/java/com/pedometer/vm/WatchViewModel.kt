@@ -308,7 +308,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             protocolHandler?.sendCommand(localeCmd)
                             Thread.sleep(200)
 
-                            // 6. Start realtime stats (steps + HR)
+                            // 6. Health config init + realtime stats
+                            healthService?.initialize()
+                            Thread.sleep(300)
                             healthService?.startRealtimeStats()
 
                             // 7. Send weather

@@ -18,9 +18,36 @@ class HealthService(
 ) {
     companion object {
         private const val TAG = "HealthService"
+        const val CMD_CONFIG_SPO2_GET = 8
+        const val CMD_CONFIG_HEART_RATE_GET = 10
+        const val CMD_CONFIG_STANDING_REMINDER_GET = 12
+        const val CMD_CONFIG_STRESS_GET = 14
+        const val CMD_CONFIG_GOAL_NOTIFICATION_GET = 21
+        const val CMD_CONFIG_GOALS_GET = 42
+        const val CMD_CONFIG_VITALITY_SCORE_GET = 35
     }
 
     private var realtimeStarted = false
+
+    fun initialize() {
+        Log.i(TAG, "Initializing health configs")
+        // Query all health configs like Gadgetbridge
+        sendSimpleCommand(CMD_CONFIG_SPO2_GET)
+        sendSimpleCommand(CMD_CONFIG_HEART_RATE_GET)
+        sendSimpleCommand(CMD_CONFIG_STANDING_REMINDER_GET)
+        sendSimpleCommand(CMD_CONFIG_STRESS_GET)
+        sendSimpleCommand(CMD_CONFIG_GOAL_NOTIFICATION_GET)
+        sendSimpleCommand(CMD_CONFIG_GOALS_GET)
+        sendSimpleCommand(CMD_CONFIG_VITALITY_SCORE_GET)
+    }
+
+    private fun sendSimpleCommand(subtype: Int) {
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(CommandHelper.TYPE_HEALTH)
+            .setSubtype(subtype)
+            .build()
+        protocolHandler.sendCommand(cmd)
+    }
 
     fun startRealtimeStats() {
         if (realtimeStarted) return
@@ -47,11 +74,16 @@ class HealthService(
                         heartRate = stats.heartRate,
                         standingHours = stats.standingHours,
                     )
-                    Log.d(TAG, "Realtime: steps=${data.steps} hr=${data.heartRate} cal=${data.calories}")
                     onHealthUpdate(data)
                 }
             }
-            else -> Log.d(TAG, "Unhandled health subtype: ${cmd.subtype}")
+            CMD_CONFIG_SPO2_GET, CMD_CONFIG_HEART_RATE_GET,
+            CMD_CONFIG_STANDING_REMINDER_GET, CMD_CONFIG_STRESS_GET,
+            CMD_CONFIG_GOAL_NOTIFICATION_GET, CMD_CONFIG_GOALS_GET,
+            CMD_CONFIG_VITALITY_SCORE_GET -> {
+                Log.d(TAG, "Health config response: subtype=${cmd.subtype}")
+            }
+            else -> Log.d(TAG, "Health subtype: ${cmd.subtype}")
         }
     }
 }
