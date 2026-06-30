@@ -17,6 +17,20 @@ class WeatherService(
 
     var onWeatherRequested: (() -> Unit)? = null
 
+    fun setLocation(cityName: String) {
+        // Must set location BEFORE sending weather
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(COMMAND_TYPE)
+            .setSubtype(7) // set current location
+            .setWeather(XiaomiProto.Weather.newBuilder()
+                .setLocation(XiaomiProto.WeatherLocation.newBuilder()
+                    .setCode(cityName)
+                    .setName(cityName)))
+            .build()
+        protocolHandler.sendCommand(cmd)
+        Log.i(TAG, "Set weather location: $cityName")
+    }
+
     fun sendWeather(data: WeatherData) {
         val timestamp = SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(Date())
 

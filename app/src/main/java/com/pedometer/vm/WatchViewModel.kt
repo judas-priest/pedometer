@@ -427,13 +427,26 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun findWatch() {
+        // findDevice: 0 = start ringing, 1 = stop ringing
         val cmd = XiaomiProto.Command.newBuilder()
             .setType(CommandHelper.TYPE_SYSTEM)
-            .setSubtype(18)
-            .setSystem(XiaomiProto.System.newBuilder().setFindDevice(1))
+            .setSubtype(18) // CMD_FIND_WATCH
+            .setSystem(XiaomiProto.System.newBuilder().setFindDevice(0)) // 0 = START
             .build()
         protocolHandler?.sendCommand(cmd)
-        Log.i(TAG, "Find watch triggered")
+        Log.i(TAG, "Find watch triggered (start)")
+
+        // Auto-stop after 10 seconds
+        viewModelScope.launch {
+            delay(10000)
+            val stopCmd = XiaomiProto.Command.newBuilder()
+                .setType(CommandHelper.TYPE_SYSTEM)
+                .setSubtype(18)
+                .setSystem(XiaomiProto.System.newBuilder().setFindDevice(1)) // 1 = STOP
+                .build()
+            protocolHandler?.sendCommand(stopCmd)
+            Log.i(TAG, "Find watch stopped")
+        }
     }
 
     fun disconnect() {
@@ -462,6 +475,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val data = WeatherProvider.fetchWithLocation(getApplication())
             if (data != null) {
+                weatherService?.setLocation(data.cityName)
+                Thread.sleep(300)
                 weatherService?.sendWeather(data)
 
                 // Also send 6-day forecast
