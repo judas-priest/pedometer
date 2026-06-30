@@ -24,6 +24,7 @@ import com.pedometer.health.UserProfile
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.notification.WatchNotificationBridge
+import com.pedometer.util.UtilityService
 import com.pedometer.weather.WeatherProvider
 import com.pedometer.weather.WeatherService
 import com.pedometer.proto.CommandHelper
@@ -347,6 +348,20 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 weatherService = weather
 
+                val utility = UtilityService(handler) {
+                    // Find Phone: play loud ringtone
+                    Log.i(TAG, "FIND PHONE triggered!")
+                    val ctx = getApplication<Application>()
+                    val ringtone = android.media.RingtoneManager.getRingtone(ctx,
+                        android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
+                    ringtone?.play()
+                    // Stop after 10 seconds
+                    viewModelScope.launch {
+                        delay(10000)
+                        ringtone?.stop()
+                    }
+                }
+
                 val notif = NotificationService(handler)
                 notificationService = notif
 
@@ -511,6 +526,20 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         batteryCharging = bat.state == 1,
                     )
                     Log.i(TAG, "Battery: ${bat.level}% charging=${bat.state}")
+                }
+            }
+            18 -> {
+                // Find phone
+                if (cmd.hasSystem() && cmd.system.findDevice == 0) {
+                    Log.i(TAG, "FIND PHONE from watch!")
+                    val ctx = getApplication<Application>()
+                    val ringtone = android.media.RingtoneManager.getRingtone(ctx,
+                        android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
+                    ringtone?.play()
+                    viewModelScope.launch {
+                        delay(10000)
+                        ringtone?.stop()
+                    }
                 }
             }
             else -> Log.d(TAG, "Unhandled system subtype=${cmd.subtype}")
