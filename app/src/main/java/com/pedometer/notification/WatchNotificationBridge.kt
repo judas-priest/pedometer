@@ -38,6 +38,7 @@ object WatchNotificationBridge {
             .setTimestamp(timestampFormat.format(Date()))
             .setIsCall(isCall)
             .setKey("0|${packageName}|${notifId}|null|10000")
+            .setOpenOnPhone(!isCall) // show "Open on phone" button for non-call notifications
 
         val notification = XiaomiProto.Notification.newBuilder()
             .setNotification2(XiaomiProto.Notification2.newBuilder()
