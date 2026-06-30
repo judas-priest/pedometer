@@ -76,7 +76,22 @@ class MediaListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        // Could send dismiss to watch
+        val sbn = sbn ?: return
+        val notification = sbn.notification ?: return
+
+        // If a call notification was removed — call ended
+        if (notification.category == Notification.CATEGORY_CALL) {
+            Log.i(TAG, "Call ended (notification removed)")
+            // Send empty call notification to dismiss call screen on watch
+            WatchNotificationBridge.sendToWatch(
+                id = 0,
+                packageName = "phone",
+                appName = "phone",
+                title = "",
+                body = "",
+                isCall = false, // not a call anymore — dismisses call UI
+            )
+        }
     }
 
     private fun resolveContactName(phoneNumber: String): String? {
