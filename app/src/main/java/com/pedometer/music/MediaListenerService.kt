@@ -47,6 +47,12 @@ class MediaListenerService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val isCall = notification.category == Notification.CATEGORY_CALL
 
+        // Skip media/transport notifications (music player track changes)
+        if (notification.category == Notification.CATEGORY_TRANSPORT ||
+            notification.category == Notification.CATEGORY_SERVICE ||
+            notification.category == Notification.CATEGORY_PROGRESS ||
+            sbn.isOngoing) return
+
         // Calls always forwarded, other apps need whitelist
         if (!isCall && pkg !in getWhitelist(applicationContext)) return
         val extras = notification.extras ?: return
