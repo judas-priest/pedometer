@@ -42,9 +42,9 @@ data class WatchState(
     val batteryCharging: Boolean = false,
     val authKey: String = "",
     val macAddress: String = "",
-    val steps: Int = 0,
-    val calories: Int = 0,
-    val heartRate: Int = 0,
+    val watchSteps: Int = 0,        // steps from watch
+    val watchCalories: Int = 0,
+    val heartRate: Int = 0,         // from watch only
     val standingHours: Int = 0,
     val phoneSteps: Long = 0,
     val phoneStepsSinceBoot: Long = 0,
@@ -212,6 +212,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = 3
 
+    // Smart step merge: watch priority + phone delta when disconnected
+    private var lastKnownWatchSteps = 0
+    private var phoneBaselineSteps = 0L  // phone steps at moment watch disconnected
+
     @SuppressLint("MissingPermission")
     fun connect() {
         val s = _state.value
@@ -311,10 +315,15 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 protocolHandler = handler
 
                 val health = HealthService(handler) { data ->
+                    if (data.steps > 0) {
+                        lastKnownWatchSteps = data.steps
+                        phoneBaselineSteps = _state.value.phoneStepsSinceBoot
+                    }
                     _state.value = _state.value.copy(
-                        steps = data.steps,
-                        calories = data.calories,
-                        heartRate = data.heartRate,
+                        watchSteps = data.steps,
+                        watchCalories = data.calories,
+                        // Keep last known HR if current is 0
+                        heartRate = if (data.heartRate > 0) data.heartRate else _state.value.heartRate,
                         standingHours = data.standingHours,
                     )
                 }

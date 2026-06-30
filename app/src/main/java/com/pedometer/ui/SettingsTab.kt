@@ -229,6 +229,33 @@ fun SettingsTab(
             }
         }
 
+        // Notification Listener (for music control from watch)
+        Spacer(Modifier.height(8.dp))
+        val nlEnabled = try {
+            val cn = android.content.ComponentName(context, com.pedometer.music.MediaListenerService::class.java)
+            val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+            flat?.contains(cn.flattenToString()) == true
+        } catch (_: Exception) { false }
+
+        if (!nlEnabled) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Управление музыкой", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Разрешите доступ к уведомлениям для управления плеером с часов",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = {
+                        context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+                    }) {
+                        Text("Разрешить")
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
 
         // Watch

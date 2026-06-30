@@ -75,12 +75,16 @@ fun ConnectScreen(
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
         )
-        // Step ring hero
+        // Smart step merge: watch priority, phone delta when disconnected
         val stepGoal = state.profile.stepGoal
-        val currentSteps = when {
-            state.healthConnectSteps > 0 -> state.healthConnectSteps
+        val phoneSteps = when {
             state.todayWalkSteps + state.todayRunSteps > 0 -> (state.todayWalkSteps + state.todayRunSteps).toLong()
             else -> state.phoneSteps
+        }
+        val currentSteps = if (state.watchSteps > 0) {
+            state.watchSteps.toLong() // Watch connected — use watch data
+        } else {
+            phoneSteps // No watch — use phone
         }
         val totalStepsInt = currentSteps.toInt()
         val progress = if (stepGoal > 0) (currentSteps.toFloat() / stepGoal).coerceIn(0f, 1f) else 0f
@@ -125,9 +129,35 @@ fun ConnectScreen(
         StepMetricCards(
             walkSteps = state.todayWalkSteps,
             runSteps = state.todayRunSteps,
-            totalSteps = (state.todayWalkSteps + state.todayRunSteps),
+            totalSteps = totalStepsInt,
             profile = state.profile,
         )
+
+        // Heart rate + watch battery (always show if watch connected)
+        if (state.connectionStatus == com.pedometer.vm.ConnectionStatus.Connected || state.batteryLevel >= 0) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MetricCard(
+                    title = if (state.heartRate > 0) "Пульс ●" else "Пульс",
+                    value = if (state.heartRate > 0) "${state.heartRate}" else "—",
+                    unit = "уд/мин",
+                    color = HeartRed,
+                    modifier = Modifier.weight(1f),
+                )
+                if (state.batteryLevel >= 0) {
+                    MetricCard(
+                        title = "Часы",
+                        value = "${state.batteryLevel}",
+                        unit = "%",
+                        color = StandBlue,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
 
         // Step history with period tabs
         if (state.stepHistory.isNotEmpty()) {

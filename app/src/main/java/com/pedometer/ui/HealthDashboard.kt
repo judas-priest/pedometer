@@ -41,7 +41,7 @@ fun HealthDashboard(state: WatchState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                StatCard(title = "Steps", value = "${state.steps}", modifier = Modifier.weight(1f))
+                StatCard(title = "Steps", value = "${state.watchSteps}", modifier = Modifier.weight(1f))
                 StatCard(
                     title = "Heart Rate",
                     value = if (state.heartRate > 0) "${state.heartRate} bpm" else "--",
@@ -53,7 +53,7 @@ fun HealthDashboard(state: WatchState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                StatCard(title = "Calories", value = "${state.calories} kcal", modifier = Modifier.weight(1f))
+                StatCard(title = "Calories", value = "${state.watchCalories} kcal", modifier = Modifier.weight(1f))
                 StatCard(title = "Standing", value = "${state.standingHours} hrs", modifier = Modifier.weight(1f))
             }
         }
