@@ -15,7 +15,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import com.pedometer.debug.DebugScreen
+import com.pedometer.music.MediaListenerService
 import com.pedometer.ui.ConnectScreen
 import com.pedometer.ui.NotificationAppsScreen
 import com.pedometer.ui.theme.PedometerTheme
@@ -26,6 +29,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Force restart NotificationListenerService (needed after APK update)
+        val cn = ComponentName(this, MediaListenerService::class.java)
+        packageManager.setComponentEnabledSetting(cn,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        packageManager.setComponentEnabledSetting(cn,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+
         setContent {
             PedometerTheme {
                 val vm: WatchViewModel = viewModel()

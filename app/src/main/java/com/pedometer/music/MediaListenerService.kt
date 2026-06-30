@@ -12,19 +12,12 @@ class MediaListenerService : NotificationListenerService() {
         const val PREFS_NAME = "notification_whitelist"
         const val KEY_PACKAGES = "packages"
 
-        // Default apps if nothing configured
-        val DEFAULT_WHITELIST = setOf(
-            "org.telegram.messenger",
-            "org.telegram.messenger.web",
-            "com.android.mms",
-            "com.google.android.apps.messaging",
-            "com.android.dialer",
-            "com.google.android.dialer",
-        )
+        // No defaults — user controls everything
+        val DEFAULT_WHITELIST = emptySet<String>()
 
         fun getWhitelist(context: android.content.Context): Set<String> {
             val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
-            return prefs.getStringSet(KEY_PACKAGES, null) ?: DEFAULT_WHITELIST
+            return prefs.getStringSet(KEY_PACKAGES, null) ?: emptySet()
         }
 
         fun saveWhitelist(context: android.content.Context, packages: Set<String>) {
