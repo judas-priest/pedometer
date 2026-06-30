@@ -71,9 +71,9 @@
 ## Phase 10: Creative Bonus Features
 - [ ] Research watch hardware capabilities (sensors, speaker, mic, screen, button)
 - [ ] Custom watch apps / mini-programs
-- [ ] Camera remote control
-- [ ] Flashlight toggle from watch
-- [ ] Phone volume control from watch
+- [x] Camera open from watch (PhoneActions.openCamera)
+- [x] Flashlight toggle from watch (PhoneActions.toggleFlashlight, 5s auto-off)
+- [x] Phone volume control from watch (PhoneActions.adjustVolume)
 - [ ] Navigation directions on watch
 - [ ] Timer/stopwatch sync
 - [ ] World clock
