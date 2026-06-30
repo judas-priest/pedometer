@@ -20,8 +20,10 @@
 - [ ] Show sleep/SpO2/stress in UI
 
 ## Phase 3: Call Handling
-- [ ] Fix contact name resolution for incoming calls
-- [ ] Accept/reject call from watch
+- [x] Contact name resolution from phone number
+- [x] Accept call from watch (TelecomManager.acceptRingingCall)
+- [x] Reject call from watch (TelecomManager.endCall)
+- [x] Calls always forwarded (no whitelist needed)
 - [ ] Call state management (ringing → connected → ended)
 - [ ] Show call duration on watch
 
@@ -89,3 +91,6 @@
 - 2026-06-30 21:20: Phase 1 weather — basic implementation done (Open-Meteo, auto-send after auth)
 - 2026-06-30 21:35: Phase 2 health — config init done (7 config queries)
 - 2026-06-30 21:40: Phase 4 find phone — ringtone plays when watch triggers find
+- 2026-06-30 21:50: Phase 1 complete — GPS location, periodic updates
+- 2026-06-30 22:00: Phase 3 calls — accept/reject from watch via TelecomManager
+- 2026-06-30 22:05: Phase 6/7 — watchfaces need data upload (complex), icon needs design
