@@ -6,9 +6,9 @@
 - [x] WMO→Xiaomi condition code mapping
 - [x] Wind Beaufort scale, humidity, pressure
 - [x] Auto-send after auth + respond to watch requests
-- [ ] Get location via GPS (FusedLocationProviderClient)
-- [ ] Weather settings in UI (city selection)
-- [ ] Periodic weather updates (every 30 min)
+- [x] Get location via GPS (FusedLocationProviderClient + Geocoder)
+- [ ] Weather settings in UI (city selection override)
+- [x] Periodic weather updates (every 30 min)
 
 ## Phase 2: Health Data Sync
 - [x] Health config init (SPO2, HR, standing, stress, goals, vitality)
