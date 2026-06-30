@@ -16,7 +16,7 @@ class MusicService(
 ) {
     companion object {
         private const val TAG = "MusicService"
-        const val COMMAND_TYPE = 20
+        const val COMMAND_TYPE = 18
         const val CMD_MUSIC_INFO = 1
         const val CMD_MEDIA_KEY = 2
     }
@@ -28,6 +28,11 @@ class MusicService(
 
     fun handleCommand(cmd: XiaomiProto.Command) {
         when (cmd.subtype) {
+            0 -> {
+                // Watch requests current track info
+                Log.i(TAG, "Watch requests music info")
+                sendCurrentMusicInfo()
+            }
             CMD_MEDIA_KEY -> {
                 if (cmd.hasMusic() && cmd.music.hasMediaKey()) {
                     handleMediaKey(cmd.music.mediaKey)

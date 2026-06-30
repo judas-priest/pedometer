@@ -26,13 +26,33 @@ seq14: type=2  sub=2   getDeviceInfo (retry)
 ## Command Types
 - type=1: Auth
 - type=2: System (deviceInfo, battery, clock, locale, widgets, display)
-- type=3: Notification
-- type=4: reserved
+- type=7: Notification (send to watch: sub=0, icon request handling)
 - type=5: Weather
-- type=7: Music
 - type=8: Health (steps, heart rate, SpO2, stress, sleep, user info, goals)
-- type=18: Notification requests from watch
+- type=18: Music (sub=0: watch requests info, sub=1: send info, sub=2: watch sends button)
 - type=20: Data upload
+
+## Music Control (type=18)
+- sub=0: CMD_MUSIC_GET — watch requests current track info
+- sub=1: CMD_MUSIC_SEND — send track info to watch (title, artist, state, volume, position)
+- sub=2: CMD_MUSIC_BUTTON — watch sends media key:
+  - 0x00: PLAY
+  - 0x01: PAUSE
+  - 0x03: PREVIOUS
+  - 0x04: NEXT
+  - 0x05: VOLUME (compare with current, up or down)
+
+## Health Realtime (type=8)
+- sub=45: CMD_REALTIME_STATS_START — enable live data stream
+- sub=46: CMD_REALTIME_STATS_STOP — disable
+- sub=47: CMD_REALTIME_STATS_EVENT — live data:
+  - RealTimeStats.getSteps() — absolute step count
+  - RealTimeStats.getHeartRate() — current BPM
+  - Delta calculation: current - previous for step increment
+
+## Notification (type=7)
+- sub=0: CMD_NOTIFICATION_SEND — protobuf: Notification { Notification2 { Notification3 {
+    id, packageName, timestamp, title, body, appName, key } } }
 
 ## System Subtypes (type=2)
 - 1: getBattery

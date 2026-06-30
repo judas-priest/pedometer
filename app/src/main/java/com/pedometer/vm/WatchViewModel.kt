@@ -231,30 +231,38 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
                         viewModelScope.launch(Dispatchers.IO) {
                             Thread.sleep(500)
-                            // Exact Mi Fitness init sequence (from btsnoop)
-                            Log.i(TAG, "POST-AUTH: Mi Fitness sequence")
+                            Log.i(TAG, "POST-AUTH: initializing watch")
 
-                            // seq02: getDeviceInfo (type=2, sub=2)
+                            // 1. getDeviceInfo
                             protocolHandler?.sendCommand(CommandHelper.buildDeviceInfoRequest())
-                            Thread.sleep(300)
+                            Thread.sleep(200)
 
-                            // seq03: type=2, sub=92 — send raw encrypted bytes
-                            val raw92 = byteArrayOf(0x08, 0x02, 0x10, 0x5c, 0x22, 0x05, 0x52, 0x03, 0x02, 0x08, 0x02)
-                            protocolHandler?.sendRawProtobuf(raw92)
-                            Thread.sleep(300)
+                            // 2. getBattery
+                            protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
+                            Thread.sleep(200)
 
-                            // seq04: type=8, sub=30 (health config)
-                            val raw30 = byteArrayOf(0x08, 0x08, 0x10, 0x1e, 0x52, 0x07, 0x8a.toByte(), 0x01, 0x02, 0x08, 0x01, 0x10, 0x03)
-                            protocolHandler?.sendRawProtobuf(raw30)
-                            Thread.sleep(300)
+                            // 3. setCurrentTime
+                            sendCurrentTime()
+                            Thread.sleep(200)
 
-                            // seq05: type=2, sub=14
-                            val raw14 = byteArrayOf(0x08, 0x02, 0x10, 0x0e, 0x22, 0x05, 0xf8.toByte(), 0x02, 0x02, 0x08, 0x04)
-                            protocolHandler?.sendRawProtobuf(raw14)
-                            Thread.sleep(300)
+                            // 4. setUserInfo
+                            sendUserInfo()
+                            Thread.sleep(200)
 
-                            // Wait for responses
-                            Log.i(TAG, "POST-AUTH: sent 4 commands, waiting for responses...")
+                            // 5. setLocale
+                            val localeCmd = XiaomiProto.Command.newBuilder()
+                                .setType(CommandHelper.TYPE_SYSTEM)
+                                .setSubtype(6)
+                                .setSystem(XiaomiProto.System.newBuilder()
+                                    .setLanguage(XiaomiProto.Language.newBuilder()
+                                        .setCode(java.util.Locale.getDefault().toLanguageTag().replace("-", "_").lowercase())))
+                                .build()
+                            protocolHandler?.sendCommand(localeCmd)
+                            Thread.sleep(200)
+
+                            // 6. Start realtime stats (steps + HR)
+                            healthService?.startRealtimeStats()
+                            Log.i(TAG, "POST-AUTH: init complete, realtime stats started")
                         }
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
