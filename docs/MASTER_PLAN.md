@@ -86,9 +86,17 @@
 ### Voice Assistant Research (Phase 9)
 - Watch has 2x MIC + speaker + BT call support
 - Alexa connects via smartphone (not direct cloud), syncs through Xiaomi Wear app
-- Audio stream likely goes through HFP (Hands-Free Profile) or custom SPP channel
-- Possible approach: intercept Alexa button → capture audio → STT → LLM → TTS → play back
-- Need to research: how Alexa audio is transmitted, what SPP commands trigger mic/speaker
+- Audio goes through **HFP (Hands-Free Profile)** — SCO channel
+- **FEASIBLE!** Android can:
+  1. `AudioManager.startBluetoothSco()` → opens SCO audio channel to watch
+  2. `AudioRecord` with `MediaRecorder.AudioSource.DEFAULT` in SCO mode → captures watch mic
+  3. Send audio to STT (Whisper API or local faster-whisper)
+  4. Send text to LLM (Claude/DeepSeek/Gemini API)
+  5. TTS response → play through SCO → comes out of watch speaker
+- Reference: `aahlenst/android-audiorecord-sample` on GitHub
+- Key APIs: `BluetoothHeadset`, `AudioManager.setBluetoothScoOn(true)`, `AudioRecord`
+- No need to intercept Alexa button — can use any trigger (notification, find phone button)
+- Alternative: show text response on watch screen via notification
 
 ### Watch Hardware Capabilities (Phase 10)
 - AMOLED display 1.96" (502x410 resolution)
