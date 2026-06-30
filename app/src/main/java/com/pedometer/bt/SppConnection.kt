@@ -60,14 +60,12 @@ class SppConnection(
         }, "spp-server")
         serverThread.start()
 
-        // SERVER ONLY mode — wait for watch to connect to us
-        Log.i(TAG, "Waiting for watch to connect to our server (30s timeout)...")
-        try { serverThread.join(30000) } catch (_: Exception) {}
-        if (running) return true
-
-        // Fallback: try as client
-        Log.i(TAG, "Server accept timed out, trying as client...")
+        // Mi Fitness reconnect pattern: scn=2 first, close, then scn=1
         try { serverSocket?.close() } catch (_: Exception) {}
+
+        try { serverSocket?.close() } catch (_: Exception) {}
+
+        // Simple client connect
         for (attempt in 1..3) {
             try {
                 val s = if (attempt <= 1) {
@@ -83,10 +81,10 @@ class SppConnection(
                 outputStream = s.outputStream
                 running = true
                 Thread({ readLoop() }, "spp-read").start()
-                Log.i(TAG, "Connected to ${device.address} as CLIENT on attempt $attempt")
+                Log.i(TAG, "Connected to ${device.address} on attempt $attempt")
                 return true
             } catch (e: Exception) {
-                Log.e(TAG, "Client connection attempt $attempt failed", e)
+                Log.e(TAG, "Connection attempt $attempt failed", e)
                 if (attempt < 3) Thread.sleep(2000)
             }
         }
