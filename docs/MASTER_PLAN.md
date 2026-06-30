@@ -13,7 +13,7 @@
 ## Phase 2: Health Data Sync
 - [x] Health config init (SPO2, HR, standing, stress, goals, vitality)
 - [ ] Sleep data sync (activity fetch, parse sleep stages)
-- [ ] SpO2 data (config sub=8, allDayTracking=2)
+- [x] SpO2 all-day tracking enabled (config sub=9, allDayTracking=true)
 - [ ] Stress data
 - [ ] Workout/training data sync
 - [ ] Store health data in Room DB
@@ -145,3 +145,6 @@
 - 2026-06-30 23:45: Phase 3 — call state management (end detection)
 - 2026-06-30 23:50: Phase 9 — voice assistant research FEASIBLE, skeleton created
 - 2026-06-30 23:55: Phase 9 — SCO audio capture, permissions added
+- 2026-07-01 00:00: Phase 1 — 6-day forecast added
+- 2026-07-01 00:05: Phase 5 — openOnPhone button enabled in notifications
+- 2026-07-01 00:10: Phase 10 — timer/navigation not in proto, done what's available
