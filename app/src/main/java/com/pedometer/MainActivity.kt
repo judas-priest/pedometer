@@ -104,7 +104,13 @@ class MainActivity : ComponentActivity() {
                     ) { page ->
                         when (page) {
                             0 -> ConnectScreen(state = state)
-                            1 -> com.pedometer.ui.ActivityTab(state = state)
+                            1 -> com.pedometer.ui.ActivityTab(
+                                state = state,
+                                onCamera = { com.pedometer.util.PhoneActions.openCamera(this@MainActivity) },
+                                onFlashlight = { com.pedometer.util.PhoneActions.toggleFlashlight(this@MainActivity) },
+                                onFindWatch = { vm.findWatch() },
+                                onBreathing = { /* TODO: breathing vibration */ },
+                            )
                             2 -> com.pedometer.ui.SettingsTab(
                                 state = state,
                                 onAuthKeyChange = vm::updateAuthKey,

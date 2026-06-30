@@ -1,13 +1,16 @@
 package com.pedometer.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pedometer.vm.WatchState
@@ -16,7 +19,13 @@ import java.time.LocalDate
 private val StepGreen = Color(0xFF4CAF50)
 
 @Composable
-fun ActivityTab(state: WatchState) {
+fun ActivityTab(
+    state: WatchState,
+    onCamera: () -> Unit = {},
+    onFlashlight: () -> Unit = {},
+    onFindWatch: () -> Unit = {},
+    onBreathing: () -> Unit = {},
+) {
     val history = state.stepHistory
     val profile = state.profile
 
@@ -125,7 +134,54 @@ fun ActivityTab(state: WatchState) {
             }
         }
 
+        // Quick Actions
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Быстрые действия",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            QuickActionCard("📷", "Камера", Modifier.weight(1f), onCamera)
+            QuickActionCard("🔦", "Фонарик", Modifier.weight(1f), onFlashlight)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            QuickActionCard("🔔", "Найти часы", Modifier.weight(1f), onFindWatch)
+            QuickActionCard("🧘", "Дыхание", Modifier.weight(1f), onBreathing)
+        }
+
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun QuickActionCard(emoji: String, label: String, modifier: Modifier, onClick: () -> Unit) {
+    ElevatedCard(
+        modifier = modifier.clickable { onClick() },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(emoji, fontSize = 28.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
