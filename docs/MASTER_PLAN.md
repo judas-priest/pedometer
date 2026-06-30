@@ -30,7 +30,8 @@
 ## Phase 4: Find Phone
 - [x] Handle find phone command from watch (system sub=18, findDevice=0)
 - [x] Play default ringtone for 10 seconds
-- [ ] Find watch (send vibrate command from phone)
+- [x] Find watch (send vibrate/ring via system subtype=18, findDevice=1)
+  - UtilityService.findWatch() already implemented
 
 ## Phase 5: Notification Actions
 - [x] Handle dismiss notification from watch (cancel via NotificationListenerService)
@@ -116,3 +117,7 @@
 - 2026-06-30 21:50: Phase 1 complete — GPS location, periodic updates
 - 2026-06-30 22:00: Phase 3 calls — accept/reject from watch via TelecomManager
 - 2026-06-30 22:05: Phase 6/7 — watchfaces need data upload (complex), icon needs design
+- 2026-06-30 22:15: Phase 5 — notification dismiss from watch works
+- 2026-06-30 22:20: Phase 2 — activity fetch today request added
+- 2026-06-30 22:25: Version bumped to 1.0.0
+- 2026-06-30 22:30: Phase 4 — find watch already implemented in UtilityService
