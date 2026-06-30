@@ -53,9 +53,10 @@
 - [x] Version bump to 1.0.0
 
 ## Phase 8: Stability
-- [ ] ColorOS auto-start persistence
-- [ ] Battery optimization handling
-- [ ] Crash reporting / error handling
+- [x] Error handling in weather fetch (try-catch)
+- [x] Separate weather update coroutine (doesn't block init)
+- [ ] ColorOS auto-start persistence guide
+- [ ] Battery optimization handling (already have UI card)
 - [ ] Connection stability improvements
 - [ ] Background service persistence tests
 
@@ -123,3 +124,6 @@
 - 2026-06-30 22:30: Phase 4 — find watch button in UI
 - 2026-06-30 22:35: Phase 2 — SpO2 all-day tracking enabled
 - 2026-06-30 22:40: Phase 7 — home screen widget (Glance, steps/goal)
+- 2026-06-30 22:50: Phase 10 — PhoneActions: camera, flashlight, volume
+- 2026-06-30 22:55: Phase 8 — stability: error handling, separate weather coroutine
+- 2026-06-30 23:00: Phase 2 — SpO2 all-day tracking enabled on connect
