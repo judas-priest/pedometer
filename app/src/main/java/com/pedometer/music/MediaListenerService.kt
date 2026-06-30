@@ -1,6 +1,8 @@
 package com.pedometer.music
 
 import android.app.Notification
+import android.net.Uri
+import android.provider.ContactsContract
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -35,11 +37,18 @@ class MediaListenerService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+        var title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
         val appName = getAppName(pkg)
+        val isCall = notification.category == Notification.CATEGORY_CALL
 
         if (title.isBlank() && text.isBlank()) return
+
+        // Resolve contact name from phone number for calls
+        if (isCall && title.matches(Regex("^[+\\d\\s\\-()]+$"))) {
+            val contactName = resolveContactName(title.replace(Regex("[\\s\\-()]"), ""))
+            if (contactName != null) title = contactName
+        }
 
         Log.i(TAG, "Forwarding notification: $pkg - $title: $text")
 
@@ -49,12 +58,26 @@ class MediaListenerService : NotificationListenerService() {
             appName = appName,
             title = title,
             body = text,
-            isCall = sbn.notification.category == Notification.CATEGORY_CALL,
+            isCall = isCall,
         )
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         // Could send dismiss to watch
+    }
+
+    private fun resolveContactName(phoneNumber: String): String? {
+        return try {
+            val uri = Uri.withAppendedPath(
+                ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                Uri.encode(phoneNumber))
+            contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Contact lookup failed: ${e.message}")
+            null
+        }
     }
 
     private fun getAppName(packageName: String): String {
