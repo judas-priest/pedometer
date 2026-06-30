@@ -423,6 +423,16 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun findWatch() {
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(CommandHelper.TYPE_SYSTEM)
+            .setSubtype(18)
+            .setSystem(XiaomiProto.System.newBuilder().setFindDevice(1))
+            .build()
+        protocolHandler?.sendCommand(cmd)
+        Log.i(TAG, "Find watch triggered")
+    }
+
     fun disconnect() {
         autoReconnectEnabled = false // don't reconnect on manual disconnect
         WatchNotificationBridge.protocolHandler = null

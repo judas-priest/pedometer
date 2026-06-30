@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                                 onProfileChange = vm::updateProfile,
                                 onOpenDebug = { showDebug = true },
                                 onOpenNotificationApps = { showNotificationApps = true },
+                                onFindWatch = { vm.findWatch() },
                             )
                         }
                     }

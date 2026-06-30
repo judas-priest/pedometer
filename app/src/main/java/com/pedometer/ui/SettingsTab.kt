@@ -35,6 +35,7 @@ fun SettingsTab(
     onProfileChange: (UserProfile) -> Unit = {},
     onOpenDebug: () -> Unit = {},
     onOpenNotificationApps: () -> Unit = {},
+    onFindWatch: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -352,6 +353,13 @@ fun SettingsTab(
                             ) {
                                 Text("Отключить")
                             }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onFindWatch,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("🔔 Найти часы")
                         }
                     }
                 }
