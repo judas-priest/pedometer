@@ -33,7 +33,8 @@
 - [ ] Find watch (send vibrate command from phone)
 
 ## Phase 5: Notification Actions
-- [ ] Handle dismiss notification from watch
+- [x] Handle dismiss notification from watch (cancel via NotificationListenerService)
+- [x] MediaListenerService lifecycle bridge (onListenerConnected/Disconnected)
 - [ ] Handle "open on phone" action from watch
 - [ ] Reply from watch (if supported)
 
