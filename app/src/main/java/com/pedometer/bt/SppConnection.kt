@@ -65,28 +65,35 @@ class SppConnection(
 
         try { serverSocket?.close() } catch (_: Exception) {}
 
-        // Simple client connect
-        for (attempt in 1..3) {
-            try {
-                val s = if (attempt <= 1) {
-                    device.createRfcommSocketToServiceRecord(SPP_UUID)
-                } else {
-                    Log.i(TAG, "Using reflection createRfcommSocket on attempt $attempt")
-                    val m = device.javaClass.getMethod("createRfcommSocket", Int::class.java)
-                    m.invoke(device, 2) as BluetoothSocket
-                }
-                s.connect()
-                socket = s
-                inputStream = s.inputStream
-                outputStream = s.outputStream
-                running = true
-                Thread({ readLoop() }, "spp-read").start()
-                Log.i(TAG, "Connected to ${device.address} on attempt $attempt")
-                return true
-            } catch (e: Exception) {
-                Log.e(TAG, "Connection attempt $attempt failed", e)
-                if (attempt < 3) Thread.sleep(2000)
-            }
+        // Try client first (fast path)
+        try {
+            val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
+            s.connect()
+            socket = s
+            inputStream = s.inputStream
+            outputStream = s.outputStream
+            running = true
+            Thread({ readLoop() }, "spp-read").start()
+            Log.i(TAG, "Connected to ${device.address} as CLIENT")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Client connection failed: ${e.message}")
+        }
+
+        // Client failed — try reflection channel 2
+        try {
+            val m = device.javaClass.getMethod("createRfcommSocket", Int::class.java)
+            val s = m.invoke(device, 2) as BluetoothSocket
+            s.connect()
+            socket = s
+            inputStream = s.inputStream
+            outputStream = s.outputStream
+            running = true
+            Thread({ readLoop() }, "spp-read").start()
+            Log.i(TAG, "Connected to ${device.address} via channel 2")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Channel 2 connection failed: ${e.message}")
         }
         return false
     }
