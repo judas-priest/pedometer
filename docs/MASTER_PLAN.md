@@ -1,11 +1,14 @@
 # Master Plan — Redmi Watch 5 Lite Full App
 
 ## Phase 1: Weather on Watch
-- [ ] Get location (GPS or saved city)
-- [ ] Fetch weather from free API (OpenWeatherMap or wttr.in)
-- [ ] Send weather to watch (type=5, sub=10)
-- [ ] Periodic weather updates (every 30 min)
+- [x] Fetch weather from Open-Meteo API (free, no key)
+- [x] Send weather to watch (type=10, sub=0)
+- [x] WMO→Xiaomi condition code mapping
+- [x] Wind Beaufort scale, humidity, pressure
+- [x] Auto-send after auth + respond to watch requests
+- [ ] Get location via GPS (FusedLocationProviderClient)
 - [ ] Weather settings in UI (city selection)
+- [ ] Periodic weather updates (every 30 min)
 
 ## Phase 2: Health Data Sync
 - [ ] Sleep data sync (activity fetch, parse sleep stages)
@@ -73,7 +76,13 @@
 - [ ] Meditation/breathing exercises with haptic feedback
 
 ## Research Notes
-(Updated by cron — findings, best practices, API docs)
+
+### Weather (Phase 1)
+- Open-Meteo API: free, no key, no registration. 10K requests/day
+- Endpoint: `https://api.open-meteo.com/v1/forecast?latitude=X&longitude=Y&current_weather=true`
+- Gadgetbridge uses COMMAND_TYPE=10 (not 5 or 12)
+- Temperature in Celsius (not Kelvin like Gadgetbridge docs say — Open-Meteo returns Celsius)
+- WMO weather codes: 0=clear, 1-3=cloudy, 45-48=fog, 51-67=rain, 71-77=snow, 95-99=thunder
 
 ## Progress Log
-(Updated by cron — what was done each iteration)
+- 2026-06-30 21:20: Phase 1 weather — basic implementation done (Open-Meteo, auto-send after auth)
