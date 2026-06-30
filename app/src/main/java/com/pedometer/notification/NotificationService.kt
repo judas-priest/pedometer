@@ -1,10 +1,12 @@
 package com.pedometer.notification
 
+import android.content.Context
 import android.util.Log
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.proto.XiaomiProto
 
 class NotificationService(
+    private val context: Context,
     private val protocolHandler: ProtocolHandler,
 ) {
     companion object {
@@ -75,8 +77,27 @@ class NotificationService(
                 }
             }
             CMD_OPEN_ON_PHONE -> {
-                Log.i(TAG, "Watch requested open on phone / accept call")
-                // If active call — accept
+                Log.i(TAG, "Watch requested open on phone")
+                if (cmd.hasNotification() && cmd.notification.hasOpenOnPhone()) {
+                    // Try to open the source app
+                    val listener = WatchNotificationBridge.notificationListener
+                    val notifId = cmd.notification.openOnPhone.id
+                    val sbn = listener?.activeNotifications?.find { it.id == notifId }
+                    if (sbn != null) {
+                        try {
+                            sbn.notification.contentIntent?.send()
+                            Log.i(TAG, "Opened notification on phone: ${sbn.packageName}")
+                        } catch (e: Exception) {
+                            // Fallback: launch app
+                            val launchIntent = context.packageManager.getLaunchIntentForPackage(sbn.packageName)
+                            if (launchIntent != null) {
+                                launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(launchIntent)
+                            }
+                        }
+                    }
+                }
+                // Also handle call accept
                 onCallAction?.invoke(true)
             }
             else -> Log.d(TAG, "Notification subtype: ${cmd.subtype}")

@@ -372,7 +372,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
 
-                val notif = NotificationService(handler)
+                val notif = NotificationService(getApplication(), handler)
                 notif.onCallAction = { accept ->
                     try {
                         val ctx = getApplication<Application>()
