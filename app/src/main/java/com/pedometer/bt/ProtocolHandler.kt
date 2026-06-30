@@ -122,7 +122,7 @@ class ProtocolHandler(
                 Log.d(TAG, "V2 DataPacket: ch=${packet.channel} opCode=${packet.opCode} payloadLen=${packet.payload.size}")
                 val decrypted = try {
                     if (packet.opCode == PacketV2.OPCODE_ENCRYPTED && authService.isInitialized) {
-                        authService.decrypt(packet.payload)
+                        authService.decryptV2(packet.payload)
                     } else {
                         packet.payload
                     }
@@ -208,7 +208,7 @@ class ProtocolHandler(
     fun sendRawProtobuf(data: ByteArray) {
         Log.d(TAG, "sendRawProtobuf dataLen=${data.size} plainHex=${data.joinToString("") { "%02x".format(it) }}")
         val encryptFn: ((ByteArray) -> ByteArray)? = if (authService.isInitialized) {
-            { msg -> authService.encrypt(msg, 0) }
+            { msg -> authService.encryptV2(msg) }
         } else null
         val packet = PacketV2.encodeDataPacket(Channel.ProtobufCommand, packetSeqV2.getAndIncrement(), data, encryptFn)
         Log.d(TAG, "V2 TX ${packet.size} bytes")
@@ -222,7 +222,7 @@ class ProtocolHandler(
 
         val packet: ByteArray = if (useV2) {
             val encryptFn: ((ByteArray) -> ByteArray)? = if (!forAuth && authService.isInitialized) {
-                { msg -> authService.encrypt(msg, 0) }
+                { msg -> authService.encryptV2(msg) }
             } else null
             PacketV2.encodeDataPacket(channel, packetSeqV2.getAndIncrement(), data, encryptFn).also {
                 Log.d(TAG, "V2 TX ${it.size} bytes: ${it.joinToString(":") { "%02x".format(it) }}")

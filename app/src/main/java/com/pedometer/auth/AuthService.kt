@@ -48,10 +48,19 @@ class AuthService(authKeyHex: String) {
     }
 
     fun encrypt(data: ByteArray, counter: Int): ByteArray {
-        if (useV2Crypto) return encryptCtr(encryptionKey, encryptionKey, data)
+        // Auth step3 deviceInfo ALWAYS uses CCM, even in V2 mode
+        // V2 CTR is only for post-auth data packets (encryptV2)
         val nonce = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
             .put(encryptionNonce).putInt(0).putInt(counter).array()
         return encryptCcm(encryptionKey, nonce, data)
+    }
+
+    fun encryptV2(data: ByteArray): ByteArray {
+        return encryptCtr(encryptionKey, encryptionKey, data)
+    }
+
+    fun decryptV2(data: ByteArray): ByteArray {
+        return decryptCtr(decryptionKey, decryptionKey, data)
     }
 
     fun decrypt(data: ByteArray): ByteArray {
