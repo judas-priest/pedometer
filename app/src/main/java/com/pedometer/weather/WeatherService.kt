@@ -50,7 +50,10 @@ class WeatherService(
             .setWeatherCondition(data.weatherCode)
             .setTemperature(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("℃").setValue(data.temperature))
             .setHumidity(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("%").setValue(data.humidity))
-            .setWind(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("").setValue(data.windSpeed.toInt()))
+            .setWind(XiaomiProto.WeatherUnitValue.newBuilder().setUnit(data.windDirection.toString()).setValue(data.windSpeed.toInt()))
+            .setUv(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("").setValue(0))
+            .setAqi(XiaomiProto.WeatherUnitValue.newBuilder().setUnit("Unknown").setValue(0))
+            .setWarning(XiaomiProto.WeatherWarnings.newBuilder())
             .setPressure(data.pressure * 100)
 
         val cmd = XiaomiProto.Command.newBuilder()
