@@ -49,7 +49,7 @@
 - [ ] Custom app icon (not default Android)
 - [x] Home screen widget (Glance — steps/goal, dark theme, 2x1, 30min update)
 - [ ] Dark/light theme support
-- [ ] Onboarding wizard (first launch)
+- [x] Onboarding wizard (5 steps: welcome, permissions, battery, notifications, done)
 - [x] Version bump to 1.0.0
 
 ## Phase 8: Stability
