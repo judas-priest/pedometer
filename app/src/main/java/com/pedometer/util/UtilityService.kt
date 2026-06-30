@@ -80,6 +80,32 @@ class UtilityService(
         Log.i(TAG, "Set world clocks: $clocks")
     }
 
+    fun sendBreathingVibration() {
+        // 4-7-8 breathing pattern: inhale 4s, hold 7s, exhale 8s
+        // Vibrate on transitions
+        val pattern = listOf(
+            XiaomiProto.Vibration.newBuilder().setVibrate(1).setMs(200).build(), // start inhale
+            XiaomiProto.Vibration.newBuilder().setVibrate(0).setMs(3800).build(), // inhale 4s
+            XiaomiProto.Vibration.newBuilder().setVibrate(1).setMs(200).build(), // start hold
+            XiaomiProto.Vibration.newBuilder().setVibrate(0).setMs(6800).build(), // hold 7s
+            XiaomiProto.Vibration.newBuilder().setVibrate(1).setMs(300).build(), // start exhale
+            XiaomiProto.Vibration.newBuilder().setVibrate(0).setMs(7700).build(), // exhale 8s
+            XiaomiProto.Vibration.newBuilder().setVibrate(1).setMs(500).build(), // cycle complete
+        )
+
+        val vibTest = XiaomiProto.VibrationTest.newBuilder()
+        pattern.forEach { vibTest.addVibration(it) }
+
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(SYSTEM_TYPE)
+            .setSubtype(41) // vibration test custom
+            .setSystem(XiaomiProto.System.newBuilder()
+                .setVibrationTestCustom(vibTest))
+            .build()
+        protocolHandler.sendCommand(cmd)
+        Log.i(TAG, "Breathing vibration sent")
+    }
+
     fun handleSystemCommand(cmd: XiaomiProto.Command) {
         when (cmd.subtype) {
             18 -> {
