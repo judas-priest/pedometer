@@ -36,7 +36,7 @@
 ## Phase 5: Notification Actions
 - [x] Handle dismiss notification from watch (cancel via NotificationListenerService)
 - [x] MediaListenerService lifecycle bridge (onListenerConnected/Disconnected)
-- [ ] Handle "open on phone" action from watch
+- [x] Handle "open on phone" — trigger contentIntent or launch app by package
 - [ ] Reply from watch (if supported)
 
 ## Phase 6: Watchfaces

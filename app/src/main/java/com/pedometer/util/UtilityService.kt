@@ -68,6 +68,18 @@ class UtilityService(
         Log.d(TAG, "Sent ${contacts.size} contacts")
     }
 
+    fun setWorldClocks(clocks: List<String>) {
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(17) // Schedule type
+            .setSubtype(11) // Create world clock
+            .setSchedule(XiaomiProto.Schedule.newBuilder()
+                .setWorldClocks(XiaomiProto.WorldClocks.newBuilder()
+                    .apply { clocks.forEach { addWorldClock(it) } }))
+            .build()
+        protocolHandler.sendCommand(cmd)
+        Log.i(TAG, "Set world clocks: $clocks")
+    }
+
     fun handleSystemCommand(cmd: XiaomiProto.Command) {
         when (cmd.subtype) {
             18 -> {
