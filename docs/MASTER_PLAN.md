@@ -47,10 +47,10 @@
 
 ## Phase 7: UI Polish
 - [ ] Custom app icon (not default Android)
-- [ ] Home screen widget (steps, HR, battery)
+- [x] Home screen widget (Glance — steps/goal, dark theme, 2x1, 30min update)
 - [ ] Dark/light theme support
 - [ ] Onboarding wizard (first launch)
-- [ ] Version bump to 1.0
+- [x] Version bump to 1.0.0
 
 ## Phase 8: Stability
 - [ ] ColorOS auto-start persistence
@@ -120,4 +120,6 @@
 - 2026-06-30 22:15: Phase 5 — notification dismiss from watch works
 - 2026-06-30 22:20: Phase 2 — activity fetch today request added
 - 2026-06-30 22:25: Version bumped to 1.0.0
-- 2026-06-30 22:30: Phase 4 — find watch already implemented in UtilityService
+- 2026-06-30 22:30: Phase 4 — find watch button in UI
+- 2026-06-30 22:35: Phase 2 — SpO2 all-day tracking enabled
+- 2026-06-30 22:40: Phase 7 — home screen widget (Glance, steps/goal)
