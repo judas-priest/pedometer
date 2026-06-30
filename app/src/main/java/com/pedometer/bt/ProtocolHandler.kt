@@ -205,6 +205,16 @@ class ProtocolHandler(
         }
     }
 
+    fun sendRawProtobuf(data: ByteArray) {
+        Log.d(TAG, "sendRawProtobuf dataLen=${data.size} plainHex=${data.joinToString("") { "%02x".format(it) }}")
+        val encryptFn: ((ByteArray) -> ByteArray)? = if (authService.isInitialized) {
+            { msg -> authService.encrypt(msg, 0) }
+        } else null
+        val packet = PacketV2.encodeDataPacket(Channel.ProtobufCommand, packetSeqV2.getAndIncrement(), data, encryptFn)
+        Log.d(TAG, "V2 TX ${packet.size} bytes")
+        connection.write(packet)
+    }
+
     fun sendCommand(command: XiaomiProto.Command, forAuth: Boolean = false) {
         val data = command.toByteArray()
         val channel = if (forAuth) Channel.Authentication else Channel.ProtobufCommand
