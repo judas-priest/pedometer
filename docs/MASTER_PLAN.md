@@ -77,7 +77,7 @@
 - [x] Phone volume control from watch (PhoneActions.adjustVolume)
 - [ ] Navigation directions on watch
 - [ ] Timer/stopwatch sync
-- [ ] World clock
+- [x] World clock sync (UtilityService.setWorldClocks)
 - [ ] Custom vibration patterns
 - [ ] Meditation/breathing exercises with haptic feedback
 
@@ -127,3 +127,6 @@
 - 2026-06-30 22:50: Phase 10 — PhoneActions: camera, flashlight, volume
 - 2026-06-30 22:55: Phase 8 — stability: error handling, separate weather coroutine
 - 2026-06-30 23:00: Phase 2 — SpO2 all-day tracking enabled on connect
+- 2026-06-30 23:10: Phase 5 — "open on phone" action done
+- 2026-06-30 23:15: Phase 10 — world clock sync, PhoneActions
+- 2026-06-30 23:20: Phase 8 — weather coroutine fix, error handling
