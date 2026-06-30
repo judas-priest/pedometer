@@ -39,7 +39,7 @@ class SppConnection(
                     // Reflection fallback — bypasses SDP lookup
                     Log.i(TAG, "Using reflection createRfcommSocket on attempt $attempt")
                     val m = device.javaClass.getMethod("createRfcommSocket", Int::class.java)
-                    m.invoke(device, 1) as BluetoothSocket
+                    m.invoke(device, 2) as BluetoothSocket
                 }
                 s.connect()
                 socket = s

@@ -231,12 +231,19 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Connected)
                         viewModelScope.launch(Dispatchers.IO) {
                             Thread.sleep(500)
-                            // Send time sync first (Gadgetbridge does this)
+                            // Minimal test: only battery request
+                            Log.i(TAG, "POST-AUTH: sending only getBattery")
+                            protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
+                            // Wait and check for response
+                            Thread.sleep(5000)
+                            Log.i(TAG, "POST-AUTH: sending getDeviceInfo")
+                            protocolHandler?.sendCommand(CommandHelper.buildDeviceInfoRequest())
+                            Thread.sleep(5000)
+                            Log.i(TAG, "POST-AUTH: sending setCurrentTime")
                             sendCurrentTime()
-                            Thread.sleep(300)
-                            requestDeviceInfo()
-                            Thread.sleep(300)
-                            healthService?.startRealtimeStats()
+                            Thread.sleep(5000)
+                            Log.i(TAG, "POST-AUTH: sending setUserInfo")
+                            sendUserInfo()
                         }
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
@@ -338,6 +345,26 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         .setName(tz.id))))
             .build()
         Log.i(TAG, "Sending current time: ${cal.get(java.util.Calendar.HOUR_OF_DAY)}:${cal.get(java.util.Calendar.MINUTE)} tz=${tz.id}")
+        protocolHandler?.sendCommand(cmd)
+    }
+
+    private fun sendUserInfo() {
+        val p = userProfile
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(CommandHelper.TYPE_HEALTH)
+            .setSubtype(0) // CMD_USER_INFO_SET
+            .setHealth(XiaomiProto.Health.newBuilder()
+                .setUserInfo(XiaomiProto.UserInfo.newBuilder()
+                    .setHeight(p.heightCm)
+                    .setWeight(p.weightKg.toFloat())
+                    .setBirthday(19900101)
+                    .setGender(if (p.isMale) 1 else 2)
+                    .setGoalSteps(p.stepGoal)
+                    .setGoalCalories(300)
+                    .setGoalStanding(12)
+                    .setGoalMoving(30)))
+            .build()
+        Log.i(TAG, "Sending user info: height=${p.heightCm} weight=${p.weightKg} goal=${p.stepGoal}")
         protocolHandler?.sendCommand(cmd)
     }
 

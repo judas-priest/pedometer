@@ -187,8 +187,16 @@ class ProtocolHandler(
                 sendCommand(step3, forAuth = true)
             }
             CommandHelper.AUTH_STEP3 -> {
-                Log.i(TAG, "Authentication successful!")
-                onAuthenticated()
+                val status = if (cmd.hasAuth()) cmd.auth.status else -1
+                Log.i(TAG, "Auth step3 response: status=$status")
+                if (status == 1) {
+                    Log.i(TAG, "Authentication successful!")
+                    onAuthenticated()
+                } else {
+                    Log.e(TAG, "Authentication FAILED! status=$status (expected 1)")
+                    // Try anyway — some firmwares may use different status codes
+                    onAuthenticated()
+                }
             }
             else -> Log.w(TAG, "Unknown auth subtype: ${cmd.subtype}")
         }
