@@ -80,6 +80,27 @@
 
 ## Research Notes
 
+### Voice Assistant Research (Phase 9)
+- Watch has 2x MIC + speaker + BT call support
+- Alexa connects via smartphone (not direct cloud), syncs through Xiaomi Wear app
+- Audio stream likely goes through HFP (Hands-Free Profile) or custom SPP channel
+- Possible approach: intercept Alexa button → capture audio → STT → LLM → TTS → play back
+- Need to research: how Alexa audio is transmitted, what SPP commands trigger mic/speaker
+
+### Watch Hardware Capabilities (Phase 10)
+- AMOLED display 1.96" (502x410 resolution)
+- 2x microphones (dual MIC noise reduction)
+- Speaker (for calls, alerts)
+- Accelerometer + Gyroscope
+- Heart rate sensor (PPG)
+- SpO2 sensor
+- Barometer (pressure/altitude)
+- GPS (standalone)
+- Vibration motor
+- Button (side)
+- NFC (some models)
+- Water resistant 5ATM
+
 ### Weather (Phase 1)
 - Open-Meteo API: free, no key, no registration. 10K requests/day
 - Endpoint: `https://api.open-meteo.com/v1/forecast?latitude=X&longitude=Y&current_weather=true`
