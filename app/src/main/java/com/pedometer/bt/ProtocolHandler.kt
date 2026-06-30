@@ -32,16 +32,11 @@ class ProtocolHandler(
     private val packetSeqV2 = AtomicInteger(0)
 
     fun start() {
-        val versionPacket = PacketV1(
-            channel = Channel.Version,
-            flag = true,
-            needsResponse = true,
-            opCode = PacketV1.OPCODE_READ,
-            frameSerial = 0,
-            dataType = PacketV1.DATA_TYPE_PLAIN,
-            payload = ByteArray(0),
-        ).encode()
-        connection.write(versionPacket)
+        // Skip version probe — go directly to V2 session config (like Mi Fitness)
+        Log.i(TAG, "Skipping version probe, sending V2 session config directly")
+        useV2 = true
+        authService.useV2Crypto = true
+        connection.write(PacketV2.encodeSessionConfig(0, PacketV2.SESSION_START_REQUEST))
     }
 
     fun onDataReceived(data: ByteArray) {
