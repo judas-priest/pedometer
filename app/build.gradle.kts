@@ -64,6 +64,7 @@ dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
 
     implementation("androidx.health.connect:connect-client:1.1.0-alpha10")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")

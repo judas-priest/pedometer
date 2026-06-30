@@ -423,12 +423,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun fetchAndSendWeather() {
         try {
-            // Default: Moscow. TODO: get from GPS or settings
-            val lat = 55.75
-            val lon = 37.62
-            val cityName = "Москва"
-
-            val data = WeatherProvider.fetch(lat, lon, cityName)
+            val data = WeatherProvider.fetchWithLocation(getApplication())
             if (data != null) {
                 weatherService?.sendWeather(data)
             } else {

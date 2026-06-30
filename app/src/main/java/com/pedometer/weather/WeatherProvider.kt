@@ -1,9 +1,16 @@
 package com.pedometer.weather
 
+import android.annotation.SuppressLint
+import android.content.Context
+import android.location.Geocoder
 import android.util.Log
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.Tasks
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 data class WeatherData(
     val temperature: Int,       // celsius
@@ -53,6 +60,33 @@ object WeatherProvider {
         kmh < 103 -> 10
         kmh < 118 -> 11
         else -> 12
+    }
+
+    @SuppressLint("MissingPermission")
+    fun fetchWithLocation(context: Context): WeatherData? {
+        return try {
+            val client = LocationServices.getFusedLocationProviderClient(context)
+            val location = Tasks.await(
+                client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null),
+                10000, java.util.concurrent.TimeUnit.MILLISECONDS
+            )
+            if (location != null) {
+                val cityName = try {
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                    addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea ?: ""
+                } catch (_: Exception) { "" }
+
+                Log.i(TAG, "GPS: ${location.latitude},${location.longitude} city=$cityName")
+                fetch(location.latitude, location.longitude, cityName)
+            } else {
+                Log.w(TAG, "GPS location null, using default")
+                fetch(55.75, 37.62, "Москва") // fallback
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "GPS failed: ${e.message}, using default")
+            fetch(55.75, 37.62, "Москва") // fallback
+        }
     }
 
     fun fetch(lat: Double, lon: Double, cityName: String = ""): WeatherData? {
