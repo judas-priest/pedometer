@@ -61,6 +61,9 @@ interface StepDao {
     @Query("SELECT * FROM sleep_records ORDER BY bedTime DESC LIMIT :count")
     suspend fun getRecentSleep(count: Int): List<SleepRecord>
 
+    @Query("SELECT * FROM sleep_records WHERE date(bedTime/1000, 'unixepoch', 'localtime') = :date OR date(wakeupTime/1000, 'unixepoch', 'localtime') = :date LIMIT 1")
+    suspend fun getSleepForDate(date: String): SleepRecord?
+
     // Heart rate
     @Insert
     suspend fun insertHeartRate(hr: HeartRateRecord)
