@@ -23,16 +23,20 @@ class WeatherService(
 
     fun setLocation(cityName: String) {
         val key = locationKey(cityName)
+        // Use subtype 6 (SET_LOCATIONS) to REPLACE the entire list, not 7 (ADD) which duplicates
+        val location = XiaomiProto.WeatherLocation.newBuilder()
+            .setCode(key)
+            .setName(cityName)
+            .build()
         val cmd = XiaomiProto.Command.newBuilder()
             .setType(COMMAND_TYPE)
-            .setSubtype(7) // set current location
+            .setSubtype(6) // SET_LOCATIONS — replaces all locations with this one
             .setWeather(XiaomiProto.Weather.newBuilder()
-                .setLocation(XiaomiProto.WeatherLocation.newBuilder()
-                    .setCode(key)
-                    .setName(cityName)))
+                .setLocations(XiaomiProto.WeatherLocations.newBuilder()
+                    .addLocation(location)))
             .build()
         protocolHandler.sendCommand(cmd)
-        Log.i(TAG, "Set weather location: $cityName (key=$key)")
+        Log.i(TAG, "Set weather location (replace): $cityName (key=$key)")
     }
 
     fun sendWeather(data: WeatherData) {

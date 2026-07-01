@@ -765,8 +765,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         reconnectAttempts = 0
     }
 
-    private var lastWeatherCity = ""
-
     private fun fetchAndSendWeather() {
         try {
             val app = getApplication<Application>()
@@ -780,12 +778,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             val lon = coords?.second ?: 37.62
             val data = WeatherProvider.fetch(lat, lon, coords?.third ?: "Москва")
             if (data != null) {
-                // Only set location once per city to avoid duplicate entries on watch
-                if (data.cityName != lastWeatherCity) {
-                    weatherService?.setLocation(data.cityName)
-                    lastWeatherCity = data.cityName
-                    Thread.sleep(300)
-                }
+                weatherService?.setLocation(data.cityName)
+                Thread.sleep(300)
                 weatherService?.sendWeather(data)
 
                 val forecasts = WeatherProvider.fetchForecast(lat, lon)
