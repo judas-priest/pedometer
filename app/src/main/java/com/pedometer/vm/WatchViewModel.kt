@@ -33,6 +33,7 @@ import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.notification.WatchNotificationBridge
 import com.pedometer.util.AlarmService
+import com.pedometer.util.WatchSettings
 import com.pedometer.util.CalendarService
 import com.pedometer.util.WatchAlarm
 import com.pedometer.util.UtilityService
@@ -117,6 +118,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var utilityService: UtilityService? = null
     private var alarmService: AlarmService? = null
     private var calendarService: CalendarService? = null
+    private var watchSettings: WatchSettings? = null
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
     private var userProfile = UserProfile.load(app)
@@ -412,7 +414,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             alarmService?.getAlarms()
                             Thread.sleep(200)
 
-                            // 8. Sync calendar
+                            // 8. Sync contacts
+                            watchSettings?.syncContacts()
+                            Thread.sleep(200)
+
+                            // 9. Sync calendar
                             calendarService?.syncCalendar()
                             Thread.sleep(200)
 
@@ -525,6 +531,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 alarmService = alarm
 
                 calendarService = CalendarService(handler, getApplication())
+                watchSettings = WatchSettings(handler, getApplication())
 
                 val sync = ActivitySync(handler,
                     onGpsTrack = { workoutStartMs, points ->
@@ -786,6 +793,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun editAlarm(alarm: WatchAlarm) { alarmService?.editAlarm(alarm) }
     fun deleteAlarm(alarmId: Int) { alarmService?.deleteAlarm(alarmId) }
+    fun syncContacts() { watchSettings?.syncContacts() }
+    fun setDnd(enabled: Boolean) { watchSettings?.setDnd(enabled) }
+    fun setWearingMode(mode: Int) { watchSettings?.setWearingMode(mode) }
+    fun createReminder(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) { watchSettings?.createReminder(title, y, m, d, h, min) }
 
     @android.annotation.SuppressLint("MissingPermission")
     private fun startGpsRelay() {
@@ -843,6 +854,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         utilityService = null
         alarmService = null
         calendarService = null
+        watchSettings = null
         sppConnection?.disconnect()
         sppConnection = null
         bleConnection?.disconnect()
