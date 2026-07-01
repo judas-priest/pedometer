@@ -9,6 +9,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import com.pedometer.data.DailyHealth
 import com.pedometer.ui.components.*
 import com.pedometer.vm.WatchState
 import java.time.LocalDate
@@ -134,7 +139,7 @@ fun ActivityScreen(
             }
         }
 
-        // Health summary — filtered by same period as steps
+        // Health charts — filtered by same period as steps
         if (validHealth.isNotEmpty()) {
             val periodDaysCount = if (selectedPeriod == 0) 6 else 29
             val periodHealth = validHealth.filter {
@@ -142,48 +147,38 @@ fun ActivityScreen(
                     val d = LocalDate.parse(it.date)
                     !d.isBefore(today.minusDays(periodDaysCount.toLong()))
                 } catch (_: Exception) { false }
-            }
+            }.sortedBy { it.date }
+
             if (periodHealth.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                Text("Здоровье", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
+                // HR chart
+                if (periodHealth.any { it.hrAvg > 0 }) {
+                    Spacer(Modifier.height(16.dp))
+                    HealthMiniChart("Пульс", periodHealth, { it.hrAvg }, HeartRed, "уд/мин")
+                }
 
-                val avgHr = periodHealth.map { it.hrAvg }.average().toInt()
-                val avgResting = periodHealth.filter { it.hrResting > 0 }.let {
-                    if (it.isNotEmpty()) it.map { h -> h.hrResting }.average().toInt() else 0
+                // SpO2 chart
+                if (periodHealth.any { it.spo2Avg in 1..100 }) {
+                    Spacer(Modifier.height(12.dp))
+                    HealthMiniChart("SpO2", periodHealth.filter { it.spo2Avg in 1..100 }, { it.spo2Avg }, StandBlue, "%")
                 }
-                val avgSpo2 = periodHealth.filter { it.spo2Avg in 1..100 }.let {
-                    if (it.isNotEmpty()) it.map { h -> h.spo2Avg }.average().toInt() else 0
-                }
-                val avgStress = periodHealth.filter { it.stressAvg > 0 }.let {
-                    if (it.isNotEmpty()) it.map { h -> h.stressAvg }.average().toInt() else 0
-                }
-                val maxHr = periodHealth.maxOf { it.hrMax }
-                val minHr = periodHealth.filter { it.hrMin > 0 }.minOfOrNull { it.hrMin } ?: 0
 
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column {
-                                Text("Пульс", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("$avgHr", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = HeartRed)
-                                Text("$minHr–$maxHr", style = MaterialTheme.typography.labelSmall)
-                            }
-                            if (avgResting > 0) Column {
-                                Text("Покой", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("$avgResting", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            }
-                            if (avgSpo2 > 0) Column {
-                                Text("SpO2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("$avgSpo2%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = StandBlue)
-                            }
-                            if (avgStress > 0) Column {
-                                Text("Стресс", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("$avgStress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = CalorieOrange)
-                            }
-                        }
-                    }
+                // Stress chart
+                if (periodHealth.any { it.stressAvg > 0 }) {
+                    Spacer(Modifier.height(12.dp))
+                    HealthMiniChart("Стресс", periodHealth.filter { it.stressAvg > 0 }, { it.stressAvg }, CalorieOrange, "")
                 }
+
+                // Resting HR chart
+                if (periodHealth.any { it.hrResting > 0 }) {
+                    Spacer(Modifier.height(12.dp))
+                    HealthMiniChart("Пульс покоя", periodHealth.filter { it.hrResting > 0 }, { it.hrResting }, HeartRed, "уд/мин")
+                }
+            }
+
+            // Sleep chart
+            if (state.recentWorkouts.isNotEmpty() || state.lastSleep != null) {
+                // Sleep duration from lastSleep only — need Room query for history
+                // TODO: add sleep history chart when getSleepHistory DAO exists
             }
         }
 
@@ -231,5 +226,47 @@ private fun daysLabel(n: Int): String {
         mod10 == 1 -> "день"
         mod10 in 2..4 -> "дня"
         else -> "дней"
+    }
+}
+
+@Composable
+private fun HealthMiniChart(
+    title: String,
+    data: List<DailyHealth>,
+    getValue: (DailyHealth) -> Int,
+    color: Color,
+    unit: String,
+) {
+    val values = data.map { getValue(it) }
+    val maxVal = values.max().toFloat().coerceAtLeast(1f)
+    val avg = values.average().toInt()
+
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text("$avg $unit", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)
+            }
+            Spacer(Modifier.height(8.dp))
+            Canvas(modifier = Modifier.fillMaxWidth().height(60.dp)) {
+                val barW = (size.width / data.size) - 6f
+                data.forEachIndexed { i, _ ->
+                    val v = values[i]
+                    val h = (v / maxVal) * size.height * 0.9f
+                    val x = i * (barW + 6f) + 3f
+                    drawRect(color.copy(alpha = 0.8f), Offset(x, size.height - h), Size(barW, h))
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                data.forEach { h ->
+                    val label = try {
+                        val d = java.time.LocalDate.parse(h.date)
+                        "%d.%02d".format(d.dayOfMonth, d.monthValue)
+                    } catch (_: Exception) { "" }
+                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
     }
 }
