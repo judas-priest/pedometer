@@ -10,7 +10,7 @@ import com.pedometer.notification.WatchNotificationBridge
 
 class MediaListenerService : NotificationListenerService() {
     private var callStartTime: Long = 0
-    private var callTimerRunning = false
+    @Volatile private var callTimerRunning = false
     private var callTitle = ""
 
     companion object {

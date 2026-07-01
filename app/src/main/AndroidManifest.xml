@@ -69,6 +69,15 @@
             android:exported="false"
             android:foregroundServiceType="health" />
         <receiver
+            android:name=".service.CommandReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.pedometer.NOTIFY" />
+                <action android:name="com.pedometer.FIND" />
+                <action android:name="com.pedometer.REFRESH" />
+            </intent-filter>
+        </receiver>
+        <receiver
             android:name=".service.BootReceiver"
             android:exported="true">
             <intent-filter>

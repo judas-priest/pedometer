@@ -184,8 +184,9 @@ fun ConnectScreen(
             profile = state.profile,
         )
 
-        // Heart rate + watch battery (always show if watch connected)
-        if (state.connectionStatus == com.pedometer.vm.ConnectionStatus.Connected || state.batteryLevel >= 0) {
+        // Heart rate + watch battery + historical data
+        val hasAnyHealthData = state.heartRate > 0 || state.batteryLevel >= 0 || state.spo2 > 0 || state.stress > 0 || state.hrHistory.isNotEmpty() || state.healthHistory.isNotEmpty()
+        if (hasAnyHealthData || state.connectionStatus == com.pedometer.vm.ConnectionStatus.Connected) {
             Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),

@@ -19,8 +19,8 @@ import com.pedometer.data.HeartRateRecord
 import com.pedometer.data.HourlySteps
 import com.pedometer.data.WorkoutRecord
 import com.pedometer.data.StepDatabase
+import com.pedometer.PedometerApp
 import com.pedometer.assistant.LlmClient
-import com.pedometer.server.MiniHttpServer
 import com.pedometer.health.ActivitySync
 import com.pedometer.health.HealthService
 import com.pedometer.health.DayStepData
@@ -108,7 +108,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var activitySync: ActivitySync? = null
     private var dataUploadService: DataUploadService? = null
     private var utilityService: UtilityService? = null
-    private val httpServer = MiniHttpServer()
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
     private var userProfile = UserProfile.load(app)
@@ -214,17 +213,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        // Start HTTP server
-        httpServer.onFindWatch = { findWatch() }
-        httpServer.onWeatherUpdate = {
-            viewModelScope.launch(Dispatchers.IO) { fetchAndSendWeather() }
-        }
-        httpServer.onGetStatus = {
-            val s = _state.value
-            """{"steps":${s.todayWalkSteps + s.todayRunSteps},"hr":${s.heartRate},"battery":${s.batteryLevel},"spo2":${s.spo2},"stress":${s.stress},"connected":${s.connectionStatus == ConnectionStatus.Connected}}"""
-        }
-        httpServer.start()
-
         // Start phone step counter
         phoneStepCounter.start()
         viewModelScope.launch {
@@ -267,6 +255,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_MAC, mac).apply()
     }
+
+    private var lastHrSaveTime = 0L // throttle HR writes to 1 per minute
 
     private var autoReconnectEnabled = true
     private var reconnectAttempts = 0
@@ -339,22 +329,31 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         // Periodic weather updates (every 30 min)
                         viewModelScope.launch(Dispatchers.IO) {
                             delay(30 * 60 * 1000)
-                            while (_state.value.connectionStatus == ConnectionStatus.Connected) {
+                            while (isActive && _state.value.connectionStatus == ConnectionStatus.Connected) {
                                 try { fetchAndSendWeather() } catch (_: Exception) {}
                                 delay(30 * 60 * 1000)
                             }
                         }
 
-                        // Periodic battery check (keepalive, every 5 min)
+                        // Periodic battery check (keepalive, every 15 min — lightweight)
                         viewModelScope.launch(Dispatchers.IO) {
-                            while (_state.value.connectionStatus == ConnectionStatus.Connected) {
-                                delay(5 * 60 * 1000)
+                            while (isActive && _state.value.connectionStatus == ConnectionStatus.Connected) {
+                                delay(15 * 60 * 1000)
                                 try {
                                     protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
-                                    // Re-fetch activity data for SpO2/stress updates
-                                    protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
-                                    Log.d(TAG, "Keepalive: battery + activity fetch sent")
+                                    Log.d(TAG, "Keepalive: battery request sent")
                                 } catch (_: Exception) {}
+                            }
+                        }
+
+                        // Start/stop realtime stats based on foreground/background
+                        PedometerApp.onForegroundChanged = { inForeground ->
+                            if (inForeground && _state.value.connectionStatus == ConnectionStatus.Connected) {
+                                Log.i(TAG, "Foreground → starting realtime stats")
+                                healthService?.startRealtimeStats()
+                            } else {
+                                Log.i(TAG, "Background → stopping realtime stats")
+                                healthService?.stopRealtimeStats()
                             }
                         }
 
@@ -389,10 +388,16 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             protocolHandler?.sendCommand(localeCmd)
                             Thread.sleep(200)
 
-                            // 6. Health config init + realtime stats
+                            // 6. Health config init
                             healthService?.initialize()
                             Thread.sleep(300)
-                            healthService?.startRealtimeStats()
+                            // Start realtime stats only if app is in foreground
+                            if (PedometerApp.isInForeground) {
+                                healthService?.startRealtimeStats()
+                                Log.i(TAG, "Realtime stats started (foreground)")
+                            } else {
+                                Log.i(TAG, "Realtime stats skipped (background)")
+                            }
 
                             // 7. Send canned messages for quick reply
                             notificationService?.sendCannedMessages()
@@ -422,13 +427,15 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         heartRate = if (data.heartRate > 0) data.heartRate else _state.value.heartRate,
                         standingHours = data.standingHours,
                     )
-                    // Persist heart rate to Room DB
-                    if (data.heartRate > 0) {
+                    // Persist heart rate to Room DB (max once per minute)
+                    val now = System.currentTimeMillis()
+                    if (data.heartRate > 0 && now - lastHrSaveTime >= 60_000) {
+                        lastHrSaveTime = now
                         viewModelScope.launch(Dispatchers.IO) {
                             try {
                                 val dao = StepDatabase.get(getApplication()).stepDao()
                                 dao.insertHeartRate(HeartRateRecord(
-                                    timestamp = System.currentTimeMillis(),
+                                    timestamp = now,
                                     bpm = data.heartRate,
                                     source = "watch",
                                 ))
@@ -685,6 +692,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         autoReconnectEnabled = false // don't reconnect on manual disconnect
+        PedometerApp.onForegroundChanged = null
         WatchNotificationBridge.protocolHandler = null
         healthService?.stopRealtimeStats()
         healthService = null
@@ -858,7 +866,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         phoneStepCounter.stop()
-        httpServer.stop()
+        PedometerApp.onForegroundChanged = null // fix memory leak #1
         disconnect()
     }
 }
