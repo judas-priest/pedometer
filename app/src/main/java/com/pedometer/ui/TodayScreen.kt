@@ -88,8 +88,7 @@ fun TodayScreen(
             healthHistory = state.healthHistory,
             onBack = { showMetric = "" },
         )
-        return
-    }
+    } else {
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -265,6 +264,7 @@ fun TodayScreen(
             }
         }
     }
+    } // else (not showing metric detail)
 }
 
 @Composable
