@@ -5,7 +5,7 @@
     android:viewportHeight="108">
     <!-- Heart shape -->
     <path
-        android:fillColor="#E53935"
+        android:fillColor="#000000"
         android:pathData="M54,78 L30,54 C24,48 24,38 30,32 C36,26 46,26 52,32 L54,34 L56,32 C62,26 72,26 78,32 C84,38 84,48 78,54 Z" />
     <!-- Pulse line -->
     <path
