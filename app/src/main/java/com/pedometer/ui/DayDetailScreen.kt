@@ -127,7 +127,18 @@ fun DayDetailScreen(
         // 3. Step breakdown
         val walk = daySteps?.walkSteps ?: 0
         val run = daySteps?.runSteps ?: 0
-        StepMetricCards(walk, run, steps, state.profile)
+        val dayHealthForCal = state.healthHistory.find { it.date == selectedDate.toString() }
+        val dayCal = when {
+            selectedDate == today && state.watchCalories > 0 -> state.watchCalories
+            dayHealthForCal != null && dayHealthForCal.calories > 0 -> dayHealthForCal.calories
+            else -> 0
+        }
+        val dayDist = when {
+            selectedDate == today && state.watchDistanceM > 0 -> state.watchDistanceM
+            dayHealthForCal != null && dayHealthForCal.distanceM > 0 -> dayHealthForCal.distanceM
+            else -> 0
+        }
+        StepMetricCards(walk, run, steps, state.profile, dayCal, dayDist)
 
         Spacer(Modifier.height(16.dp))
 

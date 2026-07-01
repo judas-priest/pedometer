@@ -625,6 +625,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                                     stressAvg = if (summary.stressAvg > 0) summary.stressAvg else existing?.stressAvg ?: 0,
                                     stressMin = if (summary.stressMin > 0) summary.stressMin else existing?.stressMin ?: 0,
                                     stressMax = if (summary.stressMax > 0) summary.stressMax else existing?.stressMax ?: 0,
+                                    calories = if (summary.calories > 0) summary.calories else existing?.calories ?: 0,
+                                    distanceM = if (summary.distanceM > 0) summary.distanceM else existing?.distanceM ?: 0,
                                 ))
                                 Log.i(TAG, "Saved daily health for $dateStr")
                             } catch (e: Exception) {

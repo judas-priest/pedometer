@@ -35,6 +35,8 @@ data class DailyHealth(
     val stressAvg: Int = 0,
     val stressMin: Int = 0,
     val stressMax: Int = 0,
+    val calories: Int = 0,
+    val distanceM: Int = 0,
 )
 
 @Entity(tableName = "heart_rate")

@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [DailySteps::class, HourlySteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class],
-    version = 6,
+    version = 7,
 )
 abstract class StepDatabase : RoomDatabase() {
     abstract fun stepDao(): StepDao
