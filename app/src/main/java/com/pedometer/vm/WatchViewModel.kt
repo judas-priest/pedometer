@@ -32,6 +32,7 @@ import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.notification.WatchNotificationBridge
 import com.pedometer.util.AlarmService
+import com.pedometer.util.CalendarService
 import com.pedometer.util.WatchAlarm
 import com.pedometer.util.UtilityService
 import com.pedometer.watchface.DataUploadService
@@ -114,6 +115,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var dataUploadService: DataUploadService? = null
     private var utilityService: UtilityService? = null
     private var alarmService: AlarmService? = null
+    private var calendarService: CalendarService? = null
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
     private var userProfile = UserProfile.load(app)
@@ -409,7 +411,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             alarmService?.getAlarms()
                             Thread.sleep(200)
 
-                            // 8. Send canned messages for quick reply
+                            // 8. Sync calendar
+                            calendarService?.syncCalendar()
+                            Thread.sleep(200)
+
+                            // 9. Send canned messages for quick reply
                             notificationService?.sendCannedMessages()
                             Thread.sleep(200)
 
@@ -514,6 +520,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     _state.value = _state.value.copy(alarms = alarms)
                 }
                 alarmService = alarm
+
+                calendarService = CalendarService(handler, getApplication())
 
                 val sync = ActivitySync(handler,
                     onHourlySteps = { date, hourlyList ->
@@ -820,6 +828,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         dataUploadService = null
         utilityService = null
         alarmService = null
+        calendarService = null
         sppConnection?.disconnect()
         sppConnection = null
         bleConnection?.disconnect()
