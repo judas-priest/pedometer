@@ -142,6 +142,9 @@ class MainActivity : ComponentActivity() {
                                 onSetActiveWatchface = { vm.setActiveWatchface(it) },
                                 onDeleteWatchface = { vm.deleteWatchface(it) },
                                 onUploadWatchface = { vm.uploadWatchface(it) },
+                                onCreateAlarm = { h, m -> vm.createAlarm(h, m) },
+                                onDeleteAlarm = { vm.deleteAlarm(it) },
+                                onToggleAlarm = { vm.editAlarm(it) },
                             )
                         }
                     }

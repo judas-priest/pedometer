@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.pedometer.health.UserProfile
@@ -41,6 +42,9 @@ fun SettingsTab(
     onSetActiveWatchface: (String) -> Unit = {},
     onDeleteWatchface: (String) -> Unit = {},
     onUploadWatchface: (ByteArray) -> Unit = {},
+    onCreateAlarm: (Int, Int) -> Unit = { _, _ -> },
+    onDeleteAlarm: (Int) -> Unit = {},
+    onToggleAlarm: (com.pedometer.util.WatchAlarm) -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -433,6 +437,85 @@ fun SettingsTab(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("🔔 Найти часы")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Alarms
+        if (state.connectionStatus == ConnectionStatus.Connected) {
+            Spacer(Modifier.height(16.dp))
+            Text("Будильники", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (state.alarms.isEmpty()) {
+                        Text("Нет будильников", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        state.alarms.forEach { alarm ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "%02d:%02d".format(alarm.hour, alarm.minute),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                val repeatLabel = when (alarm.repeatMode) {
+                                    1 -> "Ежедневно"
+                                    5 -> "По дням"
+                                    else -> "Один раз"
+                                }
+                                Text(repeatLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(8.dp))
+                                Switch(
+                                    checked = alarm.enabled,
+                                    onCheckedChange = { onToggleAlarm(alarm.copy(enabled = it)) },
+                                )
+                                IconButton(onClick = { onDeleteAlarm(alarm.id) }) {
+                                    Text("✕", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                            if (alarm != state.alarms.last()) HorizontalDivider()
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // Add alarm
+                    var newHour by remember { mutableStateOf("7") }
+                    var newMin by remember { mutableStateOf("00") }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = newHour,
+                            onValueChange = { newHour = it.filter { c -> c.isDigit() }.take(2) },
+                            label = { Text("Ч") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                        Text(":", style = MaterialTheme.typography.titleLarge)
+                        OutlinedTextField(
+                            value = newMin,
+                            onValueChange = { newMin = it.filter { c -> c.isDigit() }.take(2) },
+                            label = { Text("М") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                        FilledTonalButton(onClick = {
+                            val h = newHour.toIntOrNull()?.coerceIn(0, 23) ?: 7
+                            val m = newMin.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                            onCreateAlarm(h, m)
+                        }) {
+                            Text("+")
                         }
                     }
                 }

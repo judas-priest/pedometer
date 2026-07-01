@@ -31,6 +31,8 @@ import com.pedometer.health.UserProfile
 import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.notification.WatchNotificationBridge
+import com.pedometer.util.AlarmService
+import com.pedometer.util.WatchAlarm
 import com.pedometer.util.UtilityService
 import com.pedometer.watchface.DataUploadService
 import com.pedometer.watchface.WatchfaceInfo
@@ -81,6 +83,7 @@ data class WatchState(
     val hrHistory: List<Pair<Long, Int>> = emptyList(), // timestamp to bpm
     val healthHistory: List<DailyHealth> = emptyList(),
     val uploadProgress: Int = -1, // -1 = not uploading
+    val alarms: List<WatchAlarm> = emptyList(),
 )
 
 enum class ConnectionStatus {
@@ -110,6 +113,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var activitySync: ActivitySync? = null
     private var dataUploadService: DataUploadService? = null
     private var utilityService: UtilityService? = null
+    private var alarmService: AlarmService? = null
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
     private var userProfile = UserProfile.load(app)
@@ -401,7 +405,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                                 Log.i(TAG, "Realtime stats skipped (background)")
                             }
 
-                            // 7. Send canned messages for quick reply
+                            // 7. Fetch alarms
+                            alarmService?.getAlarms()
+                            Thread.sleep(200)
+
+                            // 8. Send canned messages for quick reply
                             notificationService?.sendCannedMessages()
                             Thread.sleep(200)
 
@@ -500,6 +508,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 utilityService = utility
+
+                val alarm = AlarmService(handler)
+                alarm.onAlarmsReceived = { alarms ->
+                    _state.value = _state.value.copy(alarms = alarms)
+                }
+                alarmService = alarm
 
                 val sync = ActivitySync(handler,
                     onHourlySteps = { date, hourlyList ->
@@ -744,6 +758,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startBreathing() { utilityService?.sendBreathingVibration() }
+    fun getAlarms() { alarmService?.getAlarms() }
+    fun createAlarm(hour: Int, minute: Int, repeatMode: Int = 0, repeatFlags: Int = 0) {
+        alarmService?.createAlarm(hour, minute, repeatMode, repeatFlags)
+    }
+    fun editAlarm(alarm: WatchAlarm) { alarmService?.editAlarm(alarm) }
+    fun deleteAlarm(alarmId: Int) { alarmService?.deleteAlarm(alarmId) }
 
     @android.annotation.SuppressLint("MissingPermission")
     private fun startGpsRelay() {
@@ -799,6 +819,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         activitySync = null
         dataUploadService = null
         utilityService = null
+        alarmService = null
         sppConnection?.disconnect()
         sppConnection = null
         bleConnection?.disconnect()
@@ -909,6 +930,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             NotificationService.COMMAND_TYPE -> notificationService?.handleCommand(cmd)
             WatchfaceService.COMMAND_TYPE -> watchfaceService?.handleCommand(cmd)
             DataUploadService.COMMAND_TYPE -> dataUploadService?.handleCommand(cmd)
+            AlarmService.COMMAND_TYPE -> alarmService?.handleCommand(cmd)
             else -> Log.d(TAG, "Unhandled command type=${cmd.type}")
         }
     }
