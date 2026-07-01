@@ -64,6 +64,8 @@ class ActivitySync(
         val steps: Int = 0,
     )
 
+    data class GpsPoint(val timestamp: Long, val lat: Double, val lon: Double, val speed: Float = 0f)
+
     data class DailySummary(
         val date: Long, // epoch seconds
         val steps: Int = 0,
@@ -251,6 +253,8 @@ class ActivitySync(
                     parseManualSamples(fileId, data)
                 info.type == 1 && info.detailType == 1 ->
                     parseWorkoutSummary(fileId, data)
+                info.type == 1 && info.detailType == 2 ->
+                    parseGpsTrack(fileId, data)
                 else -> Log.d(TAG, "Skipping file type=${info.type} sub=${info.subtype} detail=${info.detailType}")
             }
         } catch (e: Exception) {
@@ -689,6 +693,34 @@ class ActivitySync(
                 else -> Log.d(TAG, "Manual type=$type value=$value")
             }
         }
+    }
+
+    private fun parseGpsTrack(fileId: ByteArray, data: ByteArray) {
+        val info = decodeFileId(fileId)
+        val sampleSize = if (info.version >= 2) 18 else 12
+        val headerSize = 1
+
+        val bb = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        bb.position(8 + headerSize) // skip fileId + padding + header
+        val dataEnd = data.size - 4 // exclude CRC32
+
+        val points = mutableListOf<GpsPoint>()
+        while (bb.position() + sampleSize <= dataEnd) {
+            val ts = bb.int.toLong() and 0xFFFFFFFFL
+            val lon = bb.float.toDouble()
+            val lat = bb.float.toDouble()
+            var speed = 0f
+            if (info.version >= 2) {
+                bb.float // hdop
+                speed = (bb.short.toInt() shr 2) / 10.0f
+            }
+            if (lat != 0.0 && lon != 0.0) {
+                points.add(GpsPoint(ts * 1000, lat, lon, speed))
+            }
+        }
+
+        Log.i(TAG, "GPS track: ${points.size} points for sport=${info.subtype}")
+        // TODO: save to DB and display on map
     }
 
     private fun parseSleepDetails(fileId: ByteArray, data: ByteArray) {
