@@ -19,11 +19,11 @@ import android.content.ComponentName
 import android.content.pm.PackageManager
 import com.pedometer.debug.DebugScreen
 import com.pedometer.music.MediaListenerService
-import com.pedometer.ui.ConnectScreen
+import com.pedometer.ui.ActivityScreen
 import com.pedometer.ui.NotificationAppsScreen
 import com.pedometer.ui.OnboardingScreen
+import com.pedometer.ui.TodayScreen
 import com.pedometer.ui.theme.PedometerTheme
-import com.pedometer.assistant.VoiceAssistant
 import com.pedometer.vm.WatchViewModel
 import kotlinx.coroutines.launch
 
@@ -43,12 +43,6 @@ class MainActivity : ComponentActivity() {
             PedometerTheme {
                 val vm: WatchViewModel = viewModel()
                 val state by vm.state.collectAsState()
-                val voiceAssistant = remember { VoiceAssistant(this@MainActivity) }
-                val micPermLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-                ) { granted ->
-                    if (granted) voiceAssistant.startListening()
-                }
                 var showDebug by remember { mutableStateOf(false) }
                 var showNotificationApps by remember { mutableStateOf(false) }
 
@@ -110,23 +104,15 @@ class MainActivity : ComponentActivity() {
                             .padding(padding),
                     ) { page ->
                         when (page) {
-                            0 -> ConnectScreen(state = state, onRefresh = { vm.refreshData() })
-                            1 -> com.pedometer.ui.ActivityTab(
+                            0 -> TodayScreen(
                                 state = state,
-                                onCamera = { com.pedometer.util.PhoneActions.openCamera(this@MainActivity) },
-                                onFlashlight = { com.pedometer.util.PhoneActions.toggleFlashlight(this@MainActivity) },
+                                onRefresh = { vm.refreshData() },
+                                onTodayTap = { scope.launch { pagerState.animateScrollToPage(1) } },
+                            )
+                            1 -> ActivityScreen(
+                                state = state,
                                 onFindWatch = { vm.findWatch() },
                                 onBreathing = { vm.startBreathing() },
-                                onScoTest = { voiceAssistant.testSco() },
-                                onVoiceAssistant = {
-                                    if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                            this@MainActivity, android.Manifest.permission.RECORD_AUDIO
-                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                        voiceAssistant.startListening()
-                                    } else {
-                                        micPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                                    }
-                                },
                             )
                             2 -> com.pedometer.ui.SettingsTab(
                                 state = state,
