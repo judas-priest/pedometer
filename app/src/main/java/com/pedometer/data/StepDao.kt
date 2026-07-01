@@ -18,6 +18,9 @@ interface StepDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHourly(hourly: HourlySteps)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertHourly(hourly: HourlySteps)
+
     @Query("UPDATE hourly_steps SET steps = steps + :count WHERE date = :date AND hour = :hour")
     suspend fun incrementHourly(date: String, hour: Int, count: Int)
 

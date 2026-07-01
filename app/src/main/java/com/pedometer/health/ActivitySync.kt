@@ -24,6 +24,7 @@ class ActivitySync(
     private val onHeartRateSamples: (List<HeartRateSample>) -> Unit = {},
     private val onSleepData: (SleepData) -> Unit = {},
     private val onWorkout: (WorkoutSummary) -> Unit = {},
+    private val onHourlySteps: (String, List<Pair<Int, Int>>) -> Unit = { _, _ -> }, // date, list of (hour, steps)
 ) {
     companion object {
         private const val TAG = "ActivitySync"
@@ -282,6 +283,7 @@ class ActivitySync(
 
         // Parse per-minute samples
         val samples = mutableListOf<HeartRateSample>()
+        val stepsByHour = mutableMapOf<Int, Int>() // hour -> accumulated steps
         var pos = dataStart
         var minuteOffset = 0
         val baseTimestamp = info.timestamp
@@ -355,18 +357,31 @@ class ActivitySync(
                 break
             }
 
+            val sampleTs = baseTimestamp + minuteOffset * 60L
             if (hr > 0 && hr < 255) {
-                samples.add(HeartRateSample(
-                    timestamp = (baseTimestamp + minuteOffset * 60L) * 1000, // to millis
-                    bpm = hr
-                ))
+                samples.add(HeartRateSample(timestamp = sampleTs * 1000, bpm = hr))
+            }
+            if (steps > 0) {
+                val hour = java.time.Instant.ofEpochSecond(sampleTs)
+                    .atZone(java.time.ZoneId.systemDefault()).hour
+                stepsByHour[hour] = (stepsByHour[hour] ?: 0) + steps
             }
             minuteOffset++
         }
 
-        Log.i(TAG, "Parsed ${samples.size} HR samples from daily details ($minuteOffset minutes)")
+        val totalStepsFromDetails = stepsByHour.values.sum()
+        Log.i(TAG, "Parsed ${samples.size} HR samples, $totalStepsFromDetails steps in ${stepsByHour.size} hours from daily details ($minuteOffset minutes)")
         if (samples.isNotEmpty()) {
             onHeartRateSamples(samples)
+        }
+
+        // Emit hourly steps
+        if (stepsByHour.isNotEmpty()) {
+            val dateStr = java.time.Instant.ofEpochSecond(baseTimestamp)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+            val hourlyList = stepsByHour.map { (hour, s) -> Pair(hour, s) }.sortedBy { it.first }
+            Log.i(TAG, "Hourly steps for $dateStr: ${hourlyList.map { "${it.first}h=${it.second}" }}")
+            onHourlySteps(dateStr, hourlyList)
         }
     }
 

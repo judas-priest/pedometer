@@ -471,6 +471,20 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 utilityService = utility
 
                 val sync = ActivitySync(handler,
+                    onHourlySteps = { date, hourlyList ->
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val dao = StepDatabase.get(getApplication()).stepDao()
+                                // Watch data = source of truth, overwrite
+                                for ((hour, steps) in hourlyList) {
+                                    dao.upsertHourly(HourlySteps(date = date, hour = hour, steps = steps))
+                                }
+                                Log.i(TAG, "Saved ${hourlyList.size} hourly steps for $date from watch")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to save hourly steps", e)
+                            }
+                        }
+                    },
                     onWorkout = { w ->
                         Log.i(TAG, "Workout: ${w.sportName} ${w.durationSec/60}min")
                         viewModelScope.launch(Dispatchers.IO) {
