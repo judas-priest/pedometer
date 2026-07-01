@@ -62,7 +62,7 @@ fun StepRing(progress: Float, color: Color, size: Float, strokeWidth: Float) {
 // ── HrChart ────────────────────────────────────────────────────────────────────
 
 @Composable
-fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier) {
+fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier, onSelect: ((String) -> Unit)? = null) {
     val lineColor = HeartRed
     val fillColor = HeartRed.copy(alpha = 0.15f)
     val gridColor = Color.Gray.copy(alpha = 0.2f)
@@ -92,6 +92,9 @@ fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier) {
                     }
                 }
                 selectedIndex = closest
+                val pt = data[closest]
+                val t = java.time.Instant.ofEpochMilli(pt.first).atZone(java.time.ZoneId.systemDefault())
+                onSelect?.invoke("%02d:%02d — %d уд/мин".format(t.hour, t.minute, pt.second))
             }
         }) {
             if (data.size < 2) return@Canvas
@@ -141,19 +144,6 @@ fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier) {
             }
         }
 
-        // Overlay label
-        if (selectedPoint != null) {
-            val time = java.time.Instant.ofEpochMilli(selectedPoint.first)
-                .atZone(java.time.ZoneId.systemDefault())
-            val timeStr = "%02d:%02d".format(time.hour, time.minute)
-            Text(
-                "$timeStr  ${selectedPoint.second} уд/мин",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = HeartRed,
-                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
-            )
-        }
     }
 }
 

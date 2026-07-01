@@ -181,19 +181,35 @@ fun TodayScreen(
                 val hrMax = todayHr.maxOf { it.second }
                 val hrAvg = todayHr.map { it.second }.average().toInt()
 
+                var hrLabel by remember { mutableStateOf("") }
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "Пульс",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Пульс",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (hrLabel.isNotEmpty()) {
+                                Text(
+                                    hrLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = HeartRed,
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(8.dp))
                         HrChart(
                             data = todayHr,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(120.dp),
+                            onSelect = { hrLabel = it },
                         )
                         Spacer(Modifier.height(8.dp))
                         Row(

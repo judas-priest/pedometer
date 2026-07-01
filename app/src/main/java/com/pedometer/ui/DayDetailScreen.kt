@@ -137,9 +137,19 @@ fun DayDetailScreen(
         // 5. HR chart for selected day
         val dayHr = filterHrForDay(state.hrHistory, selectedDate)
         if (dayHr.size > 2) {
+            var hrLabel by remember { mutableStateOf("") }
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Пульс", style = MaterialTheme.typography.titleSmall)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Пульс", style = MaterialTheme.typography.titleSmall)
+                        if (hrLabel.isNotEmpty()) {
+                            Text(hrLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = HeartRed)
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
                     val downsampled = if (dayHr.size <= 150) dayHr
                     else {
@@ -149,6 +159,7 @@ fun DayDetailScreen(
                     HrChart(
                         data = downsampled,
                         modifier = Modifier.fillMaxWidth().height(120.dp),
+                        onSelect = { hrLabel = it },
                     )
                     Spacer(Modifier.height(8.dp))
                     val minHr = dayHr.minOf { it.second }
