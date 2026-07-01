@@ -145,6 +145,9 @@ class MainActivity : ComponentActivity() {
                                 onCreateAlarm = { h, m -> vm.createAlarm(h, m) },
                                 onDeleteAlarm = { vm.deleteAlarm(it) },
                                 onToggleAlarm = { vm.editAlarm(it) },
+                                onDndChange = { vm.setDnd(it) },
+                                onWearingModeChange = { vm.setWearingMode(it) },
+                                onSyncContacts = { vm.syncContacts() },
                             )
                         }
                     }

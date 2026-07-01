@@ -47,6 +47,9 @@ fun SettingsTab(
     onCreateAlarm: (Int, Int) -> Unit = { _, _ -> },
     onDeleteAlarm: (Int) -> Unit = {},
     onToggleAlarm: (com.pedometer.util.WatchAlarm) -> Unit = {},
+    onDndChange: (Boolean) -> Unit = {},
+    onWearingModeChange: (Int) -> Unit = {},
+    onSyncContacts: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -632,6 +635,56 @@ fun SettingsTab(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Экспорт данных (CSV)")
+        }
+
+        // Watch settings (DND, wearing mode, contacts)
+        if (state.connectionStatus == ConnectionStatus.Connected) {
+            Spacer(Modifier.height(16.dp))
+            Text("Настройки часов", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // DND sync
+                    var dndEnabled by remember { mutableStateOf(false) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Не беспокоить (DND)", style = MaterialTheme.typography.bodyMedium)
+                        Switch(checked = dndEnabled, onCheckedChange = {
+                            dndEnabled = it
+                            onDndChange(it)
+                        })
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Wearing mode
+                    Text("Режим ношения", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Браслет" to 0, "Клипса" to 1, "Ожерелье" to 2).forEach { (label, mode) ->
+                            FilterChip(
+                                selected = false,
+                                onClick = { onWearingModeChange(mode) },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Sync contacts
+                    OutlinedButton(
+                        onClick = onSyncContacts,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Синхронизировать контакты")
+                    }
+                }
+            }
         }
 
         // BLE Debug button
