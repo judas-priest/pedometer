@@ -70,21 +70,7 @@ fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier) {
     var selectedIndex by remember { mutableStateOf(-1) }
     val selectedPoint = if (selectedIndex in data.indices) data[selectedIndex] else null
 
-    Column {
-        if (selectedPoint != null) {
-            val time = java.time.Instant.ofEpochMilli(selectedPoint.first)
-                .atZone(java.time.ZoneId.systemDefault())
-            val timeStr = "%02d:%02d".format(time.hour, time.minute)
-            val dateStr = "%02d.%02d".format(time.dayOfMonth, time.monthValue)
-            Text(
-                "$dateStr $timeStr — ${selectedPoint.second} уд/мин",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = HeartRed,
-            )
-            Spacer(Modifier.height(4.dp))
-        }
-
+    Box {
         Canvas(modifier = modifier.pointerInput(data.size) {
             detectTapGestures { offset ->
                 if (data.size < 2) return@detectTapGestures
@@ -154,6 +140,20 @@ fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier) {
                 drawLine(gridColor, Offset(p.x, 0f), Offset(p.x, h), strokeWidth = 1f)
             }
         }
+
+        // Overlay label
+        if (selectedPoint != null) {
+            val time = java.time.Instant.ofEpochMilli(selectedPoint.first)
+                .atZone(java.time.ZoneId.systemDefault())
+            val timeStr = "%02d:%02d".format(time.hour, time.minute)
+            Text(
+                "$timeStr  ${selectedPoint.second} уд/мин",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = HeartRed,
+                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+            )
+        }
     }
 }
 
@@ -163,20 +163,45 @@ fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier) {
 fun HourlyStepChart(hourlySteps: List<HourlySteps>) {
     val hourMap = hourlySteps.associate { it.hour to it.steps }
     val maxSteps = (hourMap.values.maxOrNull() ?: 1).coerceAtLeast(1)
+    var selectedHour by remember { mutableStateOf(-1) }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "По часам",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "По часам",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (selectedHour >= 0) {
+                    val steps = hourMap[selectedHour] ?: 0
+                    Text(
+                        "%02d:00 — %,d шагов".format(selectedHour, steps),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = StepGreen,
+                    )
+                }
+            }
             Spacer(Modifier.height(12.dp))
 
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(100.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val barCount = 24
+                            val gap = 2.dp.toPx()
+                            val barWidth = (size.width - gap * (barCount - 1)) / barCount
+                            val tappedHour = (offset.x / (barWidth + gap)).toInt().coerceIn(0, 23)
+                            selectedHour = tappedHour
+                        }
+                    }
             ) {
                 val barCount = 24
                 val gap = 2.dp.toPx()
@@ -186,9 +211,14 @@ fun HourlyStepChart(hourlySteps: List<HourlySteps>) {
                     val steps = hourMap[hour] ?: 0
                     val barHeight = if (maxSteps > 0) (steps.toFloat() / maxSteps) * size.height else 0f
                     val x = hour * (barWidth + gap)
+                    val isSelected = hour == selectedHour
 
                     drawRoundRect(
-                        color = StepGreen.copy(alpha = if (steps > 0) 0.7f else 0.15f),
+                        color = StepGreen.copy(alpha = when {
+                            isSelected -> 1f
+                            steps > 0 -> 0.7f
+                            else -> 0.15f
+                        }),
                         topLeft = Offset(x, size.height - barHeight.coerceAtLeast(if (steps > 0) 2f else 0f)),
                         size = Size(barWidth, barHeight.coerceAtLeast(if (steps > 0) 2f else 0f)),
                         cornerRadius = CornerRadius(4f, 4f),

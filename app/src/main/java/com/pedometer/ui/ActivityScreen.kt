@@ -145,7 +145,7 @@ fun ActivityScreen(
             }
             if (periodHealth.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
-                Text("Здоровье (${periodHealth.size} дн.)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Здоровье", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
 
                 val avgHr = periodHealth.map { it.hrAvg }.average().toInt()
