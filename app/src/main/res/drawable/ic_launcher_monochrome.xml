@@ -3,16 +3,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Heart shape -->
+    <!-- Heart outline -->
     <path
-        android:fillColor="#000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
         android:pathData="M54,78 L30,54 C24,48 24,38 30,32 C36,26 46,26 52,32 L54,34 L56,32 C62,26 72,26 78,32 C84,38 84,48 78,54 Z" />
     <!-- Pulse line -->
     <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
+        android:strokeColor="#000000"
+        android:strokeWidth="2.5"
         android:fillColor="#00000000"
-        android:pathData="M28,54 L40,54 L44,44 L48,62 L52,38 L56,58 L60,50 L64,54 L80,54"
+        android:pathData="M32,54 L42,54 L45,44 L49,62 L53,38 L57,58 L61,50 L65,54 L76,54"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 </vector>
