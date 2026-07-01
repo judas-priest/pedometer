@@ -22,6 +22,8 @@ import com.pedometer.data.HourlySteps
 import com.pedometer.data.WorkoutRecord
 import com.pedometer.health.DayStepData
 import com.pedometer.health.UserProfile
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalContext
 import com.pedometer.ui.components.*
 import com.pedometer.vm.WatchState
 import java.time.Instant
@@ -35,6 +37,7 @@ fun DayDetailScreen(
     onBack: () -> Unit = {},
 ) {
     var selectedDate by remember { mutableStateOf(initialDate) }
+    val context = LocalContext.current
 
     val today = LocalDate.now()
     val oldestDate = state.stepHistory.minByOrNull { it.date }?.date?.let {
@@ -357,33 +360,46 @@ fun DayDetailScreen(
             Spacer(Modifier.height(16.dp))
         }
 
-        // 10. Workouts
+        // 10. Workouts with GPS map
         val dayWorkouts = filterWorkoutsForDay(state.recentWorkouts, selectedDate)
         if (dayWorkouts.isNotEmpty()) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Тренировки", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(8.dp))
-                    dayWorkouts.forEachIndexed { index, w ->
+            dayWorkouts.forEach { w ->
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Text(w.sportName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text("${w.durationSec / 60} мин", style = MaterialTheme.typography.bodyMedium)
-                                if (w.distanceM > 0) {
-                                    Text("%.1f км".format(w.distanceM / 1000.0), style = MaterialTheme.typography.bodyMedium)
-                                }
+                            Text(w.sportName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("${w.durationSec / 60} мин", style = MaterialTheme.typography.bodyMedium)
+                        }
+                        if (w.distanceM > 0 || w.calories > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                if (w.distanceM > 0) Text("%.1f км".format(w.distanceM / 1000.0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (w.calories > 0) Text("${w.calories} ккал", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (w.hrAvg > 0) Text("${w.hrAvg} уд/мин", style = MaterialTheme.typography.bodySmall, color = HeartRed)
                             }
                         }
-                        if (index < dayWorkouts.lastIndex) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+                        // GPS map for this workout
+                        val gpsPoints = produceState<List<com.pedometer.data.GpsPointRecord>>(emptyList(), w.startTime) {
+                            value = try {
+                                com.pedometer.data.StepDatabase.get(context).stepDao().getGpsPoints(w.startTime)
+                            } catch (_: Exception) { emptyList() }
+                        }.value
+
+                        if (gpsPoints.size >= 2) {
+                            Spacer(Modifier.height(8.dp))
+                            WorkoutMap(gpsPoints = gpsPoints, modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(16.dp))
         }
 
         Spacer(Modifier.height(24.dp))
