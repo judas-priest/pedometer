@@ -302,8 +302,8 @@ class ActivitySync(
                         0 -> { // Group 1: steps (16-bit)
                             if (pos + 2 > dataEnd) { pos = dataEnd; break }
                             val v = (data[pos].toInt() and 0xFF) or ((data[pos + 1].toInt() and 0xFF) shl 8)
-                            steps = (v shr 1) and 0x3FFF
-                            includeExtra = (v and 0x8000) != 0
+                            steps = v and 0x3FFF          // bits [0..13] = 14 bits of steps
+                            includeExtra = (v and 0x4000) != 0  // bit 14 = includeExtraEntry
                             pos += 2
                         }
                         1 -> { // Group 2: activity (8-bit)
