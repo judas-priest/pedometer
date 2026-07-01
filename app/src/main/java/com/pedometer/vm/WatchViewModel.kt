@@ -446,6 +446,13 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                 }
+                health.onGpsNeeded = { needed ->
+                    if (needed) {
+                        startGpsRelay()
+                    } else {
+                        stopGpsRelay()
+                    }
+                }
                 health.onWorkoutEvent = { event ->
                     Log.i(TAG, "Workout event: ${event.sportName} status=${event.status}")
                     when (event.status) {
@@ -737,6 +744,47 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startBreathing() { utilityService?.sendBreathingVibration() }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun startGpsRelay() {
+        Log.i(TAG, "Starting GPS relay for workout")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val client = com.google.android.gms.location.LocationServices
+                    .getFusedLocationProviderClient(getApplication<Application>())
+                val request = com.google.android.gms.location.LocationRequest.Builder(
+                    com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 1000
+                ).build()
+                val callback = object : com.google.android.gms.location.LocationCallback() {
+                    override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+                        val loc = result.lastLocation ?: return
+                        healthService?.sendGpsLocation(
+                            loc.latitude, loc.longitude, loc.altitude,
+                            loc.speed, loc.bearing
+                        )
+                    }
+                }
+                gpsCallback = callback
+                client.requestLocationUpdates(request, callback, android.os.Looper.getMainLooper())
+            } catch (e: Exception) {
+                Log.e(TAG, "GPS relay failed: ${e.message}")
+            }
+        }
+    }
+
+    private var gpsCallback: com.google.android.gms.location.LocationCallback? = null
+
+    private fun stopGpsRelay() {
+        Log.i(TAG, "Stopping GPS relay")
+        gpsCallback?.let {
+            try {
+                com.google.android.gms.location.LocationServices
+                    .getFusedLocationProviderClient(getApplication<Application>())
+                    .removeLocationUpdates(it)
+            } catch (_: Exception) {}
+        }
+        gpsCallback = null
+    }
 
     fun disconnect() {
         autoReconnectEnabled = false // don't reconnect on manual disconnect

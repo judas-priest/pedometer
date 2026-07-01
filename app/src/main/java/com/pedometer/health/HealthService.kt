@@ -21,7 +21,44 @@ class HealthService(
     private val onHealthUpdate: (HealthData) -> Unit,
 ) {
     var onWorkoutEvent: ((WorkoutEvent) -> Unit)? = null
+    var onGpsNeeded: ((Boolean) -> Unit)? = null
     private var workoutStarted = false
+    private var gpsStarted = false
+    private var gpsFixSent = false
+
+    fun sendGpsLocation(lat: Double, lon: Double, alt: Double, speed: Float, bearing: Float) {
+        if (!gpsFixSent) {
+            gpsFixSent = true
+            // Tell watch we have GPS fix
+            val reply = XiaomiProto.Command.newBuilder()
+                .setType(CommandHelper.TYPE_HEALTH)
+                .setSubtype(CMD_WORKOUT_OPEN)
+                .setHealth(XiaomiProto.Health.newBuilder()
+                    .setWorkoutOpenReply(XiaomiProto.WorkoutOpenReply.newBuilder()
+                        .setUnknown1(0).setUnknown2(2).setUnknown3(2)))
+                .build()
+            protocolHandler.sendCommand(reply)
+            Log.i(TAG, "Sent GPS fix notification to watch")
+        }
+
+        if (workoutStarted) {
+            val loc = XiaomiProto.WorkoutLocation.newBuilder()
+                .setUnknown1(2)
+                .setTimestamp((System.currentTimeMillis() / 1000).toInt())
+                .setLongitude(lon)
+                .setLatitude(lat)
+                .setAltitude(alt)
+                .setSpeed(speed)
+                .setBearing(bearing)
+
+            val cmd = XiaomiProto.Command.newBuilder()
+                .setType(CommandHelper.TYPE_HEALTH)
+                .setSubtype(CMD_WORKOUT_LOCATION)
+                .setHealth(XiaomiProto.Health.newBuilder().setWorkoutLocation(loc))
+                .build()
+            protocolHandler.sendCommand(cmd)
+        }
+    }
     companion object {
         private const val TAG = "HealthService"
         const val CMD_CONFIG_SPO2_GET = 8
@@ -116,16 +153,12 @@ class HealthService(
             CMD_WORKOUT_OPEN -> {
                 if (cmd.hasHealth() && cmd.health.hasWorkoutOpenWatch()) {
                     val sport = cmd.health.workoutOpenWatch.sport
-                    Log.i(TAG, "Workout open: sport=$sport workoutStarted=$workoutStarted")
-                    // Reply: no GPS from phone (watch has its own GPS)
-                    val reply = XiaomiProto.Command.newBuilder()
-                        .setType(CommandHelper.TYPE_HEALTH)
-                        .setSubtype(CMD_WORKOUT_OPEN)
-                        .setHealth(XiaomiProto.Health.newBuilder()
-                            .setWorkoutOpenReply(XiaomiProto.WorkoutOpenReply.newBuilder()
-                                .setUnknown1(3).setUnknown2(2).setUnknown3(10)))
-                        .build()
-                    protocolHandler.sendCommand(reply)
+                    Log.i(TAG, "Workout open: sport=$sport workoutStarted=$workoutStarted gpsStarted=$gpsStarted")
+                    // Start GPS relay from phone
+                    if (!gpsStarted) {
+                        gpsStarted = true
+                        onGpsNeeded?.invoke(true)
+                    }
                 }
             }
             CMD_WORKOUT_STATUS -> {
@@ -139,7 +172,14 @@ class HealthService(
                         else -> "Тренировка"
                     }
                     Log.i(TAG, "Workout status: $status sport=$sport ($sportName)")
-                    workoutStarted = status == 0 || status == 1
+                    when (status) {
+                        0, 1 -> workoutStarted = true // started/resumed
+                        3 -> { // finished
+                            workoutStarted = false
+                            gpsStarted = false
+                            onGpsNeeded?.invoke(false)
+                        }
+                    }
                     onWorkoutEvent?.invoke(WorkoutEvent(sport, status, sportName))
                 }
             }
