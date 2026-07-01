@@ -59,6 +59,7 @@ data class WatchState(
     val watchCalories: Int = 0,
     val heartRate: Int = 0,         // from watch only
     val standingHours: Int = 0,
+    val activeMinutes: Int = 0,
     val phoneSteps: Long = 0,
     val phoneStepsSinceBoot: Long = 0,
     val todayWalkSteps: Int = 0,
@@ -426,6 +427,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         watchCalories = data.calories,
                         heartRate = if (data.heartRate > 0) data.heartRate else _state.value.heartRate,
                         standingHours = data.standingHours,
+                        activeMinutes = data.activeMinutes,
                     )
                     // Persist heart rate to Room DB (max once per minute)
                     val now = System.currentTimeMillis()
@@ -525,7 +527,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     },
                     onDailySummary = { summary ->
                         Log.i(TAG, "Daily summary: HR avg=${summary.hrAvg} rest=${summary.hrResting} " +
-                            "SpO2=${summary.spo2Avg} stress=${summary.stressAvg}")
+                            "SpO2=${summary.spo2Avg} stress=${summary.stressAvg} cal=${summary.calories}")
+                        // Update watch calories from daily summary (RT always 0)
+                        if (summary.calories > 0) {
+                            _state.value = _state.value.copy(watchCalories = summary.calories)
+                        }
                         viewModelScope.launch(Dispatchers.IO) {
                             try {
                                 val dao = StepDatabase.get(getApplication()).stepDao()

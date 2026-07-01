@@ -48,6 +48,8 @@ internal fun StepMetricCards(
     runSteps: Int,
     totalSteps: Int,
     profile: UserProfile,
+    watchCalories: Int = 0,
+    activeMinutes: Int = 0,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -61,8 +63,14 @@ internal fun StepMetricCards(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        MetricCard(title = "Калории", value = "%.0f".format(profile.calcCalories(totalSteps)), unit = "ккал", color = HeartRed, modifier = Modifier.weight(1f))
+        // Calories: watch if available, else calculated
+        val cal = if (watchCalories > 0) watchCalories.toDouble() else profile.calcCalories(totalSteps)
+        MetricCard(title = "Калории", value = "%.0f".format(cal), unit = "ккал", color = HeartRed, modifier = Modifier.weight(1f))
         MetricCard(title = "Дистанция", value = "%.2f".format(profile.calcDistance(totalSteps)), unit = "км", color = StandBlue, modifier = Modifier.weight(1f))
+    }
+    if (activeMinutes > 0) {
+        Spacer(Modifier.height(12.dp))
+        MetricCard(title = "Активность", value = "$activeMinutes", unit = "/ 30 мин", color = CalorieOrange, modifier = Modifier.fillMaxWidth())
     }
 }
 
