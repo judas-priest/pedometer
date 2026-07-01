@@ -13,6 +13,7 @@ import com.pedometer.bt.BleConnection
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
 import com.pedometer.data.DailyHealth
+import com.pedometer.data.GpsPointRecord
 import com.pedometer.data.SleepRecord
 import com.pedometer.data.DailySteps
 import com.pedometer.data.HeartRateRecord
@@ -524,6 +525,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 calendarService = CalendarService(handler, getApplication())
 
                 val sync = ActivitySync(handler,
+                    onGpsTrack = { workoutStartMs, points ->
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val dao = StepDatabase.get(getApplication()).stepDao()
+                                dao.insertGpsPoints(points.map { p ->
+                                    GpsPointRecord(workoutStart = workoutStartMs, timestamp = p.timestamp, lat = p.lat, lon = p.lon, speed = p.speed)
+                                })
+                                Log.i(TAG, "Saved ${points.size} GPS points for workout $workoutStartMs")
+                            } catch (e: Exception) { Log.e(TAG, "Save GPS failed", e) }
+                        }
+                    },
                     onHourlySteps = { date, hourlyList ->
                         viewModelScope.launch(Dispatchers.IO) {
                             try {

@@ -70,6 +70,18 @@ data class WorkoutRecord(
     val hrMin: Int = 0,
 )
 
+@Entity(
+    tableName = "gps_points",
+    primaryKeys = ["workoutStart", "timestamp"],
+)
+data class GpsPointRecord(
+    val workoutStart: Long,          // links to WorkoutRecord.startTime
+    val timestamp: Long,
+    val lat: Double,
+    val lon: Double,
+    val speed: Float = 0f,
+)
+
 @Entity(tableName = "step_snapshots")
 data class StepSnapshot(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

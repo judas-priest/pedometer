@@ -25,6 +25,7 @@ class ActivitySync(
     private val onSleepData: (SleepData) -> Unit = {},
     private val onWorkout: (WorkoutSummary) -> Unit = {},
     private val onHourlySteps: (String, List<Pair<Int, Int>>) -> Unit = { _, _ -> }, // date, list of (hour, steps)
+    private val onGpsTrack: ((Long, List<GpsPoint>) -> Unit)? = null, // workoutStartMs, points
 ) {
     companion object {
         private const val TAG = "ActivitySync"
@@ -720,7 +721,9 @@ class ActivitySync(
         }
 
         Log.i(TAG, "GPS track: ${points.size} points for sport=${info.subtype}")
-        // TODO: save to DB and display on map
+        if (points.isNotEmpty()) {
+            onGpsTrack?.invoke(info.timestamp * 1000, points)
+        }
     }
 
     private fun parseSleepDetails(fileId: ByteArray, data: ByteArray) {

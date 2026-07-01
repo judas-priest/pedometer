@@ -67,6 +67,13 @@ interface StepDao {
     @Query("SELECT * FROM sleep_records WHERE date(bedTime/1000, 'unixepoch', 'localtime') = :date OR date(wakeupTime/1000, 'unixepoch', 'localtime') = :date LIMIT 1")
     suspend fun getSleepForDate(date: String): SleepRecord?
 
+    // GPS points
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGpsPoints(points: List<GpsPointRecord>)
+
+    @Query("SELECT * FROM gps_points WHERE workoutStart = :workoutStart ORDER BY timestamp")
+    suspend fun getGpsPoints(workoutStart: Long): List<GpsPointRecord>
+
     // Heart rate
     @Insert
     suspend fun insertHeartRate(hr: HeartRateRecord)
