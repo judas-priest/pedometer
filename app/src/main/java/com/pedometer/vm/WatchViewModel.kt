@@ -481,10 +481,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             )
                         }
                         3 -> { // finished
-                            // Fetch activity data to get workout results
+                            // Fetch activity data to get workout results + GPS track
                             viewModelScope.launch(Dispatchers.IO) {
-                                Thread.sleep(2000) // wait for watch to save
+                                Thread.sleep(5000) // wait for watch to save files
                                 protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
+                                Thread.sleep(3000)
+                                activitySync?.requestPast()
                             }
                         }
                     }
