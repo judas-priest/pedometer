@@ -23,6 +23,7 @@ import com.pedometer.ui.ConnectScreen
 import com.pedometer.ui.NotificationAppsScreen
 import com.pedometer.ui.OnboardingScreen
 import com.pedometer.ui.theme.PedometerTheme
+import com.pedometer.assistant.VoiceAssistant
 import com.pedometer.vm.WatchViewModel
 import kotlinx.coroutines.launch
 
@@ -42,6 +43,12 @@ class MainActivity : ComponentActivity() {
             PedometerTheme {
                 val vm: WatchViewModel = viewModel()
                 val state by vm.state.collectAsState()
+                val voiceAssistant = remember { VoiceAssistant(this@MainActivity) }
+                val micPermLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) voiceAssistant.startListening()
+                }
                 var showDebug by remember { mutableStateOf(false) }
                 var showNotificationApps by remember { mutableStateOf(false) }
 
@@ -109,7 +116,17 @@ class MainActivity : ComponentActivity() {
                                 onCamera = { com.pedometer.util.PhoneActions.openCamera(this@MainActivity) },
                                 onFlashlight = { com.pedometer.util.PhoneActions.toggleFlashlight(this@MainActivity) },
                                 onFindWatch = { vm.findWatch() },
-                                onBreathing = { /* TODO: breathing vibration */ },
+                                onBreathing = { vm.startBreathing() },
+                                onScoTest = { voiceAssistant.testSco() },
+                                onVoiceAssistant = {
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                            this@MainActivity, android.Manifest.permission.RECORD_AUDIO
+                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                        voiceAssistant.startListening()
+                                    } else {
+                                        micPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                    }
+                                },
                             )
                             2 -> com.pedometer.ui.SettingsTab(
                                 state = state,
@@ -121,6 +138,10 @@ class MainActivity : ComponentActivity() {
                                 onOpenDebug = { showDebug = true },
                                 onOpenNotificationApps = { showNotificationApps = true },
                                 onFindWatch = { vm.findWatch() },
+                                onRequestWatchfaces = { vm.requestWatchfaces() },
+                                onSetActiveWatchface = { vm.setActiveWatchface(it) },
+                                onDeleteWatchface = { vm.deleteWatchface(it) },
+                                onUploadWatchface = { vm.uploadWatchface(it) },
                             )
                         }
                     }

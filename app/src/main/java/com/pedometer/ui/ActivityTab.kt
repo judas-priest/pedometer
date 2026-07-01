@@ -25,6 +25,8 @@ fun ActivityTab(
     onFlashlight: () -> Unit = {},
     onFindWatch: () -> Unit = {},
     onBreathing: () -> Unit = {},
+    onVoiceAssistant: () -> Unit = {},
+    onScoTest: () -> Unit = {},
 ) {
     val history = state.stepHistory
     val profile = state.profile
@@ -134,6 +136,45 @@ fun ActivityTab(
             }
         }
 
+        // Recent workouts
+        if (state.recentWorkouts.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Тренировки",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    state.recentWorkouts.take(5).forEach { w ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column {
+                                Text(w.sportName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                val date = java.time.Instant.ofEpochMilli(w.startTime)
+                                    .atZone(java.time.ZoneId.systemDefault())
+                                    .toLocalDate()
+                                Text(date.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${w.durationSec / 60} мин", style = MaterialTheme.typography.bodyMedium)
+                                if (w.distanceM > 0) {
+                                    Text("%.1f км".format(w.distanceM / 1000.0), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        if (w != state.recentWorkouts.take(5).last()) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                        }
+                    }
+                }
+            }
+        }
+
         // Quick Actions
         Spacer(Modifier.height(16.dp))
         Text(
@@ -157,6 +198,14 @@ fun ActivityTab(
         ) {
             QuickActionCard("🔔", "Найти часы", Modifier.weight(1f), onFindWatch)
             QuickActionCard("🧘", "Дыхание", Modifier.weight(1f), onBreathing)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            QuickActionCard("🎙", "Ассистент", Modifier.weight(1f), onVoiceAssistant)
+            QuickActionCard("🔊", "SCO Тест", Modifier.weight(1f), onScoTest)
         }
 
         Spacer(Modifier.height(24.dp))

@@ -20,6 +20,7 @@ class ProtocolHandler(
     private val connection: ConnectionWriter,
     private val onAuthenticated: () -> Unit,
     private val onCommand: (XiaomiProto.Command) -> Unit,
+    var onActivityData: ((ByteArray) -> Unit)? = null,
 ) {
     companion object {
         private const val TAG = "ProtocolHandler"
@@ -131,8 +132,18 @@ class ProtocolHandler(
                     packet.payload
                 }
                 connection.write(PacketV2.encodeAck(packet.sequenceNumber))
-                Log.d(TAG, "Decrypted ${decrypted.size} bytes, sent ACK for seq=${packet.sequenceNumber}")
-                handleProtobufPayload(decrypted)
+                Log.d(TAG, "Decrypted ${decrypted.size} bytes ch=${packet.channel}, sent ACK for seq=${packet.sequenceNumber}")
+                when (packet.channel) {
+                    Channel.Activity -> {
+                        Log.i(TAG, "Activity data chunk: ${decrypted.size} bytes")
+                        onActivityData?.invoke(decrypted)
+                    }
+                    Channel.Data -> {
+                        Log.i(TAG, "Data chunk: ${decrypted.size} bytes")
+                        onActivityData?.invoke(decrypted)
+                    }
+                    else -> handleProtobufPayload(decrypted)
+                }
             }
             is PacketV2.AckPacket -> Log.d(TAG, "ACK for ${packet.sequenceNumber}")
         }

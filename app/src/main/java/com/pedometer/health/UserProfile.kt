@@ -9,6 +9,9 @@ data class UserProfile(
     val isMale: Boolean = true,
     val stepGoal: Int = 8000,
     val backgroundServiceEnabled: Boolean = false,
+    val weatherCity: String = "",  // empty = auto GPS
+    val llmApiKey: String = "sk-lo8buNshRl5QX5bOH1Jb8Fa6n-2VVmJz",
+    val llmApiUrl: String = "https://routerai.ru/api/v1",
 ) {
     val stepLengthM: Double get() = heightCm * (if (isMale) 0.415 else 0.413) / 100.0
 
@@ -27,6 +30,9 @@ data class UserProfile(
                 isMale = p.getBoolean("male", true),
                 stepGoal = p.getInt("goal", 8000),
                 backgroundServiceEnabled = p.getBoolean("bg_service", false),
+                weatherCity = p.getString("weather_city", "") ?: "",
+                llmApiKey = p.getString("llm_key", "") ?: "",
+                llmApiUrl = p.getString("llm_url", "https://routerai.ru/api/v1") ?: "https://routerai.ru/api/v1",
             )
         }
 
@@ -37,6 +43,9 @@ data class UserProfile(
                 .putBoolean("male", profile.isMale)
                 .putInt("goal", profile.stepGoal)
                 .putBoolean("bg_service", profile.backgroundServiceEnabled)
+                .putString("weather_city", profile.weatherCity)
+                .putString("llm_key", profile.llmApiKey)
+                .putString("llm_url", profile.llmApiUrl)
                 .apply()
         }
     }

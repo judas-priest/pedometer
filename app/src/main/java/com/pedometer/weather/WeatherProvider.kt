@@ -62,8 +62,22 @@ object WeatherProvider {
         else -> 12
     }
 
+    fun geocodeCity(context: Context, city: String): Triple<Double, Double, String>? {
+        return try {
+            val geocoder = Geocoder(context, Locale.getDefault())
+            val results = geocoder.getFromLocationName(city, 1)
+            val addr = results?.firstOrNull() ?: return null
+            val name = addr.locality ?: addr.adminArea ?: city
+            Log.i(TAG, "Geocoded '$city' → ${addr.latitude},${addr.longitude} name=$name")
+            Triple(addr.latitude, addr.longitude, name)
+        } catch (e: Exception) {
+            Log.w(TAG, "Geocode failed for '$city': ${e.message}")
+            null
+        }
+    }
+
     @SuppressLint("MissingPermission")
-    fun fetchWithLocation(context: Context): WeatherData? {
+    fun getLocation(context: Context): Triple<Double, Double, String>? {
         return try {
             val client = LocationServices.getFusedLocationProviderClient(context)
             val location = Tasks.await(
@@ -76,16 +90,26 @@ object WeatherProvider {
                     val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
                     addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea ?: ""
                 } catch (_: Exception) { "" }
-
                 Log.i(TAG, "GPS: ${location.latitude},${location.longitude} city=$cityName")
-                fetch(location.latitude, location.longitude, cityName)
+                Triple(location.latitude, location.longitude, cityName)
             } else {
-                Log.w(TAG, "GPS location null, using default")
-                fetch(55.75, 37.62, "Москва") // fallback
+                Log.w(TAG, "GPS location null")
+                null
             }
         } catch (e: Exception) {
-            Log.w(TAG, "GPS failed: ${e.message}, using default")
-            fetch(55.75, 37.62, "Москва") // fallback
+            Log.w(TAG, "GPS failed: ${e.message}")
+            null
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun fetchWithLocation(context: Context): WeatherData? {
+        val loc = getLocation(context)
+        return if (loc != null) {
+            fetch(loc.first, loc.second, loc.third)
+        } else {
+            Log.w(TAG, "Using default location")
+            fetch(55.75, 37.62, "Москва")
         }
     }
 

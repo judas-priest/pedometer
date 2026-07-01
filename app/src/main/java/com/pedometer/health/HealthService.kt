@@ -50,6 +50,17 @@ class HealthService(
             .build()
         protocolHandler.sendCommand(spo2Cmd)
 
+        // Enable stress all-day tracking
+        val stressCmd = XiaomiProto.Command.newBuilder()
+            .setType(CommandHelper.TYPE_HEALTH)
+            .setSubtype(15) // CMD_CONFIG_STRESS_SET
+            .setHealth(XiaomiProto.Health.newBuilder()
+                .setStress(XiaomiProto.Stress.newBuilder()
+                    .setAllDayTracking(true)))
+            .build()
+        protocolHandler.sendCommand(stressCmd)
+        Log.i(TAG, "Enabled stress all-day tracking")
+
         // Fetch today's activity data
         protocolHandler.sendCommand(CommandHelper.buildActivityFetchToday())
     }
@@ -90,8 +101,14 @@ class HealthService(
                     onHealthUpdate(data)
                 }
             }
-            CMD_CONFIG_SPO2_GET, CMD_CONFIG_HEART_RATE_GET,
-            CMD_CONFIG_STANDING_REMINDER_GET, CMD_CONFIG_STRESS_GET,
+            CMD_CONFIG_SPO2_GET -> {
+                Log.i(TAG, "SpO2 config: ${cmd.health}")
+            }
+            CMD_CONFIG_STRESS_GET -> {
+                Log.i(TAG, "Stress config: ${cmd.health}")
+            }
+            CMD_CONFIG_HEART_RATE_GET,
+            CMD_CONFIG_STANDING_REMINDER_GET,
             CMD_CONFIG_GOAL_NOTIFICATION_GET, CMD_CONFIG_GOALS_GET,
             CMD_CONFIG_VITALITY_SCORE_GET -> {
                 Log.d(TAG, "Health config response: subtype=${cmd.subtype}")

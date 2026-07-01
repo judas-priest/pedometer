@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pedometer.data.DailyHealth
 import com.pedometer.data.HourlySteps
 import com.pedometer.vm.WatchState
 
@@ -40,6 +41,31 @@ fun ConnectScreen(
     state: WatchState,
 ) {
     var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
+    var healthDetailDate by remember { mutableStateOf<String?>(null) }
+
+    // Health day detail screen
+    if (healthDetailDate != null) {
+        val date = healthDetailDate!!
+        val health = state.healthHistory.find { it.date == date }
+        val stepData = state.stepHistory.find { it.date == date }
+        val dayStart = try {
+            java.time.LocalDate.parse(date).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        } catch (_: Exception) { 0L }
+        val dayEnd = dayStart + 86400_000L
+        val dayHr = state.hrHistory.filter { it.first in dayStart until dayEnd }
+
+        androidx.activity.compose.BackHandler { healthDetailDate = null }
+        val dayHourly = state.todayHourlySteps.takeIf { date == java.time.LocalDate.now().toString() } ?: emptyList()
+        HealthDayDetail(
+            date = date,
+            health = health,
+            stepData = stepData,
+            hrData = dayHr,
+            hourlySteps = dayHourly,
+            onBack = { healthDetailDate = null },
+        )
+        return
+    }
 
     if (selectedDay != null) {
         androidx.activity.compose.BackHandler { selectedDay = null }
@@ -155,6 +181,252 @@ fun ConnectScreen(
                         color = StandBlue,
                         modifier = Modifier.weight(1f),
                     )
+                }
+            }
+
+            // SpO2 + Stress + resting HR
+            Spacer(Modifier.height(12.dp))
+            run {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    MetricCard(
+                        title = "SpO2",
+                        value = if (state.spo2 > 0) "${state.spo2}" else "—",
+                        unit = "%",
+                        color = StandBlue,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MetricCard(
+                        title = "Стресс",
+                        value = if (state.stress > 0) "${state.stress}" else "—",
+                        unit = "",
+                        color = CalorieOrange,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (state.hrResting > 0) {
+                        MetricCard(
+                            title = "Покой",
+                            value = "${state.hrResting}",
+                            unit = "уд/мин",
+                            color = HeartRed,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+
+        // Heart rate chart
+        if (state.hrHistory.size > 2) {
+            Spacer(Modifier.height(12.dp))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Downsample to max 200 points for performance
+                    val downsampled = remember(state.hrHistory.size) {
+                        if (state.hrHistory.size <= 200) state.hrHistory
+                        else {
+                            val step = state.hrHistory.size / 200
+                            state.hrHistory.filterIndexed { i, _ -> i % step == 0 }
+                        }
+                    }
+
+                    Text("Пульс", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+                    HrChart(
+                        data = downsampled,
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                    )
+                    val minHr = state.hrHistory.minOf { it.second }
+                    val maxHr = state.hrHistory.maxOf { it.second }
+                    val avgHr = state.hrHistory.map { it.second }.average().toInt()
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Мин $minHr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Среднее $avgHr", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("Макс $maxHr", style = MaterialTheme.typography.labelSmall, color = HeartRed)
+                        Text("${state.hrHistory.size} изм.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        // Last sleep
+        val sleep = state.lastSleep
+        if (sleep != null && sleep.totalMinutes > 0) {
+            Spacer(Modifier.height(12.dp))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    val hours = sleep.totalMinutes / 60
+                    val mins = sleep.totalMinutes % 60
+                    val bedFmt = java.time.Instant.ofEpochMilli(sleep.bedTime)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalTime().let { "%d:%02d".format(it.hour, it.minute) }
+                    val wakeFmt = java.time.Instant.ofEpochMilli(sleep.wakeupTime)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalTime().let { "%d:%02d".format(it.hour, it.minute) }
+                    // Sleep quality: deep+REM ratio
+                    val quality = if (sleep.totalMinutes > 0)
+                        ((sleep.deepMinutes + sleep.remMinutes) * 100) / sleep.totalMinutes else 0
+                    val qualityLabel = when {
+                        quality >= 40 -> "Отличный"
+                        quality >= 25 -> "Хороший"
+                        quality >= 15 -> "Средний"
+                        else -> "Плохой"
+                    }
+                    val qualityColor = when {
+                        quality >= 40 -> StepGreen
+                        quality >= 25 -> StandBlue
+                        quality >= 15 -> CalorieOrange
+                        else -> HeartRed
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text("Сон", style = MaterialTheme.typography.titleSmall)
+                            Text("$bedFmt → $wakeFmt", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("${hours}ч ${mins}мин", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(qualityLabel, style = MaterialTheme.typography.labelSmall, color = qualityColor, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Sleep stages bar
+                    val total = sleep.totalMinutes.toFloat().coerceAtLeast(1f)
+                    val deepFrac = sleep.deepMinutes / total
+                    val lightFrac = sleep.lightMinutes / total
+                    val remFrac = sleep.remMinutes / total
+                    val awakeFrac = sleep.awakeMinutes / total
+                    val deepColor = Color(0xFF3F51B5)
+                    val lightColor = Color(0xFF7986CB)
+                    val remColor = Color(0xFFFF9800)
+                    val awakeColor = Color(0xFFEF5350)
+
+                    Canvas(modifier = Modifier.fillMaxWidth().height(16.dp)) {
+                        val w = size.width
+                        val h = size.height
+                        var x = 0f
+                        drawRect(deepColor, Offset(x, 0f), Size(w * deepFrac, h)); x += w * deepFrac
+                        drawRect(lightColor, Offset(x, 0f), Size(w * lightFrac, h)); x += w * lightFrac
+                        drawRect(remColor, Offset(x, 0f), Size(w * remFrac, h)); x += w * remFrac
+                        drawRect(awakeColor, Offset(x, 0f), Size(w * awakeFrac, h))
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Canvas(Modifier.size(8.dp)) { drawCircle(deepColor) }
+                            Spacer(Modifier.width(2.dp))
+                            Text("${sleep.deepMinutes}м", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Canvas(Modifier.size(8.dp)) { drawCircle(lightColor) }
+                            Spacer(Modifier.width(2.dp))
+                            Text("${sleep.lightMinutes}м", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Canvas(Modifier.size(8.dp)) { drawCircle(remColor) }
+                            Spacer(Modifier.width(2.dp))
+                            Text("${sleep.remMinutes}м", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Canvas(Modifier.size(8.dp)) { drawCircle(awakeColor) }
+                            Spacer(Modifier.width(2.dp))
+                            Text("${sleep.awakeMinutes}м", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Weekly health summary
+        val validHealth = state.healthHistory.filter { it.date.startsWith("202") && it.hrAvg > 0 }
+        if (validHealth.size >= 2) {
+            Spacer(Modifier.height(12.dp))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Здоровье за ${validHealth.size} дн.", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+
+                    val avgHr = validHealth.map { it.hrAvg }.average().toInt()
+                    val avgResting = validHealth.filter { it.hrResting > 0 }.map { it.hrResting }.let {
+                        if (it.isNotEmpty()) it.average().toInt() else 0
+                    }
+                    val avgSpo2 = validHealth.filter { it.spo2Avg > 0 }.map { it.spo2Avg }.let {
+                        if (it.isNotEmpty()) it.average().toInt() else 0
+                    }
+                    val avgStress = validHealth.filter { it.stressAvg > 0 }.map { it.stressAvg }.let {
+                        if (it.isNotEmpty()) it.average().toInt() else 0
+                    }
+                    val maxHr = validHealth.maxOf { it.hrMax }
+                    val minHr = validHealth.filter { it.hrMin > 0 }.minOfOrNull { it.hrMin } ?: 0
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column {
+                            Text("Пульс", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$avgHr", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = HeartRed)
+                            Text("$minHr–$maxHr", style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (avgResting > 0) Column {
+                            Text("Покой", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$avgResting", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                        if (avgSpo2 > 0) Column {
+                            Text("SpO2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$avgSpo2%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = StandBlue)
+                        }
+                        if (avgStress > 0) Column {
+                            Text("Стресс", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("$avgStress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = CalorieOrange)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Per-day health rows (tappable)
+        if (validHealth.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            validHealth.take(7).forEach { h ->
+                val dayLabel = try {
+                    val d = java.time.LocalDate.parse(h.date)
+                    val months = listOf("", "янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+                    "${d.dayOfMonth} ${months[d.monthValue]}"
+                } catch (_: Exception) { h.date }
+
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    onClick = { healthDetailDate = h.date },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(dayLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (h.hrAvg > 0) Text("${h.hrAvg} уд", style = MaterialTheme.typography.labelSmall, color = HeartRed)
+                            if (h.spo2Avg > 0) Text("${h.spo2Avg}%", style = MaterialTheme.typography.labelSmall, color = StandBlue)
+                            if (h.stressAvg > 0) Text("стр ${h.stressAvg}", style = MaterialTheme.typography.labelSmall, color = CalorieOrange)
+                        }
+                    }
                 }
             }
         }
@@ -565,6 +837,102 @@ fun HourlyStepChart(hourlySteps: List<HourlySteps>) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier) {
+    val lineColor = HeartRed
+    val fillColor = HeartRed.copy(alpha = 0.15f)
+    val gridColor = Color.Gray.copy(alpha = 0.2f)
+
+    var selectedIndex by remember { mutableStateOf(-1) }
+    val selectedPoint = if (selectedIndex in data.indices) data[selectedIndex] else null
+
+    Column {
+        if (selectedPoint != null) {
+            val time = java.time.Instant.ofEpochMilli(selectedPoint.first)
+                .atZone(java.time.ZoneId.systemDefault())
+            val timeStr = "%02d:%02d".format(time.hour, time.minute)
+            val dateStr = "%02d.%02d".format(time.dayOfMonth, time.monthValue)
+            Text(
+                "$dateStr $timeStr — ${selectedPoint.second} уд/мин",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = HeartRed,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+
+        Canvas(modifier = modifier.pointerInput(data.size) {
+            detectTapGestures { offset ->
+                if (data.size < 2) return@detectTapGestures
+                val minTime = data.minOf { it.first }
+                val maxTime = data.maxOf { it.first }
+                val timeRange = (maxTime - minTime).coerceAtLeast(1)
+                val tapX = offset.x
+                val w = size.width.toFloat()
+
+                // Find closest point
+                var closest = 0
+                var closestDist = Float.MAX_VALUE
+                for (i in data.indices) {
+                    val x = ((data[i].first - minTime).toFloat() / timeRange) * w
+                    val dist = kotlin.math.abs(x - tapX)
+                    if (dist < closestDist) {
+                        closestDist = dist
+                        closest = i
+                    }
+                }
+                selectedIndex = closest
+            }
+        }) {
+            if (data.size < 2) return@Canvas
+
+            val minTime = data.minOf { it.first }
+            val maxTime = data.maxOf { it.first }
+            val minHr = (data.minOf { it.second } - 5).coerceAtLeast(40)
+            val maxHr = (data.maxOf { it.second } + 5).coerceAtMost(200)
+            val timeRange = (maxTime - minTime).coerceAtLeast(1)
+            val hrRange = (maxHr - minHr).coerceAtLeast(1)
+
+            val w = size.width
+            val h = size.height
+
+            for (hr in listOf(60, 80, 100, 120, 140, 160)) {
+                if (hr in minHr..maxHr) {
+                    val y = h - (hr - minHr).toFloat() / hrRange * h
+                    drawLine(gridColor, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
+                }
+            }
+
+            val points = data.map { (t, hr) ->
+                val x = ((t - minTime).toFloat() / timeRange) * w
+                val y = h - ((hr - minHr).toFloat() / hrRange) * h
+                Offset(x, y)
+            }
+
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(points.first().x, h)
+                points.forEach { lineTo(it.x, it.y) }
+                lineTo(points.last().x, h)
+                close()
+            }
+            drawPath(path, fillColor)
+
+            for (i in 0 until points.size - 1) {
+                drawLine(lineColor, points[i], points[i + 1], strokeWidth = 2f, cap = StrokeCap.Round)
+            }
+
+            // Draw selected point marker
+            if (selectedIndex in points.indices) {
+                val p = points[selectedIndex]
+                drawCircle(lineColor, 6f, p)
+                drawCircle(Color.White, 3f, p)
+                // Vertical line
+                drawLine(gridColor, Offset(p.x, 0f), Offset(p.x, h), strokeWidth = 1f)
             }
         }
     }

@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
 import com.pedometer.health.UserProfile
 import com.pedometer.vm.ConnectionStatus
 import com.pedometer.vm.WatchState
+import com.pedometer.watchface.WatchfaceInfo
 
 @Composable
 fun SettingsTab(
@@ -36,6 +37,10 @@ fun SettingsTab(
     onOpenDebug: () -> Unit = {},
     onOpenNotificationApps: () -> Unit = {},
     onFindWatch: () -> Unit = {},
+    onRequestWatchfaces: () -> Unit = {},
+    onSetActiveWatchface: (String) -> Unit = {},
+    onDeleteWatchface: (String) -> Unit = {},
+    onUploadWatchface: (ByteArray) -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -131,6 +136,74 @@ fun SettingsTab(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Weather
+        Spacer(Modifier.height(16.dp))
+        Text("Погода", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                var cityText by remember { mutableStateOf(profile.weatherCity) }
+                OutlinedTextField(
+                    value = cityText,
+                    onValueChange = {
+                        cityText = it
+                        onProfileChange(profile.copy(weatherCity = it))
+                    },
+                    label = { Text("Город") },
+                    placeholder = { Text("Авто (GPS)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Text(
+                    "Оставьте пустым для автоопределения по GPS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        // Assistant
+        Spacer(Modifier.height(16.dp))
+        Text("Ассистент", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                var keyText by remember { mutableStateOf(profile.llmApiKey) }
+                var urlText by remember { mutableStateOf(profile.llmApiUrl) }
+                OutlinedTextField(
+                    value = urlText,
+                    onValueChange = {
+                        urlText = it
+                        onProfileChange(profile.copy(llmApiUrl = it))
+                    },
+                    label = { Text("API URL") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = keyText,
+                    onValueChange = {
+                        keyText = it
+                        onProfileChange(profile.copy(llmApiKey = it))
+                    },
+                    label = { Text("API Key") },
+                    placeholder = { Text("Без ключа = локальные ответы") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Text(
+                    "OpenAI-совместимый API (RouterAI, DeepSeek и др.)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -362,6 +435,99 @@ fun SettingsTab(
                             Text("🔔 Найти часы")
                         }
                     }
+                }
+            }
+        }
+
+        // Watchfaces
+        if (state.connectionStatus == ConnectionStatus.Connected) {
+            Spacer(Modifier.height(16.dp))
+            Text("Циферблаты", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (state.watchfaces.isEmpty()) {
+                        FilledTonalButton(
+                            onClick = onRequestWatchfaces,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Загрузить список")
+                        }
+                    } else {
+                        state.watchfaces.forEach { face ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        face.name.ifBlank { face.id },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    if (face.active) {
+                                        Text("Активный", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                                if (!face.active) {
+                                    TextButton(onClick = { onSetActiveWatchface(face.id) }) {
+                                        Text("Выбрать")
+                                    }
+                                }
+                                if (face.canDelete) {
+                                    TextButton(onClick = { onDeleteWatchface(face.id) }) {
+                                        Text("Удалить", color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                            if (face != state.watchfaces.last()) {
+                                HorizontalDivider()
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onRequestWatchfaces,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Обновить")
+                        }
+                    }
+                }
+            }
+
+            // Upload watchface
+            Spacer(Modifier.height(8.dp))
+            val filePickerLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.GetContent()
+            ) { uri ->
+                if (uri != null) {
+                    try {
+                        val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            onUploadWatchface(bytes)
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            if (state.uploadProgress >= 0) {
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Загрузка циферблата...", style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { state.uploadProgress / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text("${state.uploadProgress}%", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            } else {
+                FilledTonalButton(
+                    onClick = { filePickerLauncher.launch("*/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Загрузить циферблат (.bin)")
                 }
             }
         }

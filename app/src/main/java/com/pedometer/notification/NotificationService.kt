@@ -15,6 +15,9 @@ class NotificationService(
         const val CMD_NOTIFICATION_SEND = 0
         const val CMD_NOTIFICATION_DISMISS = 1
         const val CMD_OPEN_ON_PHONE = 8
+        const val CMD_CANNED_GET = 9
+        const val CMD_CANNED_SET = 12
+        const val CMD_REPLY = 13
     }
 
     private var notificationIdCounter = 1
@@ -51,6 +54,22 @@ class NotificationService(
 
         protocolHandler.sendCommand(cmd)
         Log.d(TAG, "Sent notification: $appName - $title")
+    }
+
+    fun sendCannedMessages(messages: List<String> = listOf("Ок", "Понял", "Перезвоню", "Занят", "Скоро буду")) {
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(COMMAND_TYPE)
+            .setSubtype(CMD_CANNED_SET)
+            .setNotification(
+                XiaomiProto.Notification.newBuilder()
+                    .setCannedMessages(
+                        XiaomiProto.CannedMessages.newBuilder()
+                            .addAllReply(messages)
+                    )
+            )
+            .build()
+        protocolHandler.sendCommand(cmd)
+        Log.i(TAG, "Sent ${messages.size} canned messages")
     }
 
     var onCallAction: ((Boolean) -> Unit)? = null // true=accept, false=reject
@@ -99,6 +118,34 @@ class NotificationService(
                 }
                 // Also handle call accept
                 onCallAction?.invoke(true)
+            }
+            CMD_REPLY -> {
+                if (cmd.hasNotification() && cmd.notification.hasNotificationReply()) {
+                    val reply = cmd.notification.notificationReply
+                    Log.i(TAG, "Watch reply: '${reply.message}' to number=${reply.number}")
+                    // Try to send SMS reply
+                    if (reply.number.isNotBlank()) {
+                        try {
+                            val smsManager = android.telephony.SmsManager.getDefault()
+                            smsManager.sendTextMessage(reply.number, null, reply.message, null, null)
+                            Log.i(TAG, "SMS sent to ${reply.number}")
+                            // Confirm success to watch
+                            val ack = XiaomiProto.Command.newBuilder()
+                                .setType(COMMAND_TYPE)
+                                .setSubtype(14)
+                                .setNotification(XiaomiProto.Notification.newBuilder()
+                                    .setNotificationReplyStatus(0)) // 0 = success
+                                .build()
+                            protocolHandler.sendCommand(ack)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "SMS send failed: ${e.message}")
+                        }
+                    }
+                }
+            }
+            CMD_CANNED_GET -> {
+                Log.i(TAG, "Watch requested canned messages")
+                sendCannedMessages()
             }
             else -> Log.d(TAG, "Notification subtype: ${cmd.subtype}")
         }

@@ -9,6 +9,10 @@ import android.util.Log
 import com.pedometer.notification.WatchNotificationBridge
 
 class MediaListenerService : NotificationListenerService() {
+    private var callStartTime: Long = 0
+    private var callTimerRunning = false
+    private var callTitle = ""
+
     companion object {
         private const val TAG = "MediaListenerService"
         const val PREFS_NAME = "notification_whitelist"
@@ -48,10 +52,12 @@ class MediaListenerService : NotificationListenerService() {
         val isCall = notification.category == Notification.CATEGORY_CALL
 
         // Skip media/transport notifications (music player track changes)
-        if (notification.category == Notification.CATEGORY_TRANSPORT ||
+        // But allow ongoing calls (they become ongoing after answering)
+        if (!isCall && (
+            notification.category == Notification.CATEGORY_TRANSPORT ||
             notification.category == Notification.CATEGORY_SERVICE ||
             notification.category == Notification.CATEGORY_PROGRESS ||
-            sbn.isOngoing) return
+            sbn.isOngoing)) return
 
         // Calls always forwarded, other apps need whitelist
         if (!isCall && pkg !in getWhitelist(applicationContext)) return
@@ -59,6 +65,14 @@ class MediaListenerService : NotificationListenerService() {
 
         var title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+
+        // Track active call duration (ongoing = call answered)
+        if (isCall && sbn.isOngoing && !callTimerRunning) {
+            callStartTime = System.currentTimeMillis()
+            callTimerRunning = true
+            callTitle = title
+            startCallDurationTimer()
+        }
         val appName = getAppName(pkg)
 
         if (title.isBlank() && text.isBlank()) return
@@ -87,7 +101,10 @@ class MediaListenerService : NotificationListenerService() {
 
         // If a call notification was removed — call ended
         if (notification.category == Notification.CATEGORY_CALL) {
-            Log.i(TAG, "Call ended (notification removed)")
+            callTimerRunning = false
+            val duration = if (callStartTime > 0) (System.currentTimeMillis() - callStartTime) / 1000 else 0
+            callStartTime = 0
+            Log.i(TAG, "Call ended (${duration}s)")
             // Send empty call notification to dismiss call screen on watch
             WatchNotificationBridge.sendToWatch(
                 id = 0,
@@ -95,9 +112,30 @@ class MediaListenerService : NotificationListenerService() {
                 appName = "phone",
                 title = "",
                 body = "",
-                isCall = false, // not a call anymore — dismisses call UI
+                isCall = false,
             )
         }
+    }
+
+    private fun startCallDurationTimer() {
+        Thread {
+            while (callTimerRunning) {
+                Thread.sleep(1000)
+                if (!callTimerRunning) break
+                val elapsed = (System.currentTimeMillis() - callStartTime) / 1000
+                val min = elapsed / 60
+                val sec = elapsed % 60
+                val durationText = "%d:%02d".format(min, sec)
+                WatchNotificationBridge.sendToWatch(
+                    id = 88888,
+                    packageName = "phone",
+                    appName = "Звонок",
+                    title = callTitle.ifBlank { "Вызов" },
+                    body = durationText,
+                    isCall = false, // not isCall so it shows as notification, not call screen
+                )
+            }
+        }.start()
     }
 
     private fun resolveContactName(phoneNumber: String): String? {

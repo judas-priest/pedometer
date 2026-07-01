@@ -7,17 +7,17 @@
 - [x] Wind Beaufort scale, humidity, pressure
 - [x] Auto-send after auth + respond to watch requests
 - [x] Get location via GPS (FusedLocationProviderClient + Geocoder)
-- [ ] Weather settings in UI (city selection override)
+- [x] Weather settings in UI (city selection override)
 - [x] Periodic weather updates (every 30 min)
 
 ## Phase 2: Health Data Sync
 - [x] Health config init (SPO2, HR, standing, stress, goals, vitality)
-- [ ] Sleep data sync (activity fetch, parse sleep stages)
+- [x] Sleep data sync (activity fetch, parse sleep stages, Room DB, UI card)
 - [x] SpO2 all-day tracking enabled (config sub=9, allDayTracking=true)
-- [ ] Stress data
-- [ ] Workout/training data sync
-- [ ] Store health data in Room DB
-- [ ] Show sleep/SpO2/stress in UI
+- [x] Stress data (parsed from daily summary, shown in UI)
+- [x] Workout/training data sync (parse sport summaries, Room DB, UI list)
+- [x] Store health data in Room DB (HR + DailyHealth with SpO2/stress)
+- [x] Show sleep/SpO2/stress in UI (cards on Health screen)
 
 ## Phase 3: Call Handling
 - [x] Contact name resolution from phone number
@@ -25,7 +25,7 @@
 - [x] Reject call from watch (TelecomManager.endCall)
 - [x] Calls always forwarded (no whitelist needed)
 - [x] Call state management (detect call end via notification removal)
-- [ ] Show call duration on watch
+- [x] Show call duration on watch (timer updates every second during active call)
 
 ## Phase 4: Find Phone
 - [x] Handle find phone command from watch (system sub=18, findDevice=0)
@@ -37,50 +37,80 @@
 - [x] Handle dismiss notification from watch (cancel via NotificationListenerService)
 - [x] MediaListenerService lifecycle bridge (onListenerConnected/Disconnected)
 - [x] Handle "open on phone" — trigger contentIntent or launch app by package
-- [ ] Reply from watch (if supported)
+- [x] Reply from watch (canned messages + SMS reply)
 
 ## Phase 6: Watchfaces
 - [x] List/set/delete watchfaces — WatchfaceService already implemented
-- [ ] Wire WatchfaceService into ViewModel + handleCommand
-- [ ] Upload custom watchface (.bin file via data upload)
-- [ ] Watchface picker UI
+- [x] Wire WatchfaceService into ViewModel + handleCommand
+- [x] Upload custom watchface (.bin file via data upload, file picker, progress bar)
+- [x] Watchface picker UI
 
 ## Phase 7: UI Polish
-- [ ] Custom app icon (not default Android)
+- [x] Custom app icon (green circle with footsteps)
 - [x] Home screen widget (Glance — steps/goal, dark theme, 2x1, 30min update)
-- [ ] Dark/light theme support
+- [x] Dark/light theme support (system auto + Material You dynamic colors)
 - [x] Onboarding wizard (5 steps: welcome, permissions, battery, notifications, done)
 - [x] Version bump to 1.0.0
 
 ## Phase 8: Stability
 - [x] Error handling in weather fetch (try-catch)
 - [x] Separate weather update coroutine (doesn't block init)
-- [ ] ColorOS auto-start persistence guide
-- [ ] Battery optimization handling (already have UI card)
-- [ ] Connection stability improvements
-- [ ] Background service persistence tests
+- [x] ColorOS auto-start persistence guide (in Settings UI)
+- [x] Battery optimization handling (UI card with ignore battery optimization)
+- [x] Connection stability improvements (battery keepalive every 5min + auto-reconnect)
+- [x] Background service persistence (boot receiver restarts step + watch services)
 
 ## Phase 9: Voice Assistant (Bonus)
 - [x] Research: feasible via Bluetooth SCO (HFP), not SPP
 - [x] VoiceAssistant skeleton (SCO setup, AudioRecord, 5s capture)
 - [x] Permissions: RECORD_AUDIO, MODIFY_AUDIO_SETTINGS
-- [ ] STT integration (Whisper API or local)
-- [ ] LLM integration (Claude/DeepSeek API)
-- [ ] TTS integration (Android TTS or cloud)
-- [ ] Trigger from watch (button press or notification)
-- [ ] Show text response on watch screen via notification
+- [x] STT integration (Android SpeechRecognizer, Russian)
+- [x] LLM integration (DeepSeek v3.1 via RouterAI, OpenAI-compatible API)
+- [x] TTS integration (Android TextToSpeech, Russian)
+- [x] Trigger from watch (button in Activity tab + watch notification)
+- [x] Show text response on watch screen via notification
 
 ## Phase 10: Creative Bonus Features
-- [ ] Research watch hardware capabilities (sensors, speaker, mic, screen, button)
-- [ ] Custom watch apps / mini-programs
+- [x] Research watch hardware capabilities (documented in Research Notes below)
+- [-] Custom watch apps / mini-programs — not feasible without firmware modification
 - [x] Camera open from watch (PhoneActions.openCamera)
 - [x] Flashlight toggle from watch (PhoneActions.toggleFlashlight, 5s auto-off)
 - [x] Phone volume control from watch (PhoneActions.adjustVolume)
-- [ ] Navigation directions on watch
-- [ ] Timer/stopwatch sync
+- [-] Navigation directions on watch — no protocol support in proto
+- [-] Timer/stopwatch sync — no protocol support in proto
 - [x] World clock sync (UtilityService.setWorldClocks)
 - [x] Custom vibration patterns (VibrationTest proto)
 - [x] Meditation/breathing exercise (4-7-8 pattern with haptic cues)
+
+## Phase 11: Health Visualization & Polish
+
+- [x] Sleep detection UI — quality score, bedtime/wakeup times, stages bar chart with legend
+- [x] HR history chart — 24h heart rate graph with fill, grid lines, min/avg/max
+- [x] SpO2 history chart — shown in day detail cards + day detail screen
+- [x] Stress history chart — shown in day detail cards + stress bar in day detail
+- [x] Weekly/monthly health summary cards (avg HR, resting, SpO2, stress, min-max range)
+- [x] HR zones visualization (rest, light, fat burn, cardio, peak — stacked bar in day detail)
+- [x] Interactive charts — tap on HR chart point to see date/time/value with marker
+- [x] Steps hourly chart (24h bar chart in day detail view)
+- [x] Date picker for health data — per-day cards with tap to open detail (already implemented via health cards)
+- [x] Day detail screen — tap day card → full screen with HR chart, steps, SpO2, stress bar, back nav
+
+## Phase 12: HTTP API & Remote Control
+
+- [x] Fix HTTP POST notifications (NanoHTTPD, UTF-8, package icon support)
+- [x] Add /ask endpoint — send text to LLM, response to watch + JSON
+- [ ] Add /sco endpoint — trigger SCO voice test remotely
+- [ ] WiFi direct access (bypass adb forward, fix ColorOS firewall)
+- [x] Simple web dashboard (dark theme, status, notifications, find, weather, AI chat)
+
+## Phase 13: Voice Assistant via Watch Mic
+
+- [ ] Research HFP profile connection without Mi Fitness
+- [ ] BluetoothHeadset.connect() to establish HFP with watch
+- [ ] SCO audio routing to watch mic (setCommunicationDevice)
+- [ ] Whisper API (RouterAI /v1/audio/transcriptions) for STT
+- [ ] Vosk offline STT as fallback (Russian 45MB model)
+- [ ] Full pipeline: watch mic → STT → LLM → notification + TTS
 
 ## Research Notes
 

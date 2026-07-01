@@ -33,4 +33,44 @@ interface StepDao {
 
     @Query("DELETE FROM step_snapshots WHERE timestamp < :before")
     suspend fun cleanOldSnapshots(before: Long)
+
+    // Daily health (summary from watch)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertDailyHealth(health: DailyHealth)
+
+    @Query("SELECT * FROM daily_health WHERE date = :date")
+    suspend fun getDailyHealth(date: String): DailyHealth?
+
+    @Query("SELECT * FROM daily_health ORDER BY date DESC LIMIT :days")
+    suspend fun getRecentHealth(days: Int): List<DailyHealth>
+
+    // Workouts
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertWorkout(workout: WorkoutRecord)
+
+    @Query("SELECT * FROM workouts ORDER BY startTime DESC LIMIT :count")
+    suspend fun getRecentWorkouts(count: Int): List<WorkoutRecord>
+
+    // Sleep
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSleep(sleep: SleepRecord)
+
+    @Query("SELECT * FROM sleep_records ORDER BY bedTime DESC LIMIT 1")
+    suspend fun getLastSleep(): SleepRecord?
+
+    @Query("SELECT * FROM sleep_records ORDER BY bedTime DESC LIMIT :count")
+    suspend fun getRecentSleep(count: Int): List<SleepRecord>
+
+    // Heart rate
+    @Insert
+    suspend fun insertHeartRate(hr: HeartRateRecord)
+
+    @Query("SELECT * FROM heart_rate WHERE timestamp > :since ORDER BY timestamp DESC")
+    suspend fun getHeartRateSince(since: Long): List<HeartRateRecord>
+
+    @Query("SELECT * FROM heart_rate ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLastHeartRate(): HeartRateRecord?
+
+    @Query("DELETE FROM heart_rate WHERE timestamp < :before")
+    suspend fun cleanOldHeartRate(before: Long)
 }

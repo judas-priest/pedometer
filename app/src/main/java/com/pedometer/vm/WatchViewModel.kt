@@ -12,9 +12,16 @@ import com.pedometer.auth.AuthService
 import com.pedometer.bt.BleConnection
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.SppConnection
+import com.pedometer.data.DailyHealth
+import com.pedometer.data.SleepRecord
 import com.pedometer.data.DailySteps
+import com.pedometer.data.HeartRateRecord
 import com.pedometer.data.HourlySteps
+import com.pedometer.data.WorkoutRecord
 import com.pedometer.data.StepDatabase
+import com.pedometer.assistant.LlmClient
+import com.pedometer.server.MiniHttpServer
+import com.pedometer.health.ActivitySync
 import com.pedometer.health.HealthService
 import com.pedometer.health.DayStepData
 import com.pedometer.health.PhoneStepCounter
@@ -25,6 +32,9 @@ import com.pedometer.music.MusicService
 import com.pedometer.notification.NotificationService
 import com.pedometer.notification.WatchNotificationBridge
 import com.pedometer.util.UtilityService
+import com.pedometer.watchface.DataUploadService
+import com.pedometer.watchface.WatchfaceInfo
+import com.pedometer.watchface.WatchfaceService
 import com.pedometer.weather.WeatherProvider
 import com.pedometer.weather.WeatherService
 import com.pedometer.proto.CommandHelper
@@ -59,6 +69,16 @@ data class WatchState(
     val healthConnectHR: Int = 0,
     val profile: UserProfile = UserProfile(),
     val todayHourlySteps: List<HourlySteps> = emptyList(),
+    val watchfaces: List<WatchfaceInfo> = emptyList(),
+    val spo2: Int = 0,
+    val stress: Int = 0,
+    val hrResting: Int = 0,
+    val lastSleep: SleepRecord? = null,
+    val recentWorkouts: List<WorkoutRecord> = emptyList(),
+    val findPhoneActive: Boolean = false,
+    val hrHistory: List<Pair<Long, Int>> = emptyList(), // timestamp to bpm
+    val healthHistory: List<DailyHealth> = emptyList(),
+    val uploadProgress: Int = -1, // -1 = not uploading
 )
 
 enum class ConnectionStatus {
@@ -84,6 +104,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var musicService: MusicService? = null
     private var weatherService: WeatherService? = null
     private var notificationService: NotificationService? = null
+    private var watchfaceService: WatchfaceService? = null
+    private var activitySync: ActivitySync? = null
+    private var dataUploadService: DataUploadService? = null
+    private var utilityService: UtilityService? = null
+    private val httpServer = MiniHttpServer()
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
     private var userProfile = UserProfile.load(app)
@@ -96,6 +121,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         )
 
         _state.value = _state.value.copy(profile = userProfile)
+        LlmClient.apiKey = userProfile.llmApiKey
+        LlmClient.apiUrl = userProfile.llmApiUrl
 
         // Auto-connect if MAC and key saved
         val savedMac = _state.value.macAddress
@@ -146,7 +173,24 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     val today = java.time.LocalDate.now().toString()
                     val hourly = dao.getHourlyForDay(today)
-                    _state.value = _state.value.copy(todayHourlySteps = hourly)
+                    val health = dao.getDailyHealth(today)
+                    val lastSleep = dao.getLastSleep()
+                    val workouts = dao.getRecentWorkouts(10)
+                    val weekAgo = java.time.LocalDate.now().minusDays(7)
+                        .atStartOfDay(java.time.ZoneId.systemDefault())
+                        .toInstant().toEpochMilli()
+                    val hrRecords = dao.getHeartRateSince(weekAgo)
+                    val hrHistory = hrRecords.map { Pair(it.timestamp, it.bpm) }
+                    _state.value = _state.value.copy(
+                        todayHourlySteps = hourly,
+                        spo2 = health?.spo2Avg ?: _state.value.spo2,
+                        stress = health?.stressAvg ?: _state.value.stress,
+                        hrResting = health?.hrResting ?: _state.value.hrResting,
+                        lastSleep = lastSleep ?: _state.value.lastSleep,
+                        recentWorkouts = workouts,
+                        hrHistory = if (hrHistory.isNotEmpty()) hrHistory else _state.value.hrHistory,
+                        healthHistory = dao.getRecentHealth(30),
+                    )
                 } catch (e: Exception) {
                     Log.e(TAG, "Hourly steps read failed", e)
                 }
@@ -170,6 +214,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
+        // Start HTTP server
+        httpServer.onFindWatch = { findWatch() }
+        httpServer.onWeatherUpdate = {
+            viewModelScope.launch(Dispatchers.IO) { fetchAndSendWeather() }
+        }
+        httpServer.onGetStatus = {
+            val s = _state.value
+            """{"steps":${s.todayWalkSteps + s.todayRunSteps},"hr":${s.heartRate},"battery":${s.batteryLevel},"spo2":${s.spo2},"stress":${s.stress},"connected":${s.connectionStatus == ConnectionStatus.Connected}}"""
+        }
+        httpServer.start()
+
         // Start phone step counter
         phoneStepCounter.start()
         viewModelScope.launch {
@@ -188,6 +243,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         userProfile = profile
         UserProfile.save(getApplication(), profile)
         _state.value = _state.value.copy(profile = profile)
+        LlmClient.apiKey = profile.llmApiKey
+        LlmClient.apiUrl = profile.llmApiUrl
 
         // Start/stop background service
         val context = getApplication<Application>()
@@ -279,12 +336,23 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         reconnectAttempts = 0 // reset on successful connect
                         WatchNotificationBridge.protocolHandler = protocolHandler
 
-                        // Periodic weather updates
+                        // Periodic weather updates (every 30 min)
                         viewModelScope.launch(Dispatchers.IO) {
                             delay(30 * 60 * 1000)
                             while (_state.value.connectionStatus == ConnectionStatus.Connected) {
                                 try { fetchAndSendWeather() } catch (_: Exception) {}
                                 delay(30 * 60 * 1000)
+                            }
+                        }
+
+                        // Periodic battery check (keepalive, every 5 min)
+                        viewModelScope.launch(Dispatchers.IO) {
+                            while (_state.value.connectionStatus == ConnectionStatus.Connected) {
+                                delay(5 * 60 * 1000)
+                                try {
+                                    protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
+                                    Log.d(TAG, "Keepalive: battery request sent")
+                                } catch (_: Exception) {}
                             }
                         }
 
@@ -324,7 +392,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             Thread.sleep(300)
                             healthService?.startRealtimeStats()
 
-                            // 7. Send weather
+                            // 7. Send canned messages for quick reply
+                            notificationService?.sendCannedMessages()
+                            Thread.sleep(200)
+
+                            // 8. Send weather (activity files fetched by HealthService.initialize())
                             Thread.sleep(500)
                             try { fetchAndSendWeather() } catch (e: Exception) { Log.e(TAG, "Weather init failed", e) }
                             Log.i(TAG, "POST-AUTH: init complete")
@@ -332,6 +404,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     },
                     onCommand = { cmd -> handleCommand(cmd) },
                 )
+                handler.onActivityData = { data ->
+                    activitySync?.handleRawData(data)
+                }
                 protocolHandler = handler
 
                 val health = HealthService(handler) { data ->
@@ -342,10 +417,22 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     _state.value = _state.value.copy(
                         watchSteps = data.steps,
                         watchCalories = data.calories,
-                        // Keep last known HR if current is 0
                         heartRate = if (data.heartRate > 0) data.heartRate else _state.value.heartRate,
                         standingHours = data.standingHours,
                     )
+                    // Persist heart rate to Room DB
+                    if (data.heartRate > 0) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val dao = StepDatabase.get(getApplication()).stepDao()
+                                dao.insertHeartRate(HeartRateRecord(
+                                    timestamp = System.currentTimeMillis(),
+                                    bpm = data.heartRate,
+                                    source = "watch",
+                                ))
+                            } catch (_: Exception) {}
+                        }
+                    }
                 }
                 healthService = health
 
@@ -371,6 +458,113 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         ringtone?.stop()
                     }
                 }
+
+                utilityService = utility
+
+                val sync = ActivitySync(handler,
+                    onWorkout = { w ->
+                        Log.i(TAG, "Workout: ${w.sportName} ${w.durationSec/60}min")
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val dao = StepDatabase.get(getApplication()).stepDao()
+                                dao.upsertWorkout(WorkoutRecord(
+                                    startTime = w.startTime, endTime = w.endTime,
+                                    sportType = w.sportType, sportName = w.sportName,
+                                    durationSec = w.durationSec, distanceM = w.distanceM,
+                                    calories = w.calories, hrAvg = w.hrAvg, hrMax = w.hrMax, hrMin = w.hrMin,
+                                ))
+                                val recent = dao.getRecentWorkouts(10)
+                                _state.value = _state.value.copy(recentWorkouts = recent)
+                            } catch (e: Exception) { Log.e(TAG, "Save workout failed", e) }
+                        }
+                    },
+                    onSleepData = { sleep ->
+                        Log.i(TAG, "Sleep: ${sleep.totalMinutes}min deep=${sleep.deepMinutes} light=${sleep.lightMinutes} REM=${sleep.remMinutes}")
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val dao = StepDatabase.get(getApplication()).stepDao()
+                                val record = SleepRecord(
+                                    bedTime = sleep.bedTime,
+                                    wakeupTime = sleep.wakeupTime,
+                                    totalMinutes = sleep.totalMinutes,
+                                    deepMinutes = sleep.deepMinutes,
+                                    lightMinutes = sleep.lightMinutes,
+                                    remMinutes = sleep.remMinutes,
+                                    awakeMinutes = sleep.awakeMinutes,
+                                )
+                                dao.upsertSleep(record)
+                                _state.value = _state.value.copy(lastSleep = record)
+                                Log.i(TAG, "Saved sleep record")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to save sleep", e)
+                            }
+                        }
+                    },
+                    onDailySummary = { summary ->
+                        Log.i(TAG, "Daily summary: HR avg=${summary.hrAvg} rest=${summary.hrResting} " +
+                            "SpO2=${summary.spo2Avg} stress=${summary.stressAvg}")
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val dao = StepDatabase.get(getApplication()).stepDao()
+                                val dateStr = java.time.Instant.ofEpochSecond(summary.date)
+                                    .atZone(java.time.ZoneId.systemDefault())
+                                    .toLocalDate().toString()
+                                val existing = dao.getDailyHealth(dateStr)
+                                dao.upsertDailyHealth(DailyHealth(
+                                    date = dateStr,
+                                    hrAvg = if (summary.hrAvg > 0) summary.hrAvg else existing?.hrAvg ?: 0,
+                                    hrMin = if (summary.hrMin > 0) summary.hrMin else existing?.hrMin ?: 0,
+                                    hrMax = if (summary.hrMax > 0) summary.hrMax else existing?.hrMax ?: 0,
+                                    hrResting = if (summary.hrResting > 0) summary.hrResting else existing?.hrResting ?: 0,
+                                    spo2Avg = if (summary.spo2Avg > 0) summary.spo2Avg else existing?.spo2Avg ?: 0,
+                                    spo2Min = if (summary.spo2Min > 0) summary.spo2Min else existing?.spo2Min ?: 0,
+                                    spo2Max = if (summary.spo2Max > 0) summary.spo2Max else existing?.spo2Max ?: 0,
+                                    stressAvg = if (summary.stressAvg > 0) summary.stressAvg else existing?.stressAvg ?: 0,
+                                    stressMin = if (summary.stressMin > 0) summary.stressMin else existing?.stressMin ?: 0,
+                                    stressMax = if (summary.stressMax > 0) summary.stressMax else existing?.stressMax ?: 0,
+                                ))
+                                Log.i(TAG, "Saved daily health for $dateStr")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to save daily health", e)
+                            }
+                        }
+                    },
+                    onHeartRateSamples = { samples ->
+                        Log.i(TAG, "Got ${samples.size} HR samples from activity sync")
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val dao = StepDatabase.get(getApplication()).stepDao()
+                                for (s in samples) {
+                                    dao.insertHeartRate(HeartRateRecord(
+                                        timestamp = s.timestamp,
+                                        bpm = s.bpm,
+                                        source = "watch_history",
+                                    ))
+                                }
+                                Log.i(TAG, "Saved ${samples.size} HR samples to DB")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to save HR samples", e)
+                            }
+                        }
+                    },
+                )
+                activitySync = sync
+
+                val upload = DataUploadService(handler)
+                upload.onProgress = { progress ->
+                    _state.value = _state.value.copy(uploadProgress = progress)
+                }
+                upload.onComplete = { success ->
+                    _state.value = _state.value.copy(uploadProgress = -1)
+                    Log.i(TAG, "Watchface upload ${if (success) "SUCCESS" else "FAILED"}")
+                    if (success) watchfaceService?.requestWatchfaceList()
+                }
+                dataUploadService = upload
+
+                val watchface = WatchfaceService(handler) { faces ->
+                    _state.value = _state.value.copy(watchfaces = faces)
+                }
+                watchfaceService = watchface
 
                 val notif = NotificationService(getApplication(), handler)
                 notif.onCallAction = { accept ->
@@ -449,6 +643,34 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private var findPhoneRingtone: android.media.Ringtone? = null
+
+    private fun startFindPhoneRingtone() {
+        stopFindPhoneRingtone()
+        val ctx = getApplication<Application>()
+        findPhoneRingtone = android.media.RingtoneManager.getRingtone(ctx,
+            android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
+        findPhoneRingtone?.play()
+        _state.value = _state.value.copy(findPhoneActive = true)
+        // Auto-stop after 30 seconds
+        viewModelScope.launch {
+            delay(30000)
+            stopFindPhoneRingtone()
+        }
+    }
+
+    fun stopFindPhoneRingtone() {
+        findPhoneRingtone?.stop()
+        findPhoneRingtone = null
+        _state.value = _state.value.copy(findPhoneActive = false)
+    }
+
+    fun requestWatchfaces() { watchfaceService?.requestWatchfaceList() }
+    fun setActiveWatchface(id: String) { watchfaceService?.setActiveWatchface(id) }
+    fun deleteWatchface(id: String) { watchfaceService?.deleteWatchface(id) }
+    fun uploadWatchface(data: ByteArray) { dataUploadService?.uploadWatchface(data) }
+    fun startBreathing() { utilityService?.sendBreathingVibration() }
+
     fun disconnect() {
         autoReconnectEnabled = false // don't reconnect on manual disconnect
         WatchNotificationBridge.protocolHandler = null
@@ -457,6 +679,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         musicService = null
         weatherService = null
         notificationService = null
+        watchfaceService = null
+        activitySync = null
+        dataUploadService = null
+        utilityService = null
         sppConnection?.disconnect()
         sppConnection = null
         bleConnection?.disconnect()
@@ -473,14 +699,22 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun fetchAndSendWeather() {
         try {
-            val data = WeatherProvider.fetchWithLocation(getApplication())
+            val app = getApplication<Application>()
+            val cityOverride = userProfile.weatherCity
+            val coords = if (cityOverride.isNotBlank()) {
+                WeatherProvider.geocodeCity(app, cityOverride)
+            } else {
+                WeatherProvider.getLocation(app)
+            }
+            val lat = coords?.first ?: 55.75
+            val lon = coords?.second ?: 37.62
+            val data = WeatherProvider.fetch(lat, lon, coords?.third ?: "Москва")
             if (data != null) {
                 weatherService?.setLocation(data.cityName)
                 Thread.sleep(300)
                 weatherService?.sendWeather(data)
 
-                // Also send 6-day forecast
-                val forecasts = WeatherProvider.fetchForecast(55.75, 37.62) // TODO: use same GPS coords
+                val forecasts = WeatherProvider.fetchForecast(lat, lon)
                 if (forecasts.isNotEmpty()) {
                     weatherService?.sendForecast(data.cityName, forecasts)
                 }
@@ -550,10 +784,15 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private fun handleCommand(cmd: XiaomiProto.Command) {
         when (cmd.type) {
             CommandHelper.TYPE_SYSTEM -> handleSystemCommand(cmd)
-            CommandHelper.TYPE_HEALTH -> healthService?.handleCommand(cmd)
+            CommandHelper.TYPE_HEALTH -> {
+                healthService?.handleCommand(cmd)
+                activitySync?.handleCommand(cmd)
+            }
             MusicService.COMMAND_TYPE -> musicService?.handleCommand(cmd)
             WeatherService.COMMAND_TYPE -> weatherService?.handleCommand(cmd)
             NotificationService.COMMAND_TYPE -> notificationService?.handleCommand(cmd)
+            WatchfaceService.COMMAND_TYPE -> watchfaceService?.handleCommand(cmd)
+            DataUploadService.COMMAND_TYPE -> dataUploadService?.handleCommand(cmd)
             else -> Log.d(TAG, "Unhandled command type=${cmd.type}")
         }
     }
@@ -581,19 +820,25 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     Log.i(TAG, "Battery: ${bat.level}% charging=${bat.state}")
                 }
             }
-            18 -> {
-                // Find phone
-                if (cmd.hasSystem() && cmd.system.findDevice == 0) {
-                    Log.i(TAG, "FIND PHONE from watch!")
-                    val ctx = getApplication<Application>()
-                    val ringtone = android.media.RingtoneManager.getRingtone(ctx,
-                        android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
-                    ringtone?.play()
-                    viewModelScope.launch {
-                        delay(10000)
-                        ringtone?.stop()
+            17 -> {
+                // Find phone from watch
+                if (cmd.hasSystem()) {
+                    val action = cmd.system.findDevice
+                    Log.i(TAG, "FIND PHONE: action=$action")
+                    if (action == 0) {
+                        // Start ringing
+                        startFindPhoneRingtone()
+                    } else {
+                        // Stop ringing (watch cancelled)
+                        stopFindPhoneRingtone()
                     }
+                } else {
+                    startFindPhoneRingtone()
                 }
+            }
+            18 -> {
+                // Find device (our find watch command echo)
+                Log.d(TAG, "Find device echo subtype=18")
             }
             else -> Log.d(TAG, "Unhandled system subtype=${cmd.subtype}")
         }
@@ -601,6 +846,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         phoneStepCounter.stop()
+        httpServer.stop()
         disconnect()
     }
 }

@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [DailySteps::class, HourlySteps::class, StepSnapshot::class],
-    version = 1,
+    entities = [DailySteps::class, HourlySteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class],
+    version = 5,
 )
 abstract class StepDatabase : RoomDatabase() {
     abstract fun stepDao(): StepDao
@@ -22,7 +22,8 @@ abstract class StepDatabase : RoomDatabase() {
                     context.applicationContext,
                     StepDatabase::class.java,
                     "pedometer.db",
-                ).build().also { INSTANCE = it }
+                ).fallbackToDestructiveMigration()
+                 .build().also { INSTANCE = it }
             }
         }
     }
