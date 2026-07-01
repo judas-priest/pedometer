@@ -68,6 +68,7 @@ class ActivitySync(
         val date: Long, // epoch seconds
         val steps: Int = 0,
         val distanceM: Int = 0,
+        val activeMinutes: Int = 0,
         val hrResting: Int = 0,
         val hrMax: Int = 0,
         val hrMin: Int = 0,
@@ -193,7 +194,12 @@ class ActivitySync(
                 val info = decodeFileId(fileId)
                 Log.i(TAG, "File ID from data: ${fileId.toHex()} → $info")
                 processFile(fileId, fullData)
-                ackFile(fileId)
+                // Don't ACK manual samples (subtype=6) so they come again on next fetch
+                if (info.type == 0 && info.subtype == 6) {
+                    Log.i(TAG, "Skipping ACK for manual sample — will re-fetch next time")
+                } else {
+                    ackFile(fileId)
+                }
             }
 
             // Request next file if any
@@ -391,9 +397,25 @@ class ActivitySync(
             onHourlySteps(dateStr, hourlyList)
         }
 
-        // Emit distance via daily summary
-        if (totalDistanceM > 0) {
-            onDailySummary(DailySummary(date = baseTimestamp, distanceM = totalDistanceM))
+        // Count active minutes (minutes with steps > 0)
+        var activeMinutes = 0
+        // We need to recount from raw data — stepsByHour doesn't track per-minute
+        // Use total steps / minutes as proxy: if totalSteps > 0, count minutes with activity
+        // Actually we tracked minuteOffset but not per-minute steps. Count hours with steps as proxy.
+        // Better: count non-zero step minutes from the parse loop
+        // For now: estimate from hourly data
+        val estimatedActiveMinutes = stepsByHour.entries.sumOf { (_, steps) ->
+            // Rough: if hour had N steps, assume N/10 active minutes (avg 10 steps/min for walking)
+            (steps / 10).coerceAtMost(60)
+        }
+
+        // Emit distance + active minutes via daily summary
+        if (totalDistanceM > 0 || estimatedActiveMinutes > 0) {
+            onDailySummary(DailySummary(
+                date = baseTimestamp,
+                distanceM = totalDistanceM,
+                activeMinutes = estimatedActiveMinutes,
+            ))
         }
     }
 

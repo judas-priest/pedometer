@@ -529,13 +529,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     onDailySummary = { summary ->
                         Log.i(TAG, "Daily summary: HR avg=${summary.hrAvg} rest=${summary.hrResting} " +
                             "SpO2=${summary.spo2Avg} stress=${summary.stressAvg} cal=${summary.calories}")
-                        // Update watch calories + distance from daily summary
-                        if (summary.calories > 0 || summary.distanceM > 0) {
-                            _state.value = _state.value.copy(
-                                watchCalories = if (summary.calories > 0) summary.calories else _state.value.watchCalories,
-                                watchDistanceM = if (summary.distanceM > 0) summary.distanceM else _state.value.watchDistanceM,
-                            )
-                        }
+                        // Update watch calories + distance + active minutes from daily summary
+                        _state.value = _state.value.copy(
+                            watchCalories = if (summary.calories > 0) summary.calories else _state.value.watchCalories,
+                            watchDistanceM = if (summary.distanceM > 0) summary.distanceM else _state.value.watchDistanceM,
+                            activeMinutes = if (summary.activeMinutes > 0) summary.activeMinutes else _state.value.activeMinutes,
+                        )
                         viewModelScope.launch(Dispatchers.IO) {
                             try {
                                 val dao = StepDatabase.get(getApplication()).stepDao()
@@ -706,9 +705,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
+                // Request both today + past to get manual SpO2/stress samples
                 protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
-                Thread.sleep(500)
+                Thread.sleep(1000)
                 activitySync?.requestPast()
+                Thread.sleep(500)
                 fetchAndSendWeather()
             } catch (_: Exception) {}
         }
@@ -743,6 +744,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         reconnectAttempts = 0
     }
 
+    private var lastWeatherCity = ""
+
     private fun fetchAndSendWeather() {
         try {
             val app = getApplication<Application>()
@@ -756,8 +759,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             val lon = coords?.second ?: 37.62
             val data = WeatherProvider.fetch(lat, lon, coords?.third ?: "Москва")
             if (data != null) {
-                weatherService?.setLocation(data.cityName)
-                Thread.sleep(300)
+                // Only set location once per city to avoid duplicate entries on watch
+                if (data.cityName != lastWeatherCity) {
+                    weatherService?.setLocation(data.cityName)
+                    lastWeatherCity = data.cityName
+                    Thread.sleep(300)
+                }
                 weatherService?.sendWeather(data)
 
                 val forecasts = WeatherProvider.fetchForecast(lat, lon)
