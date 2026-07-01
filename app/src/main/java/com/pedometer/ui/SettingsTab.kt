@@ -19,7 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.pedometer.health.UserProfile
@@ -613,6 +615,23 @@ fun SettingsTab(
                     Text("Загрузить циферблат (.bin)")
                 }
             }
+        }
+
+        // Export data
+        Spacer(Modifier.height(8.dp))
+        val exportScope = rememberCoroutineScope()
+        OutlinedButton(
+            onClick = {
+                exportScope.launch {
+                    val file = com.pedometer.util.DataExporter.exportAll(context)
+                    if (file != null) {
+                        com.pedometer.util.DataExporter.shareFile(context, file)
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Экспорт данных (CSV)")
         }
 
         // BLE Debug button
