@@ -26,31 +26,42 @@ class SppConnection(
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
     @Volatile private var running = false
+    @Volatile private var connected = false // guard against double-connect
     private var device: BluetoothDevice? = null
+    private var serverThread: Thread? = null
+    private var reconnectThread: Thread? = null
     var autoReconnect = false
 
     @SuppressLint("MissingPermission")
     fun connect(device: BluetoothDevice): Boolean {
         this.device = device
+        connected = false
 
-        // Strategy: connect as client AND listen as server simultaneously
-        // Mi Fitness acts as server — watch connects TO it
         val adapter = BluetoothAdapter.getDefaultAdapter()
 
         // Start server listener in background
         var serverSocket: BluetoothServerSocket? = null
-        val serverThread = Thread({
+        serverThread = Thread({
             try {
                 serverSocket = adapter.listenUsingRfcommWithServiceRecord("Pedometer", SPP_UUID)
-                Log.i(TAG, "RFCOMM server listening on UUID $SPP_UUID")
-                val accepted = serverSocket?.accept(30000) // 30s timeout
-                if (accepted != null && !running) {
-                    Log.i(TAG, "Watch connected to us as SERVER! remote=${accepted.remoteDevice.address}")
-                    socket = accepted
-                    inputStream = accepted.inputStream
-                    outputStream = accepted.outputStream
-                    running = true
-                    Thread({ readLoop() }, "spp-read").start()
+                Log.i(TAG, "RFCOMM server listening")
+                val accepted = serverSocket?.accept(30000)
+                if (accepted != null) {
+                    synchronized(this) {
+                        if (!connected) {
+                            connected = true
+                            socket = accepted
+                            inputStream = accepted.inputStream
+                            outputStream = accepted.outputStream
+                            running = true
+                            Thread({ readLoop() }, "spp-read").start()
+                            Log.i(TAG, "Watch connected as SERVER")
+                        } else {
+                            // Client already connected, close server socket
+                            try { accepted.close() } catch (_: Exception) {}
+                            Log.d(TAG, "Server accept ignored — already connected as client")
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Log.d(TAG, "Server accept ended: ${e.message}")
@@ -58,44 +69,66 @@ class SppConnection(
                 try { serverSocket?.close() } catch (_: Exception) {}
             }
         }, "spp-server")
-        serverThread.start()
+        serverThread?.start()
 
-        // Mi Fitness reconnect pattern: scn=2 first, close, then scn=1
-        try { serverSocket?.close() } catch (_: Exception) {}
-
-        try { serverSocket?.close() } catch (_: Exception) {}
-
-        // Try client first (fast path)
-        try {
-            val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
-            s.connect()
-            socket = s
-            inputStream = s.inputStream
-            outputStream = s.outputStream
-            running = true
-            Thread({ readLoop() }, "spp-read").start()
-            Log.i(TAG, "Connected to ${device.address} as CLIENT")
-            return true
-        } catch (e: Exception) {
-            Log.e(TAG, "Client connection failed: ${e.message}")
-        }
+        // Try client connection
+        if (tryClientConnect(device)) return true
 
         // Client failed — try reflection channel 2
         try {
             val m = device.javaClass.getMethod("createRfcommSocket", Int::class.java)
             val s = m.invoke(device, 2) as BluetoothSocket
             s.connect()
-            socket = s
-            inputStream = s.inputStream
-            outputStream = s.outputStream
-            running = true
-            Thread({ readLoop() }, "spp-read").start()
-            Log.i(TAG, "Connected to ${device.address} via channel 2")
-            return true
+            synchronized(this) {
+                if (!connected) {
+                    connected = true
+                    socket = s
+                    inputStream = s.inputStream
+                    outputStream = s.outputStream
+                    running = true
+                    Thread({ readLoop() }, "spp-read").start()
+                    Log.i(TAG, "Connected via channel 2")
+                    closeServerThread()
+                    return true
+                } else {
+                    try { s.close() } catch (_: Exception) {}
+                }
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Channel 2 connection failed: ${e.message}")
+            Log.e(TAG, "Channel 2 failed: ${e.message}")
         }
         return false
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun tryClientConnect(device: BluetoothDevice): Boolean {
+        try {
+            val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
+            s.connect()
+            synchronized(this) {
+                if (!connected) {
+                    connected = true
+                    socket = s
+                    inputStream = s.inputStream
+                    outputStream = s.outputStream
+                    running = true
+                    Thread({ readLoop() }, "spp-read").start()
+                    Log.i(TAG, "Connected as CLIENT to ${device.address}")
+                    closeServerThread()
+                    return true
+                } else {
+                    try { s.close() } catch (_: Exception) {}
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Client connection failed: ${e.message}")
+        }
+        return false
+    }
+
+    private fun closeServerThread() {
+        serverThread?.interrupt()
+        serverThread = null
     }
 
     @SuppressLint("MissingPermission")
@@ -104,17 +137,22 @@ class SppConnection(
         if (!autoReconnect) return
 
         for (attempt in 1..MAX_RETRIES) {
+            if (!autoReconnect) return
             val delay = BASE_DELAY_MS * (1L shl (attempt - 1).coerceAtMost(4))
             Log.i(TAG, "Reconnect attempt $attempt/$MAX_RETRIES in ${delay}ms")
             try { Thread.sleep(delay) } catch (_: InterruptedException) { return }
+            if (!autoReconnect) return
 
             try {
                 val s = dev.createRfcommSocketToServiceRecord(SPP_UUID)
                 s.connect()
-                socket = s
-                inputStream = s.inputStream
-                outputStream = s.outputStream
-                running = true
+                synchronized(this) {
+                    connected = true
+                    socket = s
+                    inputStream = s.inputStream
+                    outputStream = s.outputStream
+                    running = true
+                }
                 Log.i(TAG, "Reconnected on attempt $attempt")
                 Thread({ readLoop() }, "spp-read").start()
                 return
@@ -138,6 +176,11 @@ class SppConnection(
 
     fun disconnect() {
         running = false
+        connected = false
+        autoReconnect = false
+        closeServerThread()
+        reconnectThread?.interrupt()
+        reconnectThread = null
         try { socket?.close() } catch (_: IOException) {}
         socket = null
         inputStream = null
@@ -153,7 +196,6 @@ class SppConnection(
                 val n = inputStream?.read(buf) ?: -1
                 if (n < 0) break
                 val received = buf.copyOf(n)
-                Log.d(TAG, "RAW RX ${received.size} bytes: ${received.take(32).joinToString(":") { "%02x".format(it) }}${if (received.size > 32) "..." else ""}")
                 onData(received)
             }
         } catch (e: IOException) {
@@ -161,10 +203,12 @@ class SppConnection(
         } finally {
             val wasRunning = running
             running = false
+            connected = false
             try { socket?.close() } catch (_: IOException) {}
             if (wasRunning && autoReconnect) {
-                Thread({ attemptReconnect() }, "spp-reconnect").start()
-            } else {
+                reconnectThread = Thread({ attemptReconnect() }, "spp-reconnect")
+                reconnectThread?.start()
+            } else if (wasRunning) {
                 onDisconnected()
             }
         }
