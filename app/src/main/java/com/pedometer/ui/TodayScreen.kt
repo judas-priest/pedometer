@@ -15,11 +15,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.window.Dialog
 import com.pedometer.data.DailyHealth
 import com.pedometer.ui.components.*
 import com.pedometer.vm.WatchState
@@ -73,6 +75,20 @@ fun TodayScreen(
         } else {
             todayHrFull
         }
+    }
+
+    var showMetric by remember { mutableStateOf("") }
+
+    if (showMetric.isNotEmpty()) {
+        androidx.activity.compose.BackHandler { showMetric = "" }
+        MetricDetailScreen(
+            metric = showMetric,
+            hrData = todayHr,
+            hrFull = todayHrFull,
+            healthHistory = state.healthHistory,
+            onBack = { showMetric = "" },
+        )
+        return
     }
 
     PullToRefreshBox(
@@ -134,8 +150,6 @@ fun TodayScreen(
             StepMetricCards(walkSteps, runSteps, totalSteps, state.profile, state.watchCalories, state.watchDistanceM, state.activeMinutes)
 
             // 4. Tappable metric cards
-            var showMetric by remember { mutableStateOf("") } // "", "hr", "spo2", "stress", "resting"
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -185,16 +199,7 @@ fun TodayScreen(
                 )
             }
 
-            // 5. Metric detail dialog
-            if (showMetric.isNotEmpty()) {
-                MetricDetailDialog(
-                    metric = showMetric,
-                    hrData = todayHr,
-                    hrFull = todayHrFull,
-                    healthHistory = state.healthHistory,
-                    onDismiss = { showMetric = "" },
-                )
-            }
+            // (metric detail opens as full screen via showMetric state above)
 
             // 7. Last night sleep
             val sleep = state.lastSleep
@@ -263,117 +268,150 @@ fun TodayScreen(
 }
 
 @Composable
-private fun MetricDetailDialog(
+private fun MetricDetailScreen(
     metric: String,
     hrData: List<Pair<Long, Int>>,
     hrFull: List<Pair<Long, Int>>,
     healthHistory: List<DailyHealth>,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+    ) {
+        // Back + title
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+            }
+            Text(
                 when (metric) {
-                    "hr" -> {
-                        Text("Пульс за сегодня", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(12.dp))
-                        if (hrData.size >= 2) {
-                            var label by remember { mutableStateOf("") }
-                            if (label.isNotEmpty()) {
-                                Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = HeartRed)
-                                Spacer(Modifier.height(4.dp))
+                    "hr" -> "Пульс"
+                    "spo2" -> "SpO2"
+                    "stress" -> "Стресс"
+                    "resting" -> "Пульс покоя"
+                    else -> ""
+                },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            when (metric) {
+                "hr" -> {
+                    // Today's HR chart
+                    if (hrData.size >= 2) {
+                        Spacer(Modifier.height(16.dp))
+                        Text("Сегодня", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        var label by remember { mutableStateOf("") }
+                        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                if (label.isNotEmpty()) {
+                                    Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = HeartRed)
+                                    Spacer(Modifier.height(4.dp))
+                                }
+                                HrChart(data = hrData, modifier = Modifier.fillMaxWidth().height(200.dp), onSelect = { label = it })
+                                Spacer(Modifier.height(8.dp))
+                                val min = hrFull.minOf { it.second }
+                                val max = hrFull.maxOf { it.second }
+                                val avg = hrFull.map { it.second }.average().toInt()
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    StatItem("Мин", "$min")
+                                    StatItem("Средний", "$avg")
+                                    StatItem("Макс", "$max")
+                                }
                             }
-                            HrChart(data = hrData, modifier = Modifier.fillMaxWidth().height(200.dp), onSelect = { label = it })
-                            Spacer(Modifier.height(8.dp))
-                            val min = hrFull.minOf { it.second }
-                            val max = hrFull.maxOf { it.second }
-                            val avg = hrFull.map { it.second }.average().toInt()
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                StatItem("Мин", "$min")
-                                StatItem("Средний", "$avg")
-                                StatItem("Макс", "$max")
-                            }
-                        } else {
-                            Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    "spo2" -> {
-                        Text("SpO2 за неделю", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(12.dp))
-                        WeeklyBarChart(
-                            data = healthHistory.filter { it.spo2Avg in 1..100 }.take(7),
-                            getValue = { it.spo2Avg },
-                            color = StandBlue,
-                            unit = "%",
-                        )
-                    }
-                    "stress" -> {
-                        Text("Стресс за неделю", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(12.dp))
-                        WeeklyBarChart(
-                            data = healthHistory.filter { it.stressAvg > 0 }.take(7),
-                            getValue = { it.stressAvg },
-                            color = CalorieOrange,
-                            unit = "",
-                        )
-                    }
-                    "resting" -> {
-                        Text("Пульс покоя за неделю", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(12.dp))
-                        WeeklyBarChart(
-                            data = healthHistory.filter { it.hrResting > 0 }.take(7),
-                            getValue = { it.hrResting },
-                            color = HeartRed,
-                            unit = "уд/мин",
-                        )
+                    // Weekly HR trend
+                    val hrHistory = healthHistory.filter { it.hrAvg > 0 }.sortedBy { it.date }.takeLast(7)
+                    if (hrHistory.isNotEmpty()) {
+                        Spacer(Modifier.height(16.dp))
+                        Text("За неделю", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        WeeklyBarChartFull(hrHistory, { it.hrAvg }, HeartRed, "уд/мин")
                     }
                 }
-
-                Spacer(Modifier.height(12.dp))
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("Закрыть")
+                "spo2" -> {
+                    val spo2Data = healthHistory.filter { it.spo2Avg in 1..100 }.sortedBy { it.date }.takeLast(14)
+                    Spacer(Modifier.height(16.dp))
+                    if (spo2Data.isNotEmpty()) {
+                        WeeklyBarChartFull(spo2Data, { it.spo2Avg }, StandBlue, "%")
+                    } else {
+                        Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                "stress" -> {
+                    val stressData = healthHistory.filter { it.stressAvg > 0 }.sortedBy { it.date }.takeLast(14)
+                    Spacer(Modifier.height(16.dp))
+                    if (stressData.isNotEmpty()) {
+                        WeeklyBarChartFull(stressData, { it.stressAvg }, CalorieOrange, "")
+                    } else {
+                        Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                "resting" -> {
+                    val restData = healthHistory.filter { it.hrResting > 0 }.sortedBy { it.date }.takeLast(14)
+                    Spacer(Modifier.height(16.dp))
+                    if (restData.isNotEmpty()) {
+                        WeeklyBarChartFull(restData, { it.hrResting }, HeartRed, "уд/мин")
+                    } else {
+                        Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun WeeklyBarChart(
+private fun WeeklyBarChartFull(
     data: List<DailyHealth>,
     getValue: (DailyHealth) -> Int,
     color: Color,
     unit: String,
 ) {
-    if (data.isEmpty()) {
-        Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        return
-    }
-
     val values = data.map { getValue(it) }
     val maxVal = values.max().toFloat().coerceAtLeast(1f)
+    val minVal = values.min()
     val avg = values.average().toInt()
 
-    Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-        val barW = size.width / data.size - 8f
-        data.forEachIndexed { i, _ ->
-            val v = values[i]
-            val h = (v / maxVal) * size.height * 0.85f
-            val x = i * (barW + 8f) + 4f
-            drawRect(color, Offset(x, size.height - h), Size(barW, h))
-        }
-    }
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                StatItem("Мин", "$minVal")
+                StatItem("Среднее", "$avg")
+                StatItem("Макс", "${values.max()}")
+            }
+            Spacer(Modifier.height(12.dp))
 
-    Spacer(Modifier.height(4.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        data.forEach { h ->
-            val dayLabel = try {
-                val d = java.time.LocalDate.parse(h.date)
-                "%02d.%02d".format(d.dayOfMonth, d.monthValue)
-            } catch (_: Exception) { "" }
-            Text(dayLabel, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
+                val barW = (size.width / data.size) - 6f
+                data.forEachIndexed { i, _ ->
+                    val v = values[i]
+                    val h = (v / maxVal) * size.height * 0.85f
+                    val x = i * (barW + 6f) + 3f
+                    drawRect(color.copy(alpha = 0.8f), Offset(x, size.height - h), Size(barW, h))
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                data.forEach { h ->
+                    val dayLabel = try {
+                        val d = java.time.LocalDate.parse(h.date)
+                        "%d.%02d".format(d.dayOfMonth, d.monthValue)
+                    } catch (_: Exception) { "" }
+                    Text(dayLabel, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+            }
         }
     }
-    Spacer(Modifier.height(4.dp))
-    Text("Среднее: $avg $unit", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
 }
