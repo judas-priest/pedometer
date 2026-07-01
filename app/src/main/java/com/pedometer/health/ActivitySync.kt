@@ -292,6 +292,8 @@ class ActivitySync(
         val samples = mutableListOf<HeartRateSample>()
         val stepsByHour = mutableMapOf<Int, Int>() // hour -> accumulated steps
         var totalDistanceCm = 0L
+        var lastSpo2 = 0
+        var lastStress = 0
         var pos = dataStart
         var minuteOffset = 0
         val baseTimestamp = info.timestamp
@@ -300,6 +302,8 @@ class ActivitySync(
             var hr = 0
             var steps = 0
             var distanceCm = 0
+            var spo2 = 0
+            var stress = 0
             var includeExtra = false
 
             try {
@@ -344,10 +348,13 @@ class ActivitySync(
                         }
                         7 -> { // Group 8: SpO2 (8-bit) - version 3+
                             if (pos >= dataEnd) { pos = dataEnd; break }
+                            spo2 = data[pos].toInt() and 0xFF
                             pos += 1
                         }
                         8 -> { // Group 9: stress (8-bit) - version 3+
                             if (pos >= dataEnd) { pos = dataEnd; break }
+                            val s = data[pos].toInt() and 0xFF
+                            if (s != 255) stress = s
                             pos += 1
                         }
                         9 -> { // Group 10: light (16-bit) - version 4+
@@ -378,6 +385,8 @@ class ActivitySync(
                 stepsByHour[hour] = (stepsByHour[hour] ?: 0) + steps
             }
             totalDistanceCm += distanceCm
+            if (spo2 in 70..100) lastSpo2 = spo2
+            if (stress in 1..100) lastStress = stress
             minuteOffset++
         }
 
@@ -409,12 +418,15 @@ class ActivitySync(
             (steps / 10).coerceAtMost(60)
         }
 
-        // Emit distance + active minutes via daily summary
-        if (totalDistanceM > 0 || estimatedActiveMinutes > 0) {
+        // Emit distance + active minutes + SpO2 + stress from daily details
+        if (totalDistanceM > 0 || estimatedActiveMinutes > 0 || lastSpo2 > 0 || lastStress > 0) {
+            Log.i(TAG, "Daily details metrics: dist=${totalDistanceM}m active=${estimatedActiveMinutes}min spo2=$lastSpo2 stress=$lastStress")
             onDailySummary(DailySummary(
                 date = baseTimestamp,
                 distanceM = totalDistanceM,
                 activeMinutes = estimatedActiveMinutes,
+                spo2Avg = lastSpo2,
+                stressAvg = lastStress,
             ))
         }
     }
