@@ -126,7 +126,7 @@ class ProtocolHandler(
                 startAuth()
             }
             is PacketV2.DataPacket -> {
-                Log.d(TAG, "V2 DataPacket: ch=${packet.channel} opCode=${packet.opCode} payloadLen=${packet.payload.size}")
+                Log.v(TAG, "V2 DataPacket: ch=${packet.channel} opCode=${packet.opCode} payloadLen=${packet.payload.size}")
                 val decrypted = try {
                     if (packet.opCode == PacketV2.OPCODE_ENCRYPTED && authService.isInitialized) {
                         authService.decryptV2(packet.payload)
@@ -138,7 +138,7 @@ class ProtocolHandler(
                     packet.payload
                 }
                 connection.write(PacketV2.encodeAck(packet.sequenceNumber))
-                Log.d(TAG, "Decrypted ${decrypted.size} bytes ch=${packet.channel}, sent ACK for seq=${packet.sequenceNumber}")
+                Log.v(TAG, "Decrypted ${decrypted.size} bytes ch=${packet.channel}, sent ACK for seq=${packet.sequenceNumber}")
                 when (packet.channel) {
                     Channel.Activity -> {
                         Log.i(TAG, "Activity data chunk: ${decrypted.size} bytes")

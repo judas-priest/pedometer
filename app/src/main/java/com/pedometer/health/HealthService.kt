@@ -139,7 +139,7 @@ class HealthService(
             CommandHelper.HEALTH_REALTIME_STATS_EVENT -> {
                 if (cmd.hasHealth() && cmd.health.hasRealTimeStats()) {
                     val stats = cmd.health.realTimeStats
-                    Log.d(TAG, "RT: steps=${stats.steps} cal=${stats.calories} u3=${stats.unknown3} hr=${stats.heartRate} u5=${stats.unknown5} standing=${stats.standingHours}")
+                    Log.v(TAG, "RT: steps=${stats.steps} cal=${stats.calories} u3=${stats.unknown3} hr=${stats.heartRate} u5=${stats.unknown5} standing=${stats.standingHours}")
                     val data = HealthData(
                         steps = stats.steps,
                         calories = stats.calories,

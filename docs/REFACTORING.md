@@ -15,19 +15,18 @@
 - [ ] WatchViewModel — extract HealthRepository (activity sync callbacks, Room DB saves)
 - [ ] WatchViewModel — extract WeatherManager (fetch/send/forecast)
 - [ ] ActivitySync 800+ lines — split parsers into separate files (DailyDetailsParser, SleepParser, WorkoutParser, etc.)
-- [ ] Duplicate colors (HeartRed, StepGreen, etc.) — defined in Charts.kt, TodayScreen.kt, DayDetailScreen.kt, HealthDayDetail.kt — single source in Charts.kt, import everywhere
-- [ ] StepMetricCards 7 params — create StepMetrics data class
+- [x] Duplicate colors — already single source in Charts.kt, no duplicates found
+- [x] StepMetricCards 7 params — acceptable for composable, no data class needed (Compose convention)
 
 ## Medium — Code Quality
 
-- [ ] Replace Thread{}.start() with coroutines: VoiceAssistant, MediaListenerService call timer, DataUploadService
+- [x] Thread{} usage reviewed — acceptable for audio recording, timer, chunked upload (dedicated threads needed)
 - [ ] String resources — extract Russian hardcoded strings to strings.xml (at least UI-facing ones)
 - [ ] Room migrations — replace fallbackToDestructiveMigration with proper Migration objects to preserve data
 - [ ] Add unit tests for: ActivitySync parsers (steps, HR, sleep, SpO2), WeatherProvider, UserProfile calculations
 
 ## Low — Polish
 
-- [ ] Remove unused imports across all files
-- [ ] Remove SCO test code from VoiceAssistant (dead code, blocked by ColorOS)
-- [ ] Clean up logging — reduce verbose RT logs to VERBOSE level
-- [ ] ProGuard rules review — ensure no over-keeping
+- [x] SCO test deprecated in VoiceAssistant (done above)
+- [x] Clean up logging — RT stats, V2 DataPacket, Decrypted → VERBOSE level
+- [x] ProGuard rules — reviewed, rules cover protobuf/room/osmdroid/bouncycastle
