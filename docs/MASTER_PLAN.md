@@ -99,18 +99,18 @@
 
 - [x] Fix HTTP POST notifications (NanoHTTPD, UTF-8, package icon support)
 - [x] Add /ask endpoint — send text to LLM, response to watch + JSON
-- [ ] Add /sco endpoint — trigger SCO voice test remotely
-- [ ] WiFi direct access (bypass adb forward, fix ColorOS firewall)
+- [-] Add /sco endpoint — blocked, SCO doesn't route watch mic without HFP
+- [-] WiFi direct access — blocked by ColorOS firewall, use `adb forward tcp:8765 tcp:8765`
 - [x] Simple web dashboard (dark theme, status, notifications, find, weather, AI chat)
 
 ## Phase 13: Voice Assistant via Watch Mic
 
-- [ ] Research HFP profile connection without Mi Fitness
-- [ ] BluetoothHeadset.connect() to establish HFP with watch
-- [ ] SCO audio routing to watch mic (setCommunicationDevice)
-- [ ] Whisper API (RouterAI /v1/audio/transcriptions) for STT
-- [ ] Vosk offline STT as fallback (Russian 45MB model)
-- [ ] Full pipeline: watch mic → STT → LLM → notification + TTS
+- [x] Research HFP profile connection without Mi Fitness — BLOCKED: ColorOS blocks BluetoothHeadset.connect() via reflection
+- [-] BluetoothHeadset.connect() — blocked by ColorOS, works on stock Android only
+- [-] SCO audio routing to watch mic — blocked, no HFP without Mi Fitness on ColorOS
+- [x] Whisper API (RouterAI /v1/audio/transcriptions) for STT — phone mic → PCM → WAV → Whisper → text
+- [-] Vosk offline STT — not needed, Whisper API works via RouterAI
+- [-] Full pipeline: watch mic → STT → LLM — blocked by HFP/ColorOS, phone mic alternative available
 
 ## Research Notes
 

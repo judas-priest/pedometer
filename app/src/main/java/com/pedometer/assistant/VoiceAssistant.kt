@@ -36,72 +36,106 @@ class VoiceAssistant(private val context: Context) {
     }
 
     fun startListening() {
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Log.e(TAG, "Speech recognition not available")
-            sendToWatch("Распознавание речи недоступно")
-            return
-        }
+        Log.i(TAG, "Starting voice capture (phone mic)...")
+        sendToWatch("Слушаю 4 сек...")
 
-        Log.i(TAG, "Starting speech recognition (phone mic)...")
-        startSpeechRecognition()
-    }
+        Thread {
+            try {
+                val sampleRate = 16000
+                val bufSize = AudioRecord.getMinBufferSize(
+                    sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+                ).coerceAtLeast(4096)
 
-    private fun startSpeechRecognition() {
-        // SpeechRecognizer MUST run on main thread
-        val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        handler.post { doStartRecognition() }
-    }
+                val recorder = AudioRecord(
+                    MediaRecorder.AudioSource.MIC, sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize * 2
+                )
 
-    private fun doStartRecognition() {
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-        }
+                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                    sendToWatch("Микрофон недоступен")
+                    return@Thread
+                }
 
-        recognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onResults(results: Bundle?) {
-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                Log.i(TAG, "Recognized: $text")
-                recognizer.destroy()
+                recorder.startRecording()
+                val allData = mutableListOf<Byte>()
+                val buffer = ByteArray(bufSize)
+                val startTime = System.currentTimeMillis()
+
+                while (System.currentTimeMillis() - startTime < 4000) {
+                    val read = recorder.read(buffer, 0, buffer.size)
+                    if (read > 0) for (i in 0 until read) allData.add(buffer[i])
+                }
+
+                recorder.stop()
+                recorder.release()
+
+                val pcmData = allData.toByteArray()
+                Log.i(TAG, "Recorded ${pcmData.size} bytes")
+
+                if (pcmData.size < 1000) {
+                    sendToWatch("Пустая запись")
+                    return@Thread
+                }
+
+                sendToWatch("Распознаю...")
+
+                // Convert PCM to WAV and send to Whisper API
+                val wavData = pcmToWav(pcmData, sampleRate)
+                val text = WhisperClient.transcribe(wavData)
 
                 if (text.isNullOrBlank()) {
-                    sendToWatch("Не удалось распознать речь")
-                } else {
-                    onResult?.invoke(text)
-                    sendToWatch("Думаю...")
-                    // Ask LLM in background
-                    Thread {
-                        val response = LlmClient.ask(text)
-                        sendToWatch(response)
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
-                            speak(response)
-                        }
-                    }.start()
+                    sendToWatch("Не удалось распознать")
+                    return@Thread
                 }
-            }
 
-            override fun onError(error: Int) {
-                Log.e(TAG, "Recognition error: $error")
-                recognizer.destroy()
-                sendToWatch("Ошибка распознавания ($error)")
-            }
+                Log.i(TAG, "Recognized: $text")
+                onResult?.invoke(text)
+                sendToWatch("Думаю...")
 
-            override fun onReadyForSpeech(params: Bundle?) {
-                Log.i(TAG, "Ready for speech")
-                sendToWatch("Слушаю...")
-            }
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() { Log.i(TAG, "End of speech") }
-            override fun onPartialResults(partialResults: Bundle?) {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
+                val response = LlmClient.ask(text)
+                sendToWatch(response)
+                android.os.Handler(android.os.Looper.getMainLooper()).post { speak(response) }
 
-        recognizer.startListening(intent)
+            } catch (e: SecurityException) {
+                sendToWatch("Нет разрешения на микрофон")
+            } catch (e: Exception) {
+                Log.e(TAG, "Voice failed", e)
+                sendToWatch("Ошибка: ${e.message}")
+            }
+        }.start()
+    }
+
+    private fun pcmToWav(pcm: ByteArray, sampleRate: Int): ByteArray {
+        val channels = 1
+        val bitsPerSample = 16
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val dataSize = pcm.size
+        val totalSize = 36 + dataSize
+
+        val wav = java.io.ByteArrayOutputStream()
+        val d = java.io.DataOutputStream(wav)
+
+        // RIFF header
+        d.writeBytes("RIFF")
+        d.writeInt(Integer.reverseBytes(totalSize))
+        d.writeBytes("WAVE")
+
+        // fmt chunk
+        d.writeBytes("fmt ")
+        d.writeInt(Integer.reverseBytes(16))
+        d.writeShort(java.lang.Short.reverseBytes(1).toInt()) // PCM
+        d.writeShort(java.lang.Short.reverseBytes(channels.toShort()).toInt())
+        d.writeInt(Integer.reverseBytes(sampleRate))
+        d.writeInt(Integer.reverseBytes(byteRate))
+        d.writeShort(java.lang.Short.reverseBytes((channels * bitsPerSample / 8).toShort()).toInt())
+        d.writeShort(java.lang.Short.reverseBytes(bitsPerSample.toShort()).toInt())
+
+        // data chunk
+        d.writeBytes("data")
+        d.writeInt(Integer.reverseBytes(dataSize))
+        d.write(pcm)
+
+        return wav.toByteArray()
     }
 
     private fun sendToWatch(text: String) {
