@@ -195,7 +195,8 @@ fun ActivityScreen(
                                 Text(w.sportName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                 val date = java.time.Instant.ofEpochMilli(w.startTime)
                                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                                Text(date.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val months = arrayOf("", "янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+                                Text("${date.dayOfMonth} ${months[date.monthValue]}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("${w.durationSec / 60} мин", style = MaterialTheme.typography.bodyMedium)
