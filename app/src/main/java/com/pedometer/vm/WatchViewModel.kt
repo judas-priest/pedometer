@@ -60,6 +60,7 @@ data class WatchState(
     val heartRate: Int = 0,         // from watch only
     val standingHours: Int = 0,
     val activeMinutes: Int = 0,
+    val watchDistanceM: Int = 0,
     val phoneSteps: Long = 0,
     val phoneStepsSinceBoot: Long = 0,
     val todayWalkSteps: Int = 0,
@@ -528,9 +529,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     onDailySummary = { summary ->
                         Log.i(TAG, "Daily summary: HR avg=${summary.hrAvg} rest=${summary.hrResting} " +
                             "SpO2=${summary.spo2Avg} stress=${summary.stressAvg} cal=${summary.calories}")
-                        // Update watch calories from daily summary (RT always 0)
-                        if (summary.calories > 0) {
-                            _state.value = _state.value.copy(watchCalories = summary.calories)
+                        // Update watch calories + distance from daily summary
+                        if (summary.calories > 0 || summary.distanceM > 0) {
+                            _state.value = _state.value.copy(
+                                watchCalories = if (summary.calories > 0) summary.calories else _state.value.watchCalories,
+                                watchDistanceM = if (summary.distanceM > 0) summary.distanceM else _state.value.watchDistanceM,
+                            )
                         }
                         viewModelScope.launch(Dispatchers.IO) {
                             try {

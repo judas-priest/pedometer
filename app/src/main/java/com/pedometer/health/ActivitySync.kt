@@ -67,6 +67,7 @@ class ActivitySync(
     data class DailySummary(
         val date: Long, // epoch seconds
         val steps: Int = 0,
+        val distanceM: Int = 0,
         val hrResting: Int = 0,
         val hrMax: Int = 0,
         val hrMin: Int = 0,
@@ -284,6 +285,7 @@ class ActivitySync(
         // Parse per-minute samples
         val samples = mutableListOf<HeartRateSample>()
         val stepsByHour = mutableMapOf<Int, Int>() // hour -> accumulated steps
+        var totalDistanceCm = 0L
         var pos = dataStart
         var minuteOffset = 0
         val baseTimestamp = info.timestamp
@@ -291,6 +293,7 @@ class ActivitySync(
         while (pos < dataEnd) {
             var hr = 0
             var steps = 0
+            var distanceCm = 0
             var includeExtra = false
 
             try {
@@ -314,8 +317,10 @@ class ActivitySync(
                             if (pos >= dataEnd) { pos = dataEnd; break }
                             pos += 1
                         }
-                        3 -> { // Group 4: distance (16-bit)
+                        3 -> { // Group 4: distance (16-bit, in cm * 100)
                             if (pos + 2 > dataEnd) { pos = dataEnd; break }
+                            val d = (data[pos].toInt() and 0xFF) or ((data[pos + 1].toInt() and 0xFF) shl 8)
+                            distanceCm = d * 100
                             pos += 2
                         }
                         4 -> { // Group 5: heart rate (8-bit)
@@ -366,11 +371,13 @@ class ActivitySync(
                     .atZone(java.time.ZoneId.systemDefault()).hour
                 stepsByHour[hour] = (stepsByHour[hour] ?: 0) + steps
             }
+            totalDistanceCm += distanceCm
             minuteOffset++
         }
 
         val totalStepsFromDetails = stepsByHour.values.sum()
-        Log.i(TAG, "Parsed ${samples.size} HR samples, $totalStepsFromDetails steps in ${stepsByHour.size} hours from daily details ($minuteOffset minutes)")
+        val totalDistanceM = (totalDistanceCm / 100).toInt()
+        Log.i(TAG, "Parsed ${samples.size} HR samples, $totalStepsFromDetails steps, ${totalDistanceM}m in ${stepsByHour.size} hours from daily details ($minuteOffset minutes)")
         if (samples.isNotEmpty()) {
             onHeartRateSamples(samples)
         }
@@ -382,6 +389,11 @@ class ActivitySync(
             val hourlyList = stepsByHour.map { (hour, s) -> Pair(hour, s) }.sortedBy { it.first }
             Log.i(TAG, "Hourly steps for $dateStr: ${hourlyList.map { "${it.first}h=${it.second}" }}")
             onHourlySteps(dateStr, hourlyList)
+        }
+
+        // Emit distance via daily summary
+        if (totalDistanceM > 0) {
+            onDailySummary(DailySummary(date = baseTimestamp, distanceM = totalDistanceM))
         }
     }
 

@@ -122,7 +122,7 @@ fun TodayScreen(
             }
 
             // 3. Step breakdown
-            StepMetricCards(walkSteps, runSteps, totalSteps, state.profile, state.watchCalories, state.activeMinutes)
+            StepMetricCards(walkSteps, runSteps, totalSteps, state.profile, state.watchCalories, state.watchDistanceM, state.activeMinutes)
 
             // 4. Live metrics row 1: Pulse | Battery
             Row(
