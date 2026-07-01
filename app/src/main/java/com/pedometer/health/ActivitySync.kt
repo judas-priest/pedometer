@@ -750,15 +750,76 @@ class ActivitySync(
             }
         }
 
-        // Create sleep data (without detailed stage durations — those come from subtype=3)
+        // Parse sleep stage packets (type=16 contains durations)
+        var deepMin = 0; var lightMin = 0; var remMin = 0; var awakeMin = 0
+        try {
+            // Skip SpO2 samples (headerIdx 1)
+            if (bb.remaining() >= 4 && headerHasField(header, 1)) {
+                val unit = bb.short.toInt() and 0xFFFF
+                val count = bb.short.toInt() and 0xFFFF
+                if (count > 0) {
+                    if (info.version >= 2 && bb.remaining() >= 4) bb.int // firstRecordTime
+                    if (bb.remaining() >= count) bb.position(bb.position() + count)
+                }
+            }
+            // Skip snore samples (version >= 3, headerIdx 2)
+            if (info.version >= 3 && bb.remaining() >= 4 && headerHasField(header, 2)) {
+                val unit = bb.short.toInt() and 0xFFFF
+                val count = bb.short.toInt() and 0xFFFF
+                if (count > 0) {
+                    if (info.version >= 2 && bb.remaining() >= 4) bb.int // firstRecordTime
+                    if (bb.remaining() >= count * 4) bb.position(bb.position() + count * 4) // floats
+                }
+            }
+            // Now parse stage packets
+            while (bb.remaining() >= 17) {
+                // Check packet header (2 bytes: 0x02 0x0F or similar)
+                val b1 = bb.get().toInt() and 0xFF
+                val b2 = bb.get().toInt() and 0xFF
+                if (b1 != 0x02) {
+                    bb.position(bb.position() - 1) // backtrack
+                    break
+                }
+                val headerLen = bb.get().toInt() and 0xFF
+                val ts = bb.long // timestamp
+                val parity = bb.get().toInt() and 0xFF
+                val type = bb.get().toInt() and 0xFF
+                val dataLen = ((bb.get().toInt() and 0xFF) shl 8) or (bb.get().toInt() and 0xFF)
+
+                if (type == 0x2 || type == 0x3 || type == 0x9 || type in 0xc..0xf) {
+                    continue // flag-only types, no data
+                }
+
+                if (dataLen > 0 && bb.remaining() >= dataLen) {
+                    if (type == 16 && dataLen >= 12) {
+                        // Summary with stage durations
+                        val d0 = bb.get().toInt() and 0xFF
+                        val sleepDur = bb.short.toInt() and 0xFFFF
+                        val wakeDur = bb.short.toInt() and 0xFFFF
+                        val lightDur = bb.short.toInt() and 0xFFFF
+                        val remDur = bb.short.toInt() and 0xFFFF
+                        val deepDur = bb.short.toInt() and 0xFFFF
+                        // skip rest
+                        if (dataLen > 11) bb.position(bb.position() + dataLen - 11)
+                        deepMin = deepDur; lightMin = lightDur; remMin = remDur; awakeMin = wakeDur
+                        Log.i(TAG, "Sleep stages: deep=$deepDur light=$lightDur REM=$remDur awake=$wakeDur")
+                    } else {
+                        bb.position(bb.position() + dataLen) // skip unknown type
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Sleep stage parsing failed: ${e.message}")
+        }
+
         val sleep = SleepData(
             bedTime = bedTime * 1000,
             wakeupTime = wakeupTime * 1000,
             totalMinutes = totalMinutes,
-            deepMinutes = 0,
-            lightMinutes = 0,
-            remMinutes = 0,
-            awakeMinutes = 0,
+            deepMinutes = deepMin,
+            lightMinutes = lightMin,
+            remMinutes = remMin,
+            awakeMinutes = awakeMin,
         )
 
         onSleepData(sleep)
