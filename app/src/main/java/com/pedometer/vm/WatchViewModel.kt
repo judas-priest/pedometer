@@ -703,6 +703,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
                 protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
+                Thread.sleep(500)
+                activitySync?.requestPast()
                 fetchAndSendWeather()
             } catch (_: Exception) {}
         }

@@ -62,8 +62,9 @@ class HealthService(
         protocolHandler.sendCommand(stressCmd)
         Log.i(TAG, "Enabled stress all-day tracking")
 
-        // Fetch today's activity data
+        // Fetch today's + past activity data
         protocolHandler.sendCommand(CommandHelper.buildActivityFetchToday())
+        // Past will be requested by ActivitySync after today's files are processed
     }
 
     private fun sendSimpleCommand(subtype: Int) {
