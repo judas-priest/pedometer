@@ -446,6 +446,27 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                 }
+                health.onWorkoutEvent = { event ->
+                    Log.i(TAG, "Workout event: ${event.sportName} status=${event.status}")
+                    when (event.status) {
+                        0 -> { // started
+                            WatchNotificationBridge.sendToWatch(
+                                id = 77777,
+                                packageName = "com.pedometer",
+                                appName = "Тренировка",
+                                title = event.sportName,
+                                body = "Начата",
+                            )
+                        }
+                        3 -> { // finished
+                            // Fetch activity data to get workout results
+                            viewModelScope.launch(Dispatchers.IO) {
+                                Thread.sleep(2000) // wait for watch to save
+                                protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
+                            }
+                        }
+                    }
+                }
                 healthService = health
 
                 val music = MusicService(getApplication(), handler)

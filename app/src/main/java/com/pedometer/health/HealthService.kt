@@ -13,10 +13,15 @@ data class HealthData(
     val activeMinutes: Int = 0,
 )
 
+data class WorkoutEvent(val sport: Int, val status: Int, val sportName: String)
+// status: 0=started, 1=resumed, 2=paused, 3=finished
+
 class HealthService(
     private val protocolHandler: ProtocolHandler,
     private val onHealthUpdate: (HealthData) -> Unit,
 ) {
+    var onWorkoutEvent: ((WorkoutEvent) -> Unit)? = null
+    private var workoutStarted = false
     companion object {
         private const val TAG = "HealthService"
         const val CMD_CONFIG_SPO2_GET = 8
@@ -26,6 +31,9 @@ class HealthService(
         const val CMD_CONFIG_GOAL_NOTIFICATION_GET = 21
         const val CMD_CONFIG_GOALS_GET = 42
         const val CMD_CONFIG_VITALITY_SCORE_GET = 35
+        const val CMD_WORKOUT_STATUS = 26
+        const val CMD_WORKOUT_OPEN = 30
+        const val CMD_WORKOUT_LOCATION = 48
     }
 
     private var realtimeStarted = false
@@ -103,6 +111,36 @@ class HealthService(
                         activeMinutes = stats.unknown5, // likely active/moving minutes
                     )
                     onHealthUpdate(data)
+                }
+            }
+            CMD_WORKOUT_OPEN -> {
+                if (cmd.hasHealth() && cmd.health.hasWorkoutOpenWatch()) {
+                    val sport = cmd.health.workoutOpenWatch.sport
+                    Log.i(TAG, "Workout open: sport=$sport workoutStarted=$workoutStarted")
+                    // Reply: no GPS from phone (watch has its own GPS)
+                    val reply = XiaomiProto.Command.newBuilder()
+                        .setType(CommandHelper.TYPE_HEALTH)
+                        .setSubtype(CMD_WORKOUT_OPEN)
+                        .setHealth(XiaomiProto.Health.newBuilder()
+                            .setWorkoutOpenReply(XiaomiProto.WorkoutOpenReply.newBuilder()
+                                .setUnknown1(3).setUnknown2(2).setUnknown3(10)))
+                        .build()
+                    protocolHandler.sendCommand(reply)
+                }
+            }
+            CMD_WORKOUT_STATUS -> {
+                if (cmd.hasHealth() && cmd.health.hasWorkoutStatusWatch()) {
+                    val ws = cmd.health.workoutStatusWatch
+                    val status = ws.status
+                    val sport = ws.sport
+                    val sportName = when (sport) {
+                        1 -> "Бег"; 2, 22 -> "Ходьба"; 3 -> "Беговая дорожка"
+                        6, 23 -> "Велосипед"; 8 -> "Свободная"; 9 -> "Плавание"
+                        else -> "Тренировка"
+                    }
+                    Log.i(TAG, "Workout status: $status sport=$sport ($sportName)")
+                    workoutStarted = status == 0 || status == 1
+                    onWorkoutEvent?.invoke(WorkoutEvent(sport, status, sportName))
                 }
             }
             CMD_CONFIG_SPO2_GET -> {
