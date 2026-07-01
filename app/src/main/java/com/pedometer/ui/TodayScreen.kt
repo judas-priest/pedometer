@@ -56,13 +56,15 @@ fun TodayScreen(
         .atStartOfDay(ZoneId.systemDefault())
         .toInstant()
         .toEpochMilli()
-    val todayHr = remember(state.hrHistory, todayStartMillis) {
-        val filtered = state.hrHistory.filter { it.first >= todayStartMillis }
-        if (filtered.size > 200) {
-            val step = filtered.size / 200
-            filtered.filterIndexed { i, _ -> i % step == 0 }
+    val todayHrFull = remember(state.hrHistory, todayStartMillis) {
+        state.hrHistory.filter { it.first >= todayStartMillis }
+    }
+    val todayHr = remember(todayHrFull) {
+        if (todayHrFull.size > 200) {
+            val step = todayHrFull.size / 200
+            todayHrFull.filterIndexed { i, _ -> i % step == 0 }
         } else {
-            filtered
+            todayHrFull
         }
     }
 
@@ -177,9 +179,9 @@ fun TodayScreen(
 
             // 6. Today's HR chart
             if (todayHr.size >= 2) {
-                val hrMin = todayHr.minOf { it.second }
-                val hrMax = todayHr.maxOf { it.second }
-                val hrAvg = todayHr.map { it.second }.average().toInt()
+                val hrMin = todayHrFull.minOf { it.second }
+                val hrMax = todayHrFull.maxOf { it.second }
+                val hrAvg = todayHrFull.map { it.second }.average().toInt()
 
                 var hrLabel by remember { mutableStateOf("") }
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
