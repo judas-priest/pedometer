@@ -58,16 +58,18 @@ class VoiceAssistant(private val context: Context) {
 
                 recorder.startRecording()
                 val allData = mutableListOf<Byte>()
-                val buffer = ByteArray(bufSize)
-                val startTime = System.currentTimeMillis()
+                try {
+                    val buffer = ByteArray(bufSize)
+                    val startTime = System.currentTimeMillis()
 
-                while (System.currentTimeMillis() - startTime < 4000) {
-                    val read = recorder.read(buffer, 0, buffer.size)
-                    if (read > 0) for (i in 0 until read) allData.add(buffer[i])
+                    while (System.currentTimeMillis() - startTime < 4000) {
+                        val read = recorder.read(buffer, 0, buffer.size)
+                        if (read > 0) for (i in 0 until read) allData.add(buffer[i])
+                    }
+                } finally {
+                    recorder.stop()
+                    recorder.release()
                 }
-
-                recorder.stop()
-                recorder.release()
 
                 val pcmData = allData.toByteArray()
                 Log.i(TAG, "Recorded ${pcmData.size} bytes")
@@ -154,6 +156,11 @@ class VoiceAssistant(private val context: Context) {
         }
     }
 
+    // SCO test removed — blocked by ColorOS (no HFP without Mi Fitness)
+    // BluetoothProfile proxy was leaking (never closed)
+    // VoiceAssistant now uses phone mic → Whisper API only
+
+    @Deprecated("Blocked by ColorOS")
     fun testSco() {
         sendToWatch("Открываю SCO...")
         Log.i(TAG, "=== SCO TEST START ===")

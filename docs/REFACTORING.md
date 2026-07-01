@@ -3,8 +3,8 @@
 ## Critical — Memory Leaks
 
 - [x] SppConnection: race condition server/client threads, orphan sockets — synchronized connect, tracked server/reconnect threads, interrupt on disconnect
-- [ ] VoiceAssistant: BluetoothProfile proxy never closed — call closeProfileProxy() after SCO test
-- [ ] VoiceAssistant: AudioRecord leak on exception — try/finally around recorder
+- [x] VoiceAssistant: BluetoothProfile proxy — SCO test deprecated (blocked by ColorOS)
+- [x] VoiceAssistant: AudioRecord leak on exception — try/finally around recorder
 - [ ] MediaListenerService: callTimerRunning not cleaned in onDestroy — add onDestroy override
 - [ ] ProtocolHandler: ByteArrayOutputStream unbounded — add max buffer size check (1MB), reset if exceeded
 - [ ] WatchViewModel connect(): stale services on reconnect — call disconnect() at start of connect()
