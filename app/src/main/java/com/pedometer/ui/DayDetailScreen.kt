@@ -134,6 +134,9 @@ fun DayDetailScreen(
             Spacer(Modifier.height(16.dp))
         }
 
+        // Health data for this day
+        val health = state.healthHistory.find { it.date == selectedDate.toString() }
+
         // 5. HR chart for selected day
         val dayHr = filterHrForDay(state.hrHistory, selectedDate)
         if (dayHr.size > 2) {
@@ -165,38 +168,19 @@ fun DayDetailScreen(
                     val minHr = dayHr.minOf { it.second }
                     val avgHr = dayHr.map { it.second }.average().toInt()
                     val maxHr = dayHr.maxOf { it.second }
+                    val restingHr = health?.hrResting ?: 0
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         HrLabel("Мин", minHr)
                         HrLabel("Среднее", avgHr)
+                        if (restingHr > 0) HrLabel("Покой", restingHr)
                         HrLabel("Макс", maxHr)
                     }
                 }
             }
             Spacer(Modifier.height(16.dp))
-        }
-
-        // 6. HR summary + zones
-        val health = state.healthHistory.find { it.date == selectedDate.toString() }
-        if (health != null && health.hrAvg > 0) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Пульс (сводка)", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        HrLabel("Среднее", health.hrAvg)
-                        HrLabel("Покой", health.hrResting)
-                        HrLabel("Мин", health.hrMin)
-                        HrLabel("Макс", health.hrMax)
-                    }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
 
             // HR zones
             if (dayHr.size > 2) {
