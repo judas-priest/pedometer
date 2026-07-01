@@ -773,14 +773,37 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteWatchface(id: String) { watchfaceService?.deleteWatchface(id) }
     fun uploadWatchface(data: ByteArray) { dataUploadService?.uploadWatchface(data) }
     fun refreshData() {
+        val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // 1. StepProvider (OPLUS) — обновить шаги с телефона
+                val today = StepProviderReader.readToday(app)
+                val history = StepProviderReader.readHistory(app, 30)
+                if (today != null) {
+                    _state.value = _state.value.copy(
+                        todayWalkSteps = today.walkSteps,
+                        todayRunSteps = today.runSteps,
+                        stepHistory = history,
+                    )
+                    val dao = StepDatabase.get(app).stepDao()
+                    dao.upsertDaily(com.pedometer.data.DailySteps(
+                        date = today.date,
+                        totalSteps = today.totalSteps,
+                        walkSteps = today.walkSteps,
+                        runSteps = today.runSteps,
+                        calories = userProfile.calcCalories(today.totalSteps),
+                        distanceKm = userProfile.calcDistance(today.totalSteps),
+                    ))
+                }
+
+                // 2. Watch data
                 protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
-                // Request both today + past to get manual SpO2/stress samples
                 protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
                 Thread.sleep(1000)
                 activitySync?.requestPast()
                 Thread.sleep(500)
+
+                // 3. Weather
                 fetchAndSendWeather()
             } catch (_: Exception) {}
         }
