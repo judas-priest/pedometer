@@ -1,45 +1,53 @@
 package com.pedometer.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.pedometer.data.DailyHealth
-import com.pedometer.data.HourlySteps
-import com.pedometer.data.WorkoutRecord
-import com.pedometer.health.DayStepData
-import com.pedometer.health.UserProfile
 import com.pedometer.ui.components.*
 import com.pedometer.vm.WatchState
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 
 @Composable
 fun ActivityScreen(
     state: WatchState,
-    onFindWatch: () -> Unit = {},
-    onBreathing: () -> Unit = {},
+    onDayTap: (LocalDate) -> Unit = {},
 ) {
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-
+    val history = state.stepHistory
+    val profile = state.profile
     val today = LocalDate.now()
-    val oldestDate = state.stepHistory.minByOrNull { it.date }?.date?.let {
-        try { LocalDate.parse(it) } catch (_: Exception) { null }
+
+    // Weekly data
+    val weekDays = history.filter {
+        try {
+            val d = LocalDate.parse(it.date)
+            !d.isBefore(today.minusDays(6))
+        } catch (_: Exception) { false }
     }
+    val weekSteps = weekDays.sumOf { it.totalSteps }
+    val weekDistance = profile.calcDistance(weekSteps)
+    val weekCalories = profile.calcCalories(weekSteps)
+    val avgSteps = if (weekDays.isNotEmpty()) weekSteps / weekDays.size else 0
+    val goalDays = weekDays.count { it.totalSteps >= profile.stepGoal }
+
+    // Monthly data
+    val monthDays = history.filter {
+        try {
+            val d = LocalDate.parse(it.date)
+            !d.isBefore(today.minusDays(29))
+        } catch (_: Exception) { false }
+    }
+
+    // Health averages
+    val validHealth = state.healthHistory.filter { it.date.startsWith("202") && it.hrAvg > 0 }
+
+    // Period selector
+    var selectedPeriod by remember { mutableIntStateOf(0) }
 
     Column(
         modifier = Modifier
@@ -47,410 +55,175 @@ fun ActivityScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
-        // 1. Date navigation header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = { selectedDate = selectedDate.minusDays(1) },
-                enabled = oldestDate == null || selectedDate > oldestDate,
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                formatDate(selectedDate),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(
-                onClick = { selectedDate = selectedDate.plusDays(1) },
-                enabled = selectedDate < today,
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Вперёд")
+        Text(
+            "Активность",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 20.dp),
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        // Period tabs
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Неделя", "Месяц").forEachIndexed { i, label ->
+                FilterChip(
+                    selected = selectedPeriod == i,
+                    onClick = { selectedPeriod = i },
+                    label = { Text(label) },
+                )
             }
         }
 
+        Spacer(Modifier.height(12.dp))
+
+        // Step history chart (tappable → opens day detail)
+        if (history.isNotEmpty()) {
+            val displayHistory = when (selectedPeriod) {
+                0 -> history.reversed().take(7)
+                else -> history.reversed().take(30)
+            }
+            StepHistoryChart(
+                history = displayHistory,
+                goal = profile.stepGoal,
+                onDayTap = { dayData ->
+                    try { onDayTap(LocalDate.parse(dayData.date)) } catch (_: Exception) {}
+                },
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Steps summary
+        val periodDays = if (selectedPeriod == 0) weekDays else monthDays
+        val periodSteps = periodDays.sumOf { it.totalSteps }
+        val periodAvg = if (periodDays.isNotEmpty()) periodSteps / periodDays.size else 0
+        val periodGoalDays = periodDays.count { it.totalSteps >= profile.stepGoal }
+        val periodDistance = profile.calcDistance(periodSteps)
+        val periodCalories = profile.calcCalories(periodSteps)
+        val periodLabel = if (selectedPeriod == 0) "За неделю" else "За месяц"
+
+        Text(periodLabel, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
 
-        // 2. Step ring for selected day
-        val daySteps = state.stepHistory.find { it.date == selectedDate.toString() }
-        val steps = daySteps?.totalSteps ?: 0
-        val progress = (steps.toFloat() / state.profile.stepGoal.coerceAtLeast(1)).coerceIn(0f, 1f)
-
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            StepRing(progress = progress, color = StepGreen, size = 160f, strokeWidth = 12f)
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "%,d".format(steps),
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = StepGreen,
-                )
-                Text(
-                    "/ ${state.profile.stepGoal}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // 3. Step breakdown
-        val walk = daySteps?.walkSteps ?: 0
-        val run = daySteps?.runSteps ?: 0
-        StepMetricCards(walk, run, steps, state.profile)
-
-        Spacer(Modifier.height(16.dp))
-
-        // 4. Hourly step chart (today only)
-        if (selectedDate == today && state.todayHourlySteps.isNotEmpty()) {
-            HourlyStepChart(state.todayHourlySteps)
-            Spacer(Modifier.height(16.dp))
-        }
-
-        // 5. HR chart for selected day
-        val dayHr = filterHrForDay(state.hrHistory, selectedDate)
-        if (dayHr.size > 2) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Пульс", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(8.dp))
-                    val downsampled = if (dayHr.size <= 150) dayHr
-                    else {
-                        val step = dayHr.size / 150
-                        dayHr.filterIndexed { i, _ -> i % step == 0 }
-                    }
-                    HrChart(
-                        data = downsampled,
-                        modifier = Modifier.fillMaxWidth().height(120.dp),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    val minHr = dayHr.minOf { it.second }
-                    val avgHr = dayHr.map { it.second }.average().toInt()
-                    val maxHr = dayHr.maxOf { it.second }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        HrLabel("Мин", minHr)
-                        HrLabel("Среднее", avgHr)
-                        HrLabel("Макс", maxHr)
-                    }
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    StatItem("Шагов", "%,d".format(periodSteps))
+                    StatItem("Среднее", "%,d".format(periodAvg))
+                    StatItem("Цель", "$periodGoalDays/${periodDays.size} дн")
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    StatItem("Дистанция", "%.1f км".format(periodDistance))
+                    StatItem("Калории", "%.0f ккал".format(periodCalories))
+                    StatItem("Лучший", "%,d".format(periodDays.maxOfOrNull { it.totalSteps } ?: 0))
                 }
             }
-            Spacer(Modifier.height(16.dp))
         }
 
-        // 6. HR summary + zones
-        val health = state.healthHistory.find { it.date == selectedDate.toString() }
-        if (health != null && health.hrAvg > 0) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Пульс (сводка)", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        HrLabel("Среднее", health.hrAvg)
-                        HrLabel("Покой", health.hrResting)
-                        HrLabel("Мин", health.hrMin)
-                        HrLabel("Макс", health.hrMax)
-                    }
-                }
-            }
+        // Streak
+        val streak = calculateStreak(history, profile.stepGoal)
+        if (streak > 0) {
             Spacer(Modifier.height(12.dp))
-
-            // HR zones
-            if (dayHr.size > 2) {
-                val zones = intArrayOf(0, 0, 0, 0, 0)
-                for ((_, bpm) in dayHr) {
-                    when {
-                        bpm < 60 -> zones[0]++
-                        bpm < 100 -> zones[1]++
-                        bpm < 140 -> zones[2]++
-                        bpm < 170 -> zones[3]++
-                        else -> zones[4]++
-                    }
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("$streak ${daysLabel(streak)} подряд цель выполнена",
+                        style = MaterialTheme.typography.bodyMedium, color = StepGreen, fontWeight = FontWeight.Bold)
                 }
-                val total = zones.sum().toFloat().coerceAtLeast(1f)
-                val zoneNames = listOf("Покой", "Лёгкая", "Жиросж.", "Кардио", "Пиковая")
-                val zoneColors = listOf(
-                    Color(0xFF90CAF9), Color(0xFF4CAF50), Color(0xFFFF9800),
-                    Color(0xFFE53935), Color(0xFF9C27B0),
-                )
+            }
+        }
+
+        // Health summary
+        if (validHealth.isNotEmpty()) {
+            val periodHealth = if (selectedPeriod == 0) validHealth.take(7) else validHealth.take(30)
+            if (periodHealth.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Text("Здоровье", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+
+                val avgHr = periodHealth.map { it.hrAvg }.average().toInt()
+                val avgResting = periodHealth.filter { it.hrResting > 0 }.let {
+                    if (it.isNotEmpty()) it.map { h -> h.hrResting }.average().toInt() else 0
+                }
+                val avgSpo2 = periodHealth.filter { it.spo2Avg > 0 }.let {
+                    if (it.isNotEmpty()) it.map { h -> h.spo2Avg }.average().toInt() else 0
+                }
+                val avgStress = periodHealth.filter { it.stressAvg > 0 }.let {
+                    if (it.isNotEmpty()) it.map { h -> h.stressAvg }.average().toInt() else 0
+                }
+                val maxHr = periodHealth.maxOf { it.hrMax }
+                val minHr = periodHealth.filter { it.hrMin > 0 }.minOfOrNull { it.hrMin } ?: 0
 
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Зоны пульса", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(8.dp))
-                        Canvas(modifier = Modifier.fillMaxWidth().height(20.dp)) {
-                            var x = 0f
-                            for (i in zones.indices) {
-                                val w = (zones[i] / total) * size.width
-                                if (w > 0) {
-                                    drawRect(zoneColors[i], Offset(x, 0f), Size(w, size.height))
-                                    x += w
-                                }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("Пульс", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$avgHr", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = HeartRed)
+                                Text("$minHr–$maxHr", style = MaterialTheme.typography.labelSmall)
                             }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            for (i in zones.indices) {
-                                if (zones[i] > 0) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Canvas(Modifier.size(8.dp)) { drawCircle(zoneColors[i]) }
-                                            Spacer(Modifier.width(2.dp))
-                                            Text(
-                                                "${(zones[i] * 100 / total).toInt()}%",
-                                                style = MaterialTheme.typography.labelSmall,
-                                            )
-                                        }
-                                        Text(
-                                            zoneNames[i],
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
+                            if (avgResting > 0) Column {
+                                Text("Покой", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$avgResting", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                            if (avgSpo2 > 0) Column {
+                                Text("SpO2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$avgSpo2%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = StandBlue)
+                            }
+                            if (avgStress > 0) Column {
+                                Text("Стресс", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("$avgStress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = CalorieOrange)
                             }
                         }
                     }
                 }
-                Spacer(Modifier.height(16.dp))
             }
         }
 
-        // 7. SpO2 card
-        if (health != null && health.spo2Avg > 0) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("SpO2", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column {
-                            Text(
-                                "${health.spo2Avg}%",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = StandBlue,
-                            )
-                            Text("Среднее", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("${health.spo2Min}% — ${health.spo2Max}%", style = MaterialTheme.typography.bodyMedium)
-                            Text("Мин — Макс", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
+        // Workouts
+        if (state.recentWorkouts.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-        }
-
-        // 8. Stress card
-        if (health != null && health.stressAvg > 0) {
-            val stressLabel = when {
-                health.stressAvg <= 25 -> "Спокойно"
-                health.stressAvg <= 50 -> "Нормально"
-                health.stressAvg <= 75 -> "Средний"
-                else -> "Высокий"
-            }
-            val stressColor = Color(0xFFFF9800)
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Стресс", style = MaterialTheme.typography.titleSmall)
-                        Text(stressLabel, style = MaterialTheme.typography.labelSmall, color = stressColor)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { health.stressAvg / 100f },
-                        modifier = Modifier.fillMaxWidth().height(8.dp),
-                        color = stressColor,
-                        trackColor = stressColor.copy(alpha = 0.15f),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("Мин ${health.stressMin}", style = MaterialTheme.typography.labelSmall)
-                        Text("Среднее ${health.stressAvg}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        Text("Макс ${health.stressMax}", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
-        // 9. Sleep card
-        val sleepDate = state.lastSleep?.let {
-            Instant.ofEpochMilli(it.wakeupTime).atZone(ZoneId.systemDefault()).toLocalDate()
-        }
-        if (sleepDate == selectedDate && state.lastSleep != null && state.lastSleep.totalMinutes > 0) {
-            val sleep = state.lastSleep
-            val bedTime = Instant.ofEpochMilli(sleep.bedTime).atZone(ZoneId.systemDefault())
-            val wakeTime = Instant.ofEpochMilli(sleep.wakeupTime).atZone(ZoneId.systemDefault())
-            val timeRange = "%02d:%02d — %02d:%02d".format(
-                bedTime.hour, bedTime.minute, wakeTime.hour, wakeTime.minute,
-            )
-            val hours = sleep.totalMinutes / 60
-            val mins = sleep.totalMinutes % 60
-
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Сон", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(timeRange, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "${hours}ч ${mins}м",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    SleepStagesBar(
-                        deep = sleep.deepMinutes,
-                        light = sleep.lightMinutes,
-                        rem = sleep.remMinutes,
-                        awake = sleep.awakeMinutes,
-                    )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
-        // 10. Workouts
-        val dayWorkouts = filterWorkoutsForDay(state.recentWorkouts, selectedDate)
-        if (dayWorkouts.isNotEmpty()) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Тренировки", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(8.dp))
-                    dayWorkouts.forEachIndexed { index, w ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(w.sportName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text("${w.durationSec / 60} мин", style = MaterialTheme.typography.bodyMedium)
-                                if (w.distanceM > 0) {
-                                    Text("%.1f км".format(w.distanceM / 1000.0), style = MaterialTheme.typography.bodyMedium)
-                                }
-                            }
-                        }
-                        if (index < dayWorkouts.lastIndex) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
-        // 11. Step history bar chart
-        if (state.stepHistory.isNotEmpty()) {
-            Text(
-                "Неделя",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("Тренировки", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
-            StepHistoryChart(
-                history = state.stepHistory.reversed().take(7),
-                goal = state.profile.stepGoal,
-                onDayTap = { dayData ->
-                    try {
-                        selectedDate = LocalDate.parse(dayData.date)
-                    } catch (_: Exception) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    state.recentWorkouts.take(5).forEachIndexed { i, w ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text(w.sportName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                val date = java.time.Instant.ofEpochMilli(w.startTime)
+                                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                                Text(date.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${w.durationSec / 60} мин", style = MaterialTheme.typography.bodyMedium)
+                                if (w.distanceM > 0) Text("%.1f км".format(w.distanceM / 1000.0), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (i < state.recentWorkouts.take(5).lastIndex) HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
                     }
-                },
-            )
-            Spacer(Modifier.height(16.dp))
-        }
-
-        // 12. Quick actions
-        Text(
-            "Быстрые действия",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            QuickActionCard("\uD83D\uDD14", "Найти часы", Modifier.weight(1f), onFindWatch)
-            QuickActionCard("\uD83E\uDDD8", "Дыхание", Modifier.weight(1f), onBreathing)
+                }
+            }
         }
 
         Spacer(Modifier.height(24.dp))
     }
 }
 
-@Composable
-private fun HrLabel(label: String, value: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            "$value",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = HeartRed,
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+private fun calculateStreak(history: List<com.pedometer.health.DayStepData>, goal: Int): Int {
+    val sorted = history.sortedByDescending { it.date }
+    var streak = 0
+    for (day in sorted) { if (day.totalSteps >= goal) streak++ else break }
+    return streak
+}
+
+private fun daysLabel(n: Int): String {
+    val mod10 = n % 10; val mod100 = n % 100
+    return when {
+        mod100 in 11..14 -> "дней"
+        mod10 == 1 -> "день"
+        mod10 in 2..4 -> "дня"
+        else -> "дней"
     }
-}
-
-private fun filterHrForDay(hrHistory: List<Pair<Long, Int>>, date: LocalDate): List<Pair<Long, Int>> {
-    val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val dayEnd = dayStart + 86400_000L
-    return hrHistory.filter { it.first in dayStart until dayEnd }
-}
-
-private fun filterWorkoutsForDay(workouts: List<WorkoutRecord>, date: LocalDate): List<WorkoutRecord> {
-    val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val dayEnd = dayStart + 86400_000L
-    return workouts.filter { it.startTime in dayStart until dayEnd }
-}
-
-private fun formatDate(date: LocalDate): String {
-    val months = arrayOf(
-        "", "января", "февраля", "марта", "апреля", "мая", "июня",
-        "июля", "августа", "сентября", "октября", "ноября", "декабря",
-    )
-    val dows = mapOf(
-        java.time.DayOfWeek.MONDAY to "пн", java.time.DayOfWeek.TUESDAY to "вт",
-        java.time.DayOfWeek.WEDNESDAY to "ср", java.time.DayOfWeek.THURSDAY to "чт",
-        java.time.DayOfWeek.FRIDAY to "пт", java.time.DayOfWeek.SATURDAY to "сб",
-        java.time.DayOfWeek.SUNDAY to "вс",
-    )
-    return "${date.dayOfMonth} ${months[date.monthValue]}, ${dows[date.dayOfWeek]}"
 }

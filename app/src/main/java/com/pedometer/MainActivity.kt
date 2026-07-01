@@ -20,6 +20,7 @@ import android.content.pm.PackageManager
 import com.pedometer.debug.DebugScreen
 import com.pedometer.music.MediaListenerService
 import com.pedometer.ui.ActivityScreen
+import com.pedometer.ui.DayDetailScreen
 import com.pedometer.ui.NotificationAppsScreen
 import com.pedometer.ui.OnboardingScreen
 import com.pedometer.ui.TodayScreen
@@ -45,6 +46,7 @@ class MainActivity : ComponentActivity() {
                 val state by vm.state.collectAsState()
                 var showDebug by remember { mutableStateOf(false) }
                 var showNotificationApps by remember { mutableStateOf(false) }
+                var showDayDetail by remember { mutableStateOf<java.time.LocalDate?>(null) }
 
                 // Onboarding on first launch
                 val prefs = remember { getSharedPreferences("app_prefs", MODE_PRIVATE) }
@@ -67,6 +69,16 @@ class MainActivity : ComponentActivity() {
                 if (showNotificationApps) {
                     androidx.activity.compose.BackHandler { showNotificationApps = false }
                     NotificationAppsScreen(onBack = { showNotificationApps = false })
+                    return@PedometerTheme
+                }
+
+                if (showDayDetail != null) {
+                    androidx.activity.compose.BackHandler { showDayDetail = null }
+                    DayDetailScreen(
+                        state = state,
+                        initialDate = showDayDetail!!,
+                        onBack = { showDayDetail = null },
+                    )
                     return@PedometerTheme
                 }
 
@@ -107,12 +119,11 @@ class MainActivity : ComponentActivity() {
                             0 -> TodayScreen(
                                 state = state,
                                 onRefresh = { vm.refreshData() },
-                                onTodayTap = { scope.launch { pagerState.animateScrollToPage(1) } },
+                                onTodayTap = { showDayDetail = java.time.LocalDate.now() },
                             )
                             1 -> ActivityScreen(
                                 state = state,
-                                onFindWatch = { vm.findWatch() },
-                                onBreathing = { vm.startBreathing() },
+                                onDayTap = { showDayDetail = it },
                             )
                             2 -> com.pedometer.ui.SettingsTab(
                                 state = state,
