@@ -283,6 +283,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         if (s.authKey.isBlank() || s.macAddress.isBlank()) return
         if (s.connectionStatus != ConnectionStatus.Disconnected) return
 
+        // Clean up any stale state from previous failed connections
+        cleanupServices()
+
         _state.value = s.copy(connectionStatus = ConnectionStatus.Connecting)
 
         // Start foreground service to keep connection alive
@@ -862,6 +865,22 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             } catch (_: Exception) {}
         }
         gpsCallback = null
+    }
+
+    private fun cleanupServices() {
+        healthService = null
+        musicService = null
+        weatherService = null
+        notificationService = null
+        watchfaceService = null
+        activitySync = null
+        dataUploadService = null
+        utilityService = null
+        alarmService = null
+        calendarService = null
+        watchSettings = null
+        protocolHandler = null
+        authService = null
     }
 
     fun disconnect() {

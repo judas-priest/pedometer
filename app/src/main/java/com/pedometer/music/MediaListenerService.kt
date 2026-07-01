@@ -40,8 +40,14 @@ class MediaListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        callTimerRunning = false
         WatchNotificationBridge.notificationListener = null
         Log.i(TAG, "NotificationListener disconnected")
+    }
+
+    override fun onDestroy() {
+        callTimerRunning = false
+        super.onDestroy()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {

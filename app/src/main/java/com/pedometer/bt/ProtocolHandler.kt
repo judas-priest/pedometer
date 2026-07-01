@@ -47,6 +47,12 @@ class ProtocolHandler(
 
     fun onDataReceived(data: ByteArray) {
         buffer.write(data)
+        // Safety: reset buffer if it grows too large (protocol desync)
+        if (buffer.size() > 1_000_000) {
+            Log.w(TAG, "Buffer exceeded 1MB (${buffer.size()}), resetting — possible protocol desync")
+            buffer.reset()
+            return
+        }
         processBuffer()
     }
 

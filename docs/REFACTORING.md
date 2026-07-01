@@ -5,9 +5,9 @@
 - [x] SppConnection: race condition server/client threads, orphan sockets — synchronized connect, tracked server/reconnect threads, interrupt on disconnect
 - [x] VoiceAssistant: BluetoothProfile proxy — SCO test deprecated (blocked by ColorOS)
 - [x] VoiceAssistant: AudioRecord leak on exception — try/finally around recorder
-- [ ] MediaListenerService: callTimerRunning not cleaned in onDestroy — add onDestroy override
-- [ ] ProtocolHandler: ByteArrayOutputStream unbounded — add max buffer size check (1MB), reset if exceeded
-- [ ] WatchViewModel connect(): stale services on reconnect — call disconnect() at start of connect()
+- [x] MediaListenerService: callTimerRunning cleaned in onDestroy + onListenerDisconnected
+- [x] ProtocolHandler: ByteArrayOutputStream capped at 1MB, reset on overflow
+- [x] WatchViewModel connect(): cleanupServices() at start to clear stale state
 
 ## High — Refactoring
 
