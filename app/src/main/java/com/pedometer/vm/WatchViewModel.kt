@@ -351,7 +351,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                                 delay(5 * 60 * 1000)
                                 try {
                                     protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
-                                    Log.d(TAG, "Keepalive: battery request sent")
+                                    // Re-fetch activity data for SpO2/stress updates
+                                    protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
+                                    Log.d(TAG, "Keepalive: battery + activity fetch sent")
                                 } catch (_: Exception) {}
                             }
                         }
@@ -669,6 +671,16 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun setActiveWatchface(id: String) { watchfaceService?.setActiveWatchface(id) }
     fun deleteWatchface(id: String) { watchfaceService?.deleteWatchface(id) }
     fun uploadWatchface(data: ByteArray) { dataUploadService?.uploadWatchface(data) }
+    fun refreshData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
+                protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
+                fetchAndSendWeather()
+            } catch (_: Exception) {}
+        }
+    }
+
     fun startBreathing() { utilityService?.sendBreathingVibration() }
 
     fun disconnect() {

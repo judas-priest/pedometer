@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
                             .padding(padding),
                     ) { page ->
                         when (page) {
-                            0 -> ConnectScreen(state = state)
+                            0 -> ConnectScreen(state = state, onRefresh = { vm.refreshData() })
                             1 -> com.pedometer.ui.ActivityTab(
                                 state = state,
                                 onCamera = { com.pedometer.util.PhoneActions.openCamera(this@MainActivity) },

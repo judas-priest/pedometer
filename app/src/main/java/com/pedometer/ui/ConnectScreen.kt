@@ -13,6 +13,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import com.pedometer.data.DailyHealth
 import com.pedometer.data.HourlySteps
 import com.pedometer.vm.WatchState
@@ -39,6 +41,7 @@ private val StandBlue = Color(0xFF42A5F5)
 @Composable
 fun ConnectScreen(
     state: WatchState,
+    onRefresh: (() -> Unit)? = null,
 ) {
     var selectedDay by remember { mutableStateOf<com.pedometer.health.DayStepData?>(null) }
     var healthDetailDate by remember { mutableStateOf<String?>(null) }
@@ -71,10 +74,18 @@ fun ConnectScreen(
         androidx.activity.compose.BackHandler { selectedDay = null }
         val isToday = selectedDay!!.date == java.time.LocalDate.now().toString()
         val history = state.stepHistory
+        val dayDate = selectedDay!!.date
+        val dayHealth = state.healthHistory.find { it.date == dayDate }
+        val dayStart = try {
+            java.time.LocalDate.parse(dayDate).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        } catch (_: Exception) { 0L }
+        val dayHrData = state.hrHistory.filter { it.first in dayStart until dayStart + 86400_000L }
         DayDetailScreen(
             day = selectedDay!!,
             profile = state.profile,
             hourlySteps = if (isToday) state.todayHourlySteps else emptyList(),
+            health = dayHealth,
+            hrData = dayHrData,
             onBack = { selectedDay = null },
             onPrevDay = {
                 val idx = history.indexOfFirst { it.date == selectedDay!!.date }
@@ -90,6 +101,20 @@ fun ConnectScreen(
         return
     }
 
+    var isRefreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            onRefresh?.invoke()
+            scope.launch {
+                kotlinx.coroutines.delay(2000)
+                isRefreshing = false
+            }
+        },
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -462,6 +487,7 @@ fun ConnectScreen(
 
         Spacer(Modifier.height(24.dp))
     }
+    } // PullToRefreshBox
 }
 
 @Composable
@@ -667,6 +693,8 @@ fun DayDetailScreen(
     day: com.pedometer.health.DayStepData,
     profile: com.pedometer.health.UserProfile = com.pedometer.health.UserProfile(),
     hourlySteps: List<HourlySteps> = emptyList(),
+    health: DailyHealth? = null,
+    hrData: List<Pair<Long, Int>> = emptyList(),
     onBack: () -> Unit,
     onPrevDay: () -> Unit = {},
     onNextDay: () -> Unit = {},
@@ -783,6 +811,65 @@ fun DayDetailScreen(
             Spacer(Modifier.height(24.dp))
             HourlyStepChart(hourlySteps = hourlySteps)
         }
+
+        // Health data for this day
+        if (health != null && health.hrAvg > 0) {
+            Spacer(Modifier.height(16.dp))
+            // HR chart
+            if (hrData.size > 2) {
+                val downsampled = if (hrData.size <= 150) hrData
+                else {
+                    val step = hrData.size / 150
+                    hrData.filterIndexed { i, _ -> i % step == 0 }
+                }
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Пульс", style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.height(8.dp))
+                        HrChart(data = downsampled, modifier = Modifier.fillMaxWidth().height(100.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Мин ${health.hrMin}", style = MaterialTheme.typography.labelSmall)
+                            Text("Среднее ${health.hrAvg}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text("Покой ${health.hrResting}", style = MaterialTheme.typography.labelSmall)
+                            Text("Макс ${health.hrMax}", style = MaterialTheme.typography.labelSmall, color = HeartRed)
+                        }
+                    }
+                }
+            }
+
+            // SpO2
+            if (health.spo2Avg > 0) {
+                Spacer(Modifier.height(8.dp))
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("SpO2", style = MaterialTheme.typography.titleSmall)
+                        Text("${health.spo2Avg}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = StandBlue)
+                    }
+                }
+            }
+
+            // Stress
+            if (health.stressAvg > 0) {
+                Spacer(Modifier.height(8.dp))
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Стресс", style = MaterialTheme.typography.titleSmall)
+                            Text("${health.stressAvg}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = CalorieOrange)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { health.stressAvg / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = CalorieOrange,
+                            trackColor = CalorieOrange.copy(alpha = 0.15f),
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(24.dp))
         }
     }

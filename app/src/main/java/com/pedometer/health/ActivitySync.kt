@@ -237,6 +237,8 @@ class ActivitySync(
                     parseDailySummary(fileId, data)
                 info.type == 0 && info.subtype == 3 && info.detailType == 0 ->
                     parseSleepStages(fileId, data)
+                info.type == 0 && info.subtype == 8 ->
+                    parseSleepDetails(fileId, data)
                 info.type == 0 && info.subtype == 6 ->
                     parseManualSamples(fileId, data)
                 info.type == 1 && info.detailType == 1 ->
@@ -533,24 +535,131 @@ class ActivitySync(
 
     private fun parseManualSamples(fileId: ByteArray, data: ByteArray) {
         // Manual SpO2/stress measurements — subtype=6
-        if (data.size < 12) return
+        // Format per record: timestamp(4) + heartRate(1) + type(1) + value(1) = 7 bytes
+        // type: 2=SpO2, 1=stress
+        if (data.size < 15) return // 8 header + 7 record min
 
-        // Scan all bytes for SpO2 values (80-100 range)
-        var foundSpO2 = 0
-        for (i in 8 until data.size - 4) {
-            val v = data[i].toInt() and 0xFF
-            if (v in 80..100) {
-                foundSpO2 = v
-                Log.i(TAG, "SpO2 from manual sample: $v%")
+        val rawHex = data.copyOfRange(8, minOf(data.size, 30))
+            .joinToString(" ") { "%02x".format(it) }
+        Log.i(TAG, "Manual samples raw: $rawHex (total ${data.size} bytes)")
+
+        val dataEnd = data.size - 4 // exclude CRC32
+        var pos = 8
+
+        while (pos + 7 <= dataEnd) {
+            val bb = ByteBuffer.wrap(data, pos, 7).order(ByteOrder.LITTLE_ENDIAN)
+            val ts = bb.int.toLong() and 0xFFFFFFFFL
+            val hr = bb.get().toInt() and 0xFF
+            val type = bb.get().toInt() and 0xFF
+            val value = bb.get().toInt() and 0xFF
+            pos += 7
+
+            Log.i(TAG, "Manual sample: ts=$ts hr=$hr type=$type value=$value")
+
+            // Use current time for DB storage since file timestamps are non-standard
+            val now = System.currentTimeMillis() / 1000
+
+            when (type) {
+                2 -> {
+                    if (value in 70..100) {
+                        Log.i(TAG, "SpO2: $value% (HR=$hr)")
+                        onDailySummary(DailySummary(
+                            date = now, spo2Avg = value, spo2Max = value, spo2Min = value,
+                        ))
+                    }
+                }
+                3 -> {
+                    if (value in 1..100) {
+                        Log.i(TAG, "Stress: $value (HR=$hr)")
+                        onDailySummary(DailySummary(
+                            date = now, stressAvg = value, stressMax = value, stressMin = value,
+                        ))
+                    }
+                }
+                else -> Log.d(TAG, "Manual type=$type value=$value")
+            }
+        }
+    }
+
+    private fun parseSleepDetails(fileId: ByteArray, data: ByteArray) {
+        // ACTIVITY_SLEEP (subtype=8) — detailed sleep data with HR, SpO2, stages
+        if (data.size < 20) return
+        val info = decodeFileId(fileId)
+
+        val headerSize = when {
+            info.version >= 5 -> 2
+            else -> 1
+        }
+
+        val bb = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        bb.position(8) // skip fileId + padding
+
+        val header = ByteArray(headerSize)
+        bb.get(header)
+
+        val isAwake = bb.get().toInt() and 0xFF
+        val bedTime = bb.int.toLong() and 0xFFFFFFFFL
+        val wakeupTime = bb.int.toLong() and 0xFFFFFFFFL
+
+        if (bedTime == 0L || wakeupTime == 0L) {
+            Log.w(TAG, "Sleep details: empty bed/wake times")
+            return
+        }
+
+        val totalMinutes = ((wakeupTime - bedTime) / 60).toInt()
+        Log.i(TAG, "Sleep details: bed=${bedTime} wake=${wakeupTime} total=${totalMinutes}min isAwake=$isAwake")
+
+        // Skip quality byte for v4+
+        if (info.version >= 4 && bb.remaining() > 0) bb.get()
+
+        // Skip extra bytes for v5
+        if (info.version >= 5 && bb.remaining() >= 17) {
+            bb.position(bb.position() + 9) // unknown
+            bb.int // bedTime2
+            bb.int // wakeupTime2
+        }
+
+        // Try to read HR samples
+        val hrSamples = mutableListOf<HeartRateSample>()
+        if (bb.remaining() >= 4 && headerHasField(header, 0)) {
+            val unit = bb.short.toInt() and 0xFFFF // sample rate in seconds
+            val count = bb.short.toInt() and 0xFFFF
+            if (count > 0 && bb.remaining() >= 4 + count) {
+                val firstRecordTime = if (info.version >= 2) bb.int.toLong() and 0xFFFFFFFFL else bedTime
+                for (i in 0 until count) {
+                    if (bb.remaining() < 1) break
+                    val hr = bb.get().toInt() and 0xFF
+                    if (hr > 0 && hr < 255) {
+                        hrSamples.add(HeartRateSample(
+                            timestamp = (firstRecordTime + i * unit) * 1000,
+                            bpm = hr
+                        ))
+                    }
+                }
+                Log.i(TAG, "Sleep HR: ${hrSamples.size} samples (unit=${unit}s)")
             }
         }
 
-        if (foundSpO2 > 0) {
-            onDailySummary(DailySummary(
-                date = System.currentTimeMillis() / 1000,
-                spo2Avg = foundSpO2, spo2Max = foundSpO2, spo2Min = foundSpO2,
-            ))
-        }
+        // Create sleep data (without detailed stage durations — those come from subtype=3)
+        val sleep = SleepData(
+            bedTime = bedTime * 1000,
+            wakeupTime = wakeupTime * 1000,
+            totalMinutes = totalMinutes,
+            deepMinutes = 0,
+            lightMinutes = 0,
+            remMinutes = 0,
+            awakeMinutes = 0,
+        )
+
+        onSleepData(sleep)
+        if (hrSamples.isNotEmpty()) onHeartRateSamples(hrSamples)
+    }
+
+    private fun headerHasField(header: ByteArray, index: Int): Boolean {
+        if (header.isEmpty()) return false
+        val byteIdx = index / 8
+        val bitIdx = index % 8
+        return byteIdx < header.size && (header[byteIdx].toInt() and (1 shl bitIdx)) != 0
     }
 
     private fun parseSleepStages(fileId: ByteArray, data: ByteArray) {
