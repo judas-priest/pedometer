@@ -72,15 +72,6 @@ class MainActivity : ComponentActivity() {
                     return@PedometerTheme
                 }
 
-                if (showDayDetail != null) {
-                    androidx.activity.compose.BackHandler { showDayDetail = null }
-                    DayDetailScreen(
-                        state = state,
-                        initialDate = showDayDetail!!,
-                        onBack = { showDayDetail = null },
-                    )
-                    return@PedometerTheme
-                }
 
                 val pagerState = rememberPagerState(pageCount = { 3 })
                 val scope = rememberCoroutineScope()
@@ -116,14 +107,26 @@ class MainActivity : ComponentActivity() {
                             .padding(padding),
                     ) { page ->
                         when (page) {
-                            0 -> TodayScreen(
-                                state = state,
-                                onRefresh = { vm.refreshData() },
-                                onTodayTap = { showDayDetail = java.time.LocalDate.now() },
-                            )
+                            0 -> if (showDayDetail != null) {
+                                androidx.activity.compose.BackHandler { showDayDetail = null }
+                                DayDetailScreen(
+                                    state = state,
+                                    initialDate = showDayDetail!!,
+                                    onBack = { showDayDetail = null },
+                                )
+                            } else {
+                                TodayScreen(
+                                    state = state,
+                                    onRefresh = { vm.refreshData() },
+                                    onTodayTap = { showDayDetail = java.time.LocalDate.now() },
+                                )
+                            }
                             1 -> ActivityScreen(
                                 state = state,
-                                onDayTap = { showDayDetail = it },
+                                onDayTap = {
+                                    showDayDetail = it
+                                    scope.launch { pagerState.animateScrollToPage(0) }
+                                },
                             )
                             2 -> com.pedometer.ui.SettingsTab(
                                 state = state,

@@ -134,19 +134,25 @@ fun ActivityScreen(
             }
         }
 
-        // Health summary
+        // Health summary — filtered by same period as steps
         if (validHealth.isNotEmpty()) {
-            val periodHealth = if (selectedPeriod == 0) validHealth.take(7) else validHealth.take(30)
+            val periodDaysCount = if (selectedPeriod == 0) 6 else 29
+            val periodHealth = validHealth.filter {
+                try {
+                    val d = LocalDate.parse(it.date)
+                    !d.isBefore(today.minusDays(periodDaysCount.toLong()))
+                } catch (_: Exception) { false }
+            }
             if (periodHealth.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
-                Text("Здоровье", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Здоровье (${periodHealth.size} дн.)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
 
                 val avgHr = periodHealth.map { it.hrAvg }.average().toInt()
                 val avgResting = periodHealth.filter { it.hrResting > 0 }.let {
                     if (it.isNotEmpty()) it.map { h -> h.hrResting }.average().toInt() else 0
                 }
-                val avgSpo2 = periodHealth.filter { it.spo2Avg > 0 }.let {
+                val avgSpo2 = periodHealth.filter { it.spo2Avg in 1..100 }.let {
                     if (it.isNotEmpty()) it.map { h -> h.spo2Avg }.average().toInt() else 0
                 }
                 val avgStress = periodHealth.filter { it.stressAvg > 0 }.let {

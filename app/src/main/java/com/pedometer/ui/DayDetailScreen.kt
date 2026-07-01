@@ -44,32 +44,51 @@ fun DayDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .verticalScroll(rememberScrollState()),
     ) {
-        // 1. Date navigation header
+        // Back button + title (no horizontal padding — flush left)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+            }
+            Text(
+                "Активность за день",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        // Content with padding
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+
+        // Date navigation with chevrons
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
         ) {
             IconButton(
                 onClick = { selectedDate = selectedDate.minusDays(1) },
                 enabled = oldestDate == null || selectedDate > oldestDate,
+                modifier = Modifier.size(36.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                Text("‹", fontSize = 24.sp, color = if (oldestDate == null || selectedDate > oldestDate) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(16.dp))
             Text(
                 formatDate(selectedDate),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
             )
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(16.dp))
             IconButton(
                 onClick = { selectedDate = selectedDate.plusDays(1) },
                 enabled = selectedDate < today,
+                modifier = Modifier.size(36.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Вперёд")
+                Text("›", fontSize = 24.sp, color = if (selectedDate < today) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
             }
         }
 
@@ -373,6 +392,7 @@ fun DayDetailScreen(
         }
 
         Spacer(Modifier.height(24.dp))
+        } // inner Column with padding
     }
 }
 
