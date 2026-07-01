@@ -423,11 +423,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         phoneBaselineSteps = _state.value.phoneStepsSinceBoot
                     }
                     _state.value = _state.value.copy(
-                        watchSteps = data.steps,
-                        watchCalories = data.calories,
+                        watchSteps = if (data.steps > 0) data.steps else _state.value.watchSteps,
+                        watchCalories = if (data.calories > 0) data.calories else _state.value.watchCalories,
                         heartRate = if (data.heartRate > 0) data.heartRate else _state.value.heartRate,
-                        standingHours = data.standingHours,
-                        activeMinutes = data.activeMinutes,
+                        standingHours = if (data.standingHours > 0) data.standingHours else _state.value.standingHours,
+                        activeMinutes = if (data.activeMinutes > 0) data.activeMinutes else _state.value.activeMinutes,
                     )
                     // Persist heart rate to Room DB (max once per minute)
                     val now = System.currentTimeMillis()
