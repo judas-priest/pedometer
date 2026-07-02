@@ -153,25 +153,25 @@ fun ActivityScreen(
                 // HR chart
                 if (periodHealth.any { it.hrAvg > 0 }) {
                     Spacer(Modifier.height(16.dp))
-                    HealthMiniChart("Пульс", periodHealth, { it.hrAvg }, HeartRed, "уд/мин")
+                    HealthBarChart("Пульс", periodHealth, { it.hrAvg }, HeartRed, "уд/мин")
                 }
 
                 // SpO2 chart
                 if (periodHealth.any { it.spo2Avg in 1..100 }) {
                     Spacer(Modifier.height(12.dp))
-                    HealthMiniChart("SpO2", periodHealth.filter { it.spo2Avg in 1..100 }, { it.spo2Avg }, StandBlue, "%")
+                    HealthBarChart("SpO2", periodHealth.filter { it.spo2Avg in 1..100 }, { it.spo2Avg }, StandBlue, "%")
                 }
 
                 // Stress chart
                 if (periodHealth.any { it.stressAvg > 0 }) {
                     Spacer(Modifier.height(12.dp))
-                    HealthMiniChart("Стресс", periodHealth.filter { it.stressAvg > 0 }, { it.stressAvg }, CalorieOrange, "")
+                    HealthBarChart("Стресс", periodHealth.filter { it.stressAvg > 0 }, { it.stressAvg }, CalorieOrange, "")
                 }
 
                 // Resting HR chart
                 if (periodHealth.any { it.hrResting > 0 }) {
                     Spacer(Modifier.height(12.dp))
-                    HealthMiniChart("Пульс покоя", periodHealth.filter { it.hrResting > 0 }, { it.hrResting }, HeartRed, "уд/мин")
+                    HealthBarChart("Пульс покоя", periodHealth.filter { it.hrResting > 0 }, { it.hrResting }, HeartRed, "уд/мин")
                 }
             }
 
@@ -230,44 +230,4 @@ private fun daysLabel(n: Int): String {
     }
 }
 
-@Composable
-private fun HealthMiniChart(
-    title: String,
-    data: List<DailyHealth>,
-    getValue: (DailyHealth) -> Int,
-    color: Color,
-    unit: String,
-) {
-    val values = data.map { getValue(it) }
-    val maxVal = values.max().toFloat().coerceAtLeast(1f)
-    val avg = values.average().toInt()
-
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text("$avg $unit", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)
-            }
-            Spacer(Modifier.height(8.dp))
-            Canvas(modifier = Modifier.fillMaxWidth().height(60.dp)) {
-                val barW = (size.width / data.size) - 6f
-                data.forEachIndexed { i, _ ->
-                    val v = values[i]
-                    val h = (v / maxVal) * size.height * 0.9f
-                    val x = i * (barW + 6f) + 3f
-                    drawRect(color.copy(alpha = 0.8f), Offset(x, size.height - h), Size(barW, h))
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                data.forEach { h ->
-                    val label = try {
-                        val d = java.time.LocalDate.parse(h.date)
-                        "%d.%02d".format(d.dayOfMonth, d.monthValue)
-                    } catch (_: Exception) { "" }
-                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
-}
+// HealthMiniChart removed — use HealthBarChart from components.Charts

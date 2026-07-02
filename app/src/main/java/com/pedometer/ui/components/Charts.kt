@@ -364,3 +364,59 @@ fun SleepStagesBar(deep: Int, light: Int, rem: Int, awake: Int, modifier: Modifi
         }
     }
 }
+
+// ── HealthBarChart — reusable bar chart for daily health metrics ──────────────
+
+@Composable
+fun HealthBarChart(
+    title: String,
+    data: List<com.pedometer.data.DailyHealth>,
+    getValue: (com.pedometer.data.DailyHealth) -> Int,
+    color: Color,
+    unit: String,
+    showStats: Boolean = true,
+    chartHeight: Int = 100,
+    modifier: Modifier = Modifier,
+) {
+    if (data.isEmpty()) return
+    val values = data.map { getValue(it) }
+    val maxVal = values.max().toFloat().coerceAtLeast(1f)
+    val avg = values.average().toInt()
+
+    ElevatedCard(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text("$avg $unit", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)
+            }
+
+            if (showStats) {
+                Spacer(Modifier.height(4.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Мин ${values.min()}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text("Макс ${values.max()}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Canvas(modifier = Modifier.fillMaxWidth().height(chartHeight.dp)) {
+                val barW = (size.width / data.size) - 6f
+                values.forEachIndexed { i, v ->
+                    val h = (v / maxVal) * size.height * 0.9f
+                    val x = i * (barW + 6f) + 3f
+                    drawRect(color.copy(alpha = 0.8f), Offset(x, size.height - h), Size(barW, h))
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                data.forEach { h ->
+                    val label = try {
+                        val d = java.time.LocalDate.parse(h.date)
+                        "%d.%02d".format(d.dayOfMonth, d.monthValue)
+                    } catch (_: Exception) { "" }
+                    Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+            }
+        }
+    }
+}

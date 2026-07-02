@@ -335,14 +335,14 @@ private fun MetricDetailScreen(
                         Spacer(Modifier.height(16.dp))
                         Text("За неделю", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
-                        WeeklyBarChartFull(hrHistory, { it.hrAvg }, HeartRed, "уд/мин")
+                        HealthBarChart("", hrHistory, { it.hrAvg }, HeartRed, "уд/мин")
                     }
                 }
                 "spo2" -> {
                     val spo2Data = healthHistory.filter { it.spo2Avg in 1..100 }.sortedBy { it.date }.takeLast(14)
                     Spacer(Modifier.height(16.dp))
                     if (spo2Data.isNotEmpty()) {
-                        WeeklyBarChartFull(spo2Data, { it.spo2Avg }, StandBlue, "%")
+                        HealthBarChart("", spo2Data, { it.spo2Avg }, StandBlue, "%")
                     } else {
                         Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -351,7 +351,7 @@ private fun MetricDetailScreen(
                     val stressData = healthHistory.filter { it.stressAvg > 0 }.sortedBy { it.date }.takeLast(14)
                     Spacer(Modifier.height(16.dp))
                     if (stressData.isNotEmpty()) {
-                        WeeklyBarChartFull(stressData, { it.stressAvg }, CalorieOrange, "")
+                        HealthBarChart("", stressData, { it.stressAvg }, CalorieOrange, "")
                     } else {
                         Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -360,7 +360,7 @@ private fun MetricDetailScreen(
                     val restData = healthHistory.filter { it.hrResting > 0 }.sortedBy { it.date }.takeLast(14)
                     Spacer(Modifier.height(16.dp))
                     if (restData.isNotEmpty()) {
-                        WeeklyBarChartFull(restData, { it.hrResting }, HeartRed, "уд/мин")
+                        HealthBarChart("", restData, { it.hrResting }, HeartRed, "уд/мин")
                     } else {
                         Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -371,47 +371,4 @@ private fun MetricDetailScreen(
     }
 }
 
-@Composable
-private fun WeeklyBarChartFull(
-    data: List<DailyHealth>,
-    getValue: (DailyHealth) -> Int,
-    color: Color,
-    unit: String,
-) {
-    val values = data.map { getValue(it) }
-    val maxVal = values.max().toFloat().coerceAtLeast(1f)
-    val minVal = values.min()
-    val avg = values.average().toInt()
-
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                StatItem("Мин", "$minVal")
-                StatItem("Среднее", "$avg")
-                StatItem("Макс", "${values.max()}")
-            }
-            Spacer(Modifier.height(12.dp))
-
-            Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-                val barW = (size.width / data.size) - 6f
-                data.forEachIndexed { i, _ ->
-                    val v = values[i]
-                    val h = (v / maxVal) * size.height * 0.85f
-                    val x = i * (barW + 6f) + 3f
-                    drawRect(color.copy(alpha = 0.8f), Offset(x, size.height - h), Size(barW, h))
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                data.forEach { h ->
-                    val dayLabel = try {
-                        val d = java.time.LocalDate.parse(h.date)
-                        "%d.%02d".format(d.dayOfMonth, d.monthValue)
-                    } catch (_: Exception) { "" }
-                    Text(dayLabel, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                }
-            }
-        }
-    }
-}
+// WeeklyBarChartFull removed — use HealthBarChart from components.Charts
