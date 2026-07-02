@@ -106,7 +106,6 @@ class StepCounterService : Service(), SensorEventListener {
             }
         }
         sessionSteps = total - lastStepCounterValue
-        updateNotification("$sessionSteps шагов за сессию")
     }
 
     private var detectorStepsToday = 0L
@@ -133,9 +132,6 @@ class StepCounterService : Service(), SensorEventListener {
             flushPendingSteps()
         }
 
-        if (detectorStepsToday % 50 == 0L) {
-            updateNotification("$detectorStepsToday шагов сегодня (сервис)")
-        }
     }
 
     private fun flushPendingSteps() {

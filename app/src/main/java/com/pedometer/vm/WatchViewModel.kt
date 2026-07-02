@@ -124,6 +124,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private val healthConnectReader = HealthConnectReader(app)
     private var userProfile = UserProfile.load(app)
     private var stepPollingJob: Job? = null
+    private var weatherJob: Job? = null
+    private var lastWeatherFetchTime = 0L
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -159,8 +161,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 onAppBackground()
             }
         }
-        // Start foreground polling immediately (app launches in foreground)
-        startStepPolling()
+        // App launches in foreground — trigger initial refresh + polling
+        onAppForeground()
 
         // Start phone step counter (event-driven, always active)
         phoneStepCounter.start()
@@ -175,8 +177,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        // Initial full refresh
-        refreshData()
     }
 
     fun updateProfile(profile: UserProfile) {
@@ -186,14 +186,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         LlmClient.apiKey = profile.llmApiKey
         LlmClient.apiUrl = profile.llmApiUrl
 
-        // Start/stop background service
-        val context = getApplication<Application>()
-        val intent = android.content.Intent(context, com.pedometer.service.StepCounterService::class.java)
-        if (profile.backgroundServiceEnabled) {
-            context.startForegroundService(intent)
-        } else {
-            context.stopService(intent)
-        }
     }
 
     fun updateAuthKey(key: String) {
@@ -281,25 +273,39 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         reconnectAttempts = 0 // reset on successful connect
                         WatchNotificationBridge.protocolHandler = protocolHandler
 
+                        // Update notification text
+                        try {
+                            val ctx = getApplication<Application>()
+                            val svc = android.content.Intent(ctx, com.pedometer.service.WatchConnectionService::class.java)
+                            (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)?.let { nm ->
+                                val pi = android.app.PendingIntent.getActivity(ctx, 0,
+                                    android.content.Intent(ctx, com.pedometer.MainActivity::class.java),
+                                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+                                val n = androidx.core.app.NotificationCompat.Builder(ctx, "pedometer_connection")
+                                    .setContentTitle("Шагомер")
+                                    .setContentText("Часы подключены")
+                                    .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+                                    .setContentIntent(pi)
+                                    .setOngoing(true)
+                                    .setSilent(true)
+                                    .build()
+                                nm.notify(1, n)
+                            }
+                        } catch (_: Exception) {}
+
                         // Periodic weather updates (every 2 hours)
-                        viewModelScope.launch(Dispatchers.IO) {
+                        weatherJob?.cancel()
+                        weatherJob = viewModelScope.launch(Dispatchers.IO) {
                             delay(2 * 60 * 60 * 1000L)
                             while (isActive && _state.value.connectionStatus == ConnectionStatus.Connected) {
-                                try { fetchAndSendWeather() } catch (_: Exception) {}
+                                try {
+                                    fetchAndSendWeather()
+                                    lastWeatherFetchTime = System.currentTimeMillis()
+                                } catch (_: Exception) {}
                                 delay(2 * 60 * 60 * 1000L)
                             }
                         }
 
-                        // Periodic battery check (keepalive, every 30 min)
-                        viewModelScope.launch(Dispatchers.IO) {
-                            while (isActive && _state.value.connectionStatus == ConnectionStatus.Connected) {
-                                delay(30 * 60 * 1000L)
-                                try {
-                                    protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
-                                    Log.d(TAG, "Keepalive: battery request sent")
-                                } catch (_: Exception) {}
-                            }
-                        }
 
                         viewModelScope.launch(Dispatchers.IO) {
                             Thread.sleep(500)
@@ -442,17 +448,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 weatherService = weather
 
                 val utility = UtilityService(handler) {
-                    // Find Phone: play loud ringtone
                     Log.i(TAG, "FIND PHONE triggered!")
-                    val ctx = getApplication<Application>()
-                    val ringtone = android.media.RingtoneManager.getRingtone(ctx,
-                        android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
-                    ringtone?.play()
-                    // Stop after 10 seconds
-                    viewModelScope.launch {
-                        delay(10000)
-                        ringtone?.stop()
-                    }
+                    startFindPhoneRingtone()
                 }
 
                 utilityService = utility
@@ -738,7 +735,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: Exception) {
                     Log.e(TAG, "StepProvider poll failed", e)
                 }
-                delay(1_000)
+                delay(10_000)
             }
         }
     }
@@ -815,8 +812,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 activitySync?.requestPast()
                 delay(500)
 
-                // 5. Weather
-                fetchAndSendWeather()
+                // 5. Weather (skip if fetched less than 30 min ago)
+                val now = System.currentTimeMillis()
+                if (now - lastWeatherFetchTime > 30 * 60 * 1000L) {
+                    fetchAndSendWeather()
+                    lastWeatherFetchTime = now
+                }
             } catch (_: Exception) {}
         }
     }
@@ -875,6 +876,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun cleanupServices() {
+        healthService?.stopRealtimeStats()
         healthService = null
         musicService = null
         weatherService = null
@@ -888,11 +890,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         watchSettings = null
         protocolHandler = null
         authService = null
+        sppConnection?.disconnect()
+        sppConnection = null
+        bleConnection?.disconnect()
+        bleConnection = null
     }
 
     fun disconnect() {
         autoReconnectEnabled = false // don't reconnect on manual disconnect
         stopGpsRelay()
+        weatherJob?.cancel()
+        weatherJob = null
         WatchNotificationBridge.protocolHandler = null
         healthService?.stopRealtimeStats()
         healthService = null

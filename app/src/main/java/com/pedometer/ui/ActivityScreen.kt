@@ -14,14 +14,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import com.pedometer.data.DailyHealth
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import com.pedometer.ui.components.*
 import com.pedometer.vm.WatchState
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityScreen(
     state: WatchState,
     onDayTap: (LocalDate) -> Unit = {},
+    onRefresh: () -> Unit = {},
 ) {
     val history = state.stepHistory
     val profile = state.profile
@@ -53,7 +58,20 @@ fun ActivityScreen(
 
     // Period selector
     var selectedPeriod by remember { mutableIntStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            onRefresh()
+            scope.launch {
+                delay(2000)
+                isRefreshing = false
+            }
+        },
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -211,6 +229,7 @@ fun ActivityScreen(
 
         Spacer(Modifier.height(24.dp))
     }
+    } // PullToRefreshBox
 }
 
 private fun calculateStreak(history: List<com.pedometer.health.DayStepData>, goal: Int): Int {

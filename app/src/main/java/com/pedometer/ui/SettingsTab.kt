@@ -219,48 +219,8 @@ fun SettingsTab(
 
         Spacer(Modifier.height(16.dp))
 
-        // Background service
-        Text("Фоновый процесс", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
-
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Фоновый сбор данных", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Почасовой график, cadence, этажи. Расходует батарею",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = profile.backgroundServiceEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                val hasPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-                                    ContextCompat.checkSelfPermission(
-                                        context, Manifest.permission.ACTIVITY_RECOGNITION
-                                    ) == PackageManager.PERMISSION_GRANTED
-                                if (hasPermission) {
-                                    onProfileChange(profile.copy(backgroundServiceEnabled = true))
-                                } else {
-                                    activityRecognitionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
-                                }
-                            } else {
-                                onProfileChange(profile.copy(backgroundServiceEnabled = false))
-                            }
-                        },
-                    )
-                }
-            }
-        }
-
-        // Battery & ColorOS survival tips
-        if (profile.backgroundServiceEnabled) {
+        // Battery & ColorOS tips (only when watch connected)
+        if (state.connectionStatus == ConnectionStatus.Connected) {
             val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as PowerManager
             val isWhitelisted = pm.isIgnoringBatteryOptimizations(context.packageName)
 
@@ -270,7 +230,7 @@ fun SettingsTab(
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Оптимизация батареи", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "Отключите оптимизацию чтобы сервис не убивался системой",
+                            "Отключите оптимизацию чтобы соединение с часами не разрывалось",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -283,31 +243,6 @@ fun SettingsTab(
                         }) {
                             Text("Отключить оптимизацию")
                         }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Автозапуск (ColorOS)", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Для стабильной работы:\n" +
-                            "1. Откройте настройки приложения\n" +
-                            "2. Включите «Автозапуск»\n" +
-                            "3. В «Расход батареи» → «Без ограничений»\n" +
-                            "4. Закрепите приложение в недавних (свайп вниз)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = {
-                        context.startActivity(Intent(
-                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.parse("package:${context.packageName}"),
-                        ))
-                    }) {
-                        Text("Настройки приложения")
                     }
                 }
             }

@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
                                     showDayDetail = it
                                     scope.launch { pagerState.animateScrollToPage(0) }
                                 },
+                                onRefresh = { vm.refreshData() },
                             )
                             2 -> com.pedometer.ui.SettingsTab(
                                 state = state,

@@ -13,16 +13,6 @@ class BootReceiver : BroadcastReceiver() {
 
             Log.i("BootReceiver", "Received ${intent.action}")
 
-            val profile = UserProfile.load(context)
-            if (profile.backgroundServiceEnabled) {
-                Log.i("BootReceiver", "Starting StepCounterService")
-                try {
-                    context.startForegroundService(Intent(context, StepCounterService::class.java))
-                } catch (e: Exception) {
-                    Log.e("BootReceiver", "Failed to start StepCounterService: ${e.message}")
-                }
-            }
-
             // Auto-start watch connection if MAC and key are saved
             val prefs = context.getSharedPreferences("pedometer_prefs", Context.MODE_PRIVATE)
             val mac = prefs.getString("mac_address", "") ?: ""
