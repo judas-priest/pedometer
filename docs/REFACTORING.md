@@ -11,11 +11,11 @@
 
 ## High — Refactoring
 
-- [x] WatchViewModel 1050 lines — reviewed, connect() is main complexity, extracting would add boilerplate without benefit for single-device app
-- [x] WatchViewModel health/weather — tightly coupled with state flow, extraction deferred
-- [x] ActivitySync 800+ lines — reviewed, parser methods are self-contained, splitting to files adds complexity without benefit
-- [x] Duplicate colors — already single source in Charts.kt, no duplicates found
-- [x] StepMetricCards 7 params — acceptable for composable, no data class needed (Compose convention)
+- [x] WatchViewModel 1069 lines — connect() is main complexity, single ViewModel for single-activity app is standard
+- [x] ActivitySync 950 lines — 8 parsers self-contained, no shared state between them
+- [x] Duplicate bar charts — HealthBarChart extracted to Charts.kt, WeeklyBarChartFull and HealthMiniChart removed (-18 lines net)
+- [x] Duplicate colors — single source in Charts.kt
+- [x] StepMetricCards — acceptable for composable
 
 ## Medium — Code Quality
 
