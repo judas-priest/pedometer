@@ -237,19 +237,43 @@ class ActivitySync(
             return
         }
 
-        val info = decodeFileId(fileId)
+        val info = com.pedometer.health.parsers.ParserUtils.decodeFileId(fileId)
         Log.i(TAG, "Processing: $info")
 
         try {
             when {
-                info.type == 0 && info.subtype == 0 && info.detailType == 0 ->
-                    parseDailyDetails(fileId, data)
-                info.type == 0 && info.subtype == 0 && info.detailType == 1 ->
-                    parseDailySummary(fileId, data)
-                info.type == 0 && info.subtype == 3 && info.detailType == 0 ->
-                    parseSleepStages(fileId, data)
-                info.type == 0 && info.subtype == 8 ->
-                    parseSleepDetails(fileId, data)
+                info.type == 0 && info.subtype == 0 && info.detailType == 0 -> {
+                    val result = com.pedometer.health.parsers.DailyDetailsParser.parse(fileId, data)
+                    if (result != null) {
+                        if (result.hrSamples.isNotEmpty()) onHeartRateSamples(result.hrSamples)
+                        if (result.hourlySteps.isNotEmpty()) {
+                            val dateStr = java.time.Instant.ofEpochSecond(info.timestamp)
+                                .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+                            onHourlySteps(dateStr, result.hourlySteps.map { (h, s) -> Pair(h, s) }.sortedBy { it.first })
+                        }
+                        if (result.totalDistanceM > 0 || result.activeMinutes > 0 || result.lastSpo2 > 0 || result.lastStress > 0) {
+                            onDailySummary(DailySummary(
+                                date = info.timestamp, distanceM = result.totalDistanceM,
+                                activeMinutes = result.activeMinutes, spo2Avg = result.lastSpo2, stressAvg = result.lastStress,
+                            ))
+                        }
+                    }
+                }
+                info.type == 0 && info.subtype == 0 && info.detailType == 1 -> {
+                    val summary = com.pedometer.health.parsers.DailySummaryParser.parse(fileId, data)
+                    if (summary != null) onDailySummary(summary)
+                }
+                info.type == 0 && info.subtype == 3 && info.detailType == 0 -> {
+                    val sleep = com.pedometer.health.parsers.SleepParser.parseSleepStages(fileId, data)
+                    if (sleep != null) onSleepData(sleep)
+                }
+                info.type == 0 && info.subtype == 8 -> {
+                    val result = com.pedometer.health.parsers.SleepParser.parseSleepDetails(fileId, data)
+                    if (result != null) {
+                        onSleepData(result.first)
+                        if (result.second.isNotEmpty()) onHeartRateSamples(result.second)
+                    }
+                }
                 info.type == 0 && info.subtype == 6 ->
                     parseManualSamples(fileId, data)
                 info.type == 1 && info.detailType == 1 ->
