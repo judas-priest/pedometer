@@ -67,10 +67,6 @@
             android:name=".service.WatchConnectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|location" />
-        <service
-            android:name=".service.StepCounterService"
-            android:exported="false"
-            android:foregroundServiceType="health" />
         <receiver
             android:name=".service.CommandReceiver"
             android:exported="true">

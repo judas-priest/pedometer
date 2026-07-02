@@ -248,5 +248,3 @@ private fun daysLabel(n: Int): String {
         else -> "дней"
     }
 }
-
-// HealthMiniChart removed — use HealthBarChart from components.Charts

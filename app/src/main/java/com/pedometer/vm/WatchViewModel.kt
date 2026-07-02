@@ -21,7 +21,6 @@ import com.pedometer.data.HourlySteps
 import com.pedometer.data.WorkoutRecord
 import com.pedometer.data.StepDatabase
 import com.pedometer.PedometerApp
-import com.pedometer.assistant.LlmClient
 import com.pedometer.health.ActivitySync
 import com.pedometer.health.HealthService
 import com.pedometer.health.DayStepData
@@ -135,9 +134,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         )
 
         _state.value = _state.value.copy(profile = userProfile)
-        LlmClient.apiKey = userProfile.llmApiKey
-        LlmClient.apiUrl = userProfile.llmApiUrl
-
         // Auto-connect if MAC and key saved
         val savedMac = _state.value.macAddress
         val savedKey = _state.value.authKey
@@ -183,8 +179,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         userProfile = profile
         UserProfile.save(getApplication(), profile)
         _state.value = _state.value.copy(profile = profile)
-        LlmClient.apiKey = profile.llmApiKey
-        LlmClient.apiUrl = profile.llmApiUrl
 
     }
 

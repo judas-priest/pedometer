@@ -59,14 +59,6 @@ fun SettingsTab(
         if (results.values.all { it }) onConnect()
     }
 
-    val activityRecognitionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            onProfileChange(state.profile.copy(backgroundServiceEnabled = true))
-        }
-    }
-
     val profile = state.profile
 
     Column(
@@ -172,45 +164,6 @@ fun SettingsTab(
                 )
                 Text(
                     "Оставьте пустым для автоопределения по GPS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        // Assistant
-        Spacer(Modifier.height(16.dp))
-        Text("Ассистент", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
-
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                var keyText by remember { mutableStateOf(profile.llmApiKey) }
-                var urlText by remember { mutableStateOf(profile.llmApiUrl) }
-                OutlinedTextField(
-                    value = urlText,
-                    onValueChange = {
-                        urlText = it
-                        onProfileChange(profile.copy(llmApiUrl = it))
-                    },
-                    label = { Text("API URL") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = keyText,
-                    onValueChange = {
-                        keyText = it
-                        onProfileChange(profile.copy(llmApiKey = it))
-                    },
-                    label = { Text("API Key") },
-                    placeholder = { Text("Без ключа = локальные ответы") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Text(
-                    "OpenAI-совместимый API (RouterAI, DeepSeek и др.)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

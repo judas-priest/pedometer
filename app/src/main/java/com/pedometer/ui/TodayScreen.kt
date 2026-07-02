@@ -370,5 +370,3 @@ private fun MetricDetailScreen(
         }
     }
 }
-
-// WeeklyBarChartFull removed — use HealthBarChart from components.Charts
