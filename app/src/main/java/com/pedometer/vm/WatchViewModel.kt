@@ -799,18 +799,20 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 } catch (_: Exception) {}
 
-                // 4. Watch data (if connected)
-                protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
-                protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
-                delay(1000)
-                activitySync?.requestPast()
-                delay(500)
+                // 4. Watch data (only if connected)
+                if (_state.value.connectionStatus == ConnectionStatus.Connected) {
+                    protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
+                    protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
+                    delay(1000)
+                    activitySync?.requestPast()
+                    delay(500)
 
-                // 5. Weather (skip if fetched less than 30 min ago)
-                val now = System.currentTimeMillis()
-                if (now - lastWeatherFetchTime > 30 * 60 * 1000L) {
-                    fetchAndSendWeather()
-                    lastWeatherFetchTime = now
+                    // 5. Weather (skip if fetched less than 30 min ago)
+                    val now = System.currentTimeMillis()
+                    if (now - lastWeatherFetchTime > 30 * 60 * 1000L) {
+                        fetchAndSendWeather()
+                        lastWeatherFetchTime = now
+                    }
                 }
             } catch (_: Exception) {}
         }
@@ -896,26 +898,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         weatherJob?.cancel()
         weatherJob = null
         WatchNotificationBridge.protocolHandler = null
-        healthService?.stopRealtimeStats()
-        healthService = null
-        musicService = null
-        weatherService = null
-        notificationService = null
-        watchfaceService = null
-        activitySync = null
-        dataUploadService = null
-        utilityService = null
-        alarmService = null
-        calendarService = null
-        watchSettings = null
-        sppConnection?.disconnect()
-        sppConnection = null
-        bleConnection?.disconnect()
-        bleConnection = null
-        protocolHandler = null
-        authService = null
+        cleanupServices()
         _state.value = _state.value.copy(connectionStatus = ConnectionStatus.Disconnected)
-        // Stop foreground service
         val ctx = getApplication<Application>()
         ctx.stopService(android.content.Intent(ctx, com.pedometer.service.WatchConnectionService::class.java))
         autoReconnectEnabled = true // re-enable for next connect
@@ -936,7 +920,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             val data = WeatherProvider.fetch(lat, lon, coords?.third ?: "Москва")
             if (data != null) {
                 weatherService?.setLocation(data.cityName)
-                Thread.sleep(300)
                 weatherService?.sendWeather(data)
 
                 val forecasts = WeatherProvider.fetchForecast(lat, lon)
@@ -999,11 +982,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             .build()
         Log.i(TAG, "Sending user info: height=${p.heightCm} weight=${p.weightKg} goal=${p.stepGoal}")
         protocolHandler?.sendCommand(cmd)
-    }
-
-    private fun requestDeviceInfo() {
-        protocolHandler?.sendCommand(CommandHelper.buildDeviceInfoRequest())
-        protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
     }
 
     private fun handleCommand(cmd: XiaomiProto.Command) {

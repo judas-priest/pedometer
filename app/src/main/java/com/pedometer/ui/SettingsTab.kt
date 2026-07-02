@@ -294,6 +294,7 @@ fun SettingsTab(
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                     perms.add(Manifest.permission.ACTIVITY_RECOGNITION)
                                 }
+                                perms.add(Manifest.permission.READ_CALL_LOG)
                                 permissionLauncher.launch(perms.toTypedArray())
                             },
                             modifier = Modifier.fillMaxWidth(),
