@@ -85,27 +85,9 @@ class HealthService(
         sendSimpleCommand(CMD_CONFIG_GOALS_GET)
         sendSimpleCommand(CMD_CONFIG_VITALITY_SCORE_GET)
 
-        // Enable SpO2 all-day tracking (value=2, not boolean true)
-        val spo2Cmd = XiaomiProto.Command.newBuilder()
-            .setType(CommandHelper.TYPE_HEALTH)
-            .setSubtype(9) // CMD_CONFIG_SPO2_SET
-            .setHealth(XiaomiProto.Health.newBuilder()
-                .setSpo2(XiaomiProto.SpO2.newBuilder()
-                    .setUnknown1(1)
-                    .setAllDayTracking(true)))
-            .build()
-        protocolHandler.sendCommand(spo2Cmd)
-
-        // Enable stress all-day tracking
-        val stressCmd = XiaomiProto.Command.newBuilder()
-            .setType(CommandHelper.TYPE_HEALTH)
-            .setSubtype(15) // CMD_CONFIG_STRESS_SET
-            .setHealth(XiaomiProto.Health.newBuilder()
-                .setStress(XiaomiProto.Stress.newBuilder()
-                    .setAllDayTracking(true)))
-            .build()
-        protocolHandler.sendCommand(stressCmd)
-        Log.i(TAG, "Enabled stress all-day tracking")
+        // Don't force SpO2/stress all-day tracking — it drains watch battery significantly
+        // User can enable in watch settings if needed
+        Log.i(TAG, "SpO2/stress all-day tracking NOT forced (battery optimization)")
 
         // Fetch today's + past activity data
         protocolHandler.sendCommand(CommandHelper.buildActivityFetchToday())

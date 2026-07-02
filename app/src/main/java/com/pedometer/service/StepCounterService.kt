@@ -110,23 +110,45 @@ class StepCounterService : Service(), SensorEventListener {
     }
 
     private var detectorStepsToday = 0L
+    private val pendingSteps = mutableMapOf<Int, Int>() // hour -> steps
+    private var pendingDate = LocalDate.now().toString()
 
     private fun handleStepDetector() {
-        // Each call = 1 step detected. Bucket into hourly_steps.
         val now = LocalDateTime.now()
         val date = now.toLocalDate().toString()
         val hour = now.hour
         detectorStepsToday++
 
-        scope.launch {
-            val dao = db.stepDao()
-            dao.insertHourly(HourlySteps(date = date, hour = hour, steps = 0))
-            dao.incrementHourly(date, hour, 1)
+        // Date changed — flush old data
+        if (date != pendingDate) {
+            flushPendingSteps()
+            pendingDate = date
         }
 
-        // Update notification every 50 steps to avoid excessive updates
+        pendingSteps[hour] = (pendingSteps[hour] ?: 0) + 1
+
+        // Flush to Room every 60 steps (~1 min of walking)
+        val totalPending = pendingSteps.values.sum()
+        if (totalPending >= 60) {
+            flushPendingSteps()
+        }
+
         if (detectorStepsToday % 50 == 0L) {
             updateNotification("$detectorStepsToday шагов сегодня (сервис)")
+        }
+    }
+
+    private fun flushPendingSteps() {
+        if (pendingSteps.isEmpty()) return
+        val date = pendingDate
+        val steps = pendingSteps.toMap()
+        pendingSteps.clear()
+        scope.launch {
+            val dao = db.stepDao()
+            for ((hour, count) in steps) {
+                dao.insertHourly(HourlySteps(date = date, hour = hour, steps = 0))
+                dao.incrementHourly(date, hour, count)
+            }
         }
     }
 
@@ -161,6 +183,7 @@ class StepCounterService : Service(), SensorEventListener {
     }
 
     override fun onDestroy() {
+        flushPendingSteps()
         sensorManager?.unregisterListener(this)
         scope.cancel()
         Log.i(TAG, "Step counter service stopped")

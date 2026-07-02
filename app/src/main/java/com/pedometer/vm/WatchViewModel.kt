@@ -45,6 +45,7 @@ import com.pedometer.weather.WeatherService
 import com.pedometer.proto.CommandHelper
 import com.pedometer.proto.XiaomiProto
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -122,6 +123,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
     private var userProfile = UserProfile.load(app)
+    private var stepPollingJob: Job? = null
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -145,86 +147,22 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        // Periodically refresh step data from StepProvider (every 10s while active)
-        viewModelScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                try {
-                    val today = StepProviderReader.readToday(app)
-                    val history = StepProviderReader.readHistory(app, 30)
-                    if (today != null) {
-                        _state.value = _state.value.copy(
-                            todayWalkSteps = today.walkSteps,
-                            todayRunSteps = today.runSteps,
-                            todayWalkMinutes = today.walkMinutes,
-                            stepHistory = history,
-                        )
-                        // Persist daily data to Room
-                        val dao = StepDatabase.get(app).stepDao()
-                        dao.upsertDaily(DailySteps(
-                            date = today.date,
-                            totalSteps = today.totalSteps,
-                            walkSteps = today.walkSteps,
-                            runSteps = today.runSteps,
-                            calories = userProfile.calcCalories(today.totalSteps),
-                            distanceKm = userProfile.calcDistance(today.totalSteps),
-                        ))
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "StepProvider failed", e)
+        // Lifecycle: step polling + refresh on foreground/background
+        PedometerApp.onForegroundChanged = { inForeground ->
+            if (inForeground) {
+                if (_state.value.connectionStatus == ConnectionStatus.Connected) {
+                    healthService?.startRealtimeStats()
                 }
-                delay(10_000)
+                onAppForeground()
+            } else {
+                healthService?.stopRealtimeStats()
+                onAppBackground()
             }
         }
+        // Start foreground polling immediately (app launches in foreground)
+        startStepPolling()
 
-        // Periodically refresh hourly step data from Room DB (every 10s)
-        viewModelScope.launch(Dispatchers.IO) {
-            val dao = StepDatabase.get(app).stepDao()
-            while (isActive) {
-                try {
-                    val today = java.time.LocalDate.now().toString()
-                    val hourly = dao.getHourlyForDay(today)
-                    val health = dao.getDailyHealth(today)
-                    val lastSleep = dao.getLastSleep()
-                    val workouts = dao.getRecentWorkouts(10)
-                    val weekAgo = java.time.LocalDate.now().minusDays(7)
-                        .atStartOfDay(java.time.ZoneId.systemDefault())
-                        .toInstant().toEpochMilli()
-                    val hrRecords = dao.getHeartRateSince(weekAgo)
-                    val hrHistory = hrRecords.map { Pair(it.timestamp, it.bpm) }
-                    _state.value = _state.value.copy(
-                        todayHourlySteps = hourly,
-                        spo2 = health?.spo2Avg ?: _state.value.spo2,
-                        stress = health?.stressAvg ?: _state.value.stress,
-                        hrResting = health?.hrResting ?: _state.value.hrResting,
-                        lastSleep = lastSleep ?: _state.value.lastSleep,
-                        recentWorkouts = workouts,
-                        hrHistory = if (hrHistory.isNotEmpty()) hrHistory else _state.value.hrHistory,
-                        healthHistory = dao.getRecentHealth(30),
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "Hourly steps read failed", e)
-                }
-                delay(10_000)
-            }
-        }
-
-        // Read Health Connect data
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                if (healthConnectReader.isAvailable()) {
-                    val hcSteps = healthConnectReader.readTodaySteps()
-                    val hcHR = healthConnectReader.readLatestHeartRate()
-                    _state.value = _state.value.copy(
-                        healthConnectSteps = hcSteps,
-                        healthConnectHR = hcHR,
-                    )
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Health Connect failed", e)
-            }
-        }
-
-        // Start phone step counter
+        // Start phone step counter (event-driven, always active)
         phoneStepCounter.start()
         viewModelScope.launch {
             phoneStepCounter.stepsSinceStart.collect { steps ->
@@ -236,6 +174,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = _state.value.copy(phoneStepsSinceBoot = total)
             }
         }
+
+        // Initial full refresh
+        refreshData()
     }
 
     fun updateProfile(profile: UserProfile) {
@@ -340,34 +281,23 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         reconnectAttempts = 0 // reset on successful connect
                         WatchNotificationBridge.protocolHandler = protocolHandler
 
-                        // Periodic weather updates (every 30 min)
+                        // Periodic weather updates (every 2 hours)
                         viewModelScope.launch(Dispatchers.IO) {
-                            delay(30 * 60 * 1000)
+                            delay(2 * 60 * 60 * 1000L)
                             while (isActive && _state.value.connectionStatus == ConnectionStatus.Connected) {
                                 try { fetchAndSendWeather() } catch (_: Exception) {}
-                                delay(30 * 60 * 1000)
+                                delay(2 * 60 * 60 * 1000L)
                             }
                         }
 
-                        // Periodic battery check (keepalive, every 15 min — lightweight)
+                        // Periodic battery check (keepalive, every 30 min)
                         viewModelScope.launch(Dispatchers.IO) {
                             while (isActive && _state.value.connectionStatus == ConnectionStatus.Connected) {
-                                delay(15 * 60 * 1000)
+                                delay(30 * 60 * 1000L)
                                 try {
                                     protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
                                     Log.d(TAG, "Keepalive: battery request sent")
                                 } catch (_: Exception) {}
-                            }
-                        }
-
-                        // Start/stop realtime stats based on foreground/background
-                        PedometerApp.onForegroundChanged = { inForeground ->
-                            if (inForeground && _state.value.connectionStatus == ConnectionStatus.Connected) {
-                                Log.i(TAG, "Foreground → starting realtime stats")
-                                healthService?.startRealtimeStats()
-                            } else {
-                                Log.i(TAG, "Background → stopping realtime stats")
-                                healthService?.stopRealtimeStats()
                             }
                         }
 
@@ -608,6 +538,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             watchCalories = if (summary.calories > 0) summary.calories else _state.value.watchCalories,
                             watchDistanceM = if (summary.distanceM > 0) summary.distanceM else _state.value.watchDistanceM,
                             activeMinutes = if (summary.activeMinutes > 0) summary.activeMinutes else _state.value.activeMinutes,
+                            spo2 = if (summary.spo2Avg > 0) summary.spo2Avg else _state.value.spo2,
+                            stress = if (summary.stressAvg > 0) summary.stressAvg else _state.value.stress,
+                            hrResting = if (summary.hrResting > 0) summary.hrResting else _state.value.hrResting,
                         )
                         viewModelScope.launch(Dispatchers.IO) {
                             try {
@@ -777,21 +710,60 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun setActiveWatchface(id: String) { watchfaceService?.setActiveWatchface(id) }
     fun deleteWatchface(id: String) { watchfaceService?.deleteWatchface(id) }
     fun uploadWatchface(data: ByteArray) { dataUploadService?.uploadWatchface(data) }
+    fun onAppForeground() {
+        Log.i(TAG, "App foreground — starting step polling + full refresh")
+        refreshData()
+        startStepPolling()
+    }
+
+    fun onAppBackground() {
+        Log.i(TAG, "App background — stopping step polling")
+        stopStepPolling()
+    }
+
+    private fun startStepPolling() {
+        if (stepPollingJob?.isActive == true) return
+        stepPollingJob = viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            while (isActive) {
+                try {
+                    val today = StepProviderReader.readToday(app)
+                    if (today != null) {
+                        _state.value = _state.value.copy(
+                            todayWalkSteps = today.walkSteps,
+                            todayRunSteps = today.runSteps,
+                            todayWalkMinutes = today.walkMinutes,
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "StepProvider poll failed", e)
+                }
+                delay(1_000)
+            }
+        }
+    }
+
+    private fun stopStepPolling() {
+        stepPollingJob?.cancel()
+        stepPollingJob = null
+    }
+
     fun refreshData() {
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // 1. StepProvider (OPLUS) — обновить шаги с телефона
+                // 1. StepProvider (OPLUS)
                 val today = StepProviderReader.readToday(app)
                 val history = StepProviderReader.readHistory(app, 30)
                 if (today != null) {
                     _state.value = _state.value.copy(
                         todayWalkSteps = today.walkSteps,
                         todayRunSteps = today.runSteps,
+                        todayWalkMinutes = today.walkMinutes,
                         stepHistory = history,
                     )
                     val dao = StepDatabase.get(app).stepDao()
-                    dao.upsertDaily(com.pedometer.data.DailySteps(
+                    dao.upsertDaily(DailySteps(
                         date = today.date,
                         totalSteps = today.totalSteps,
                         walkSteps = today.walkSteps,
@@ -801,14 +773,49 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     ))
                 }
 
-                // 2. Watch data
+                // 2. Room DB — all health data
+                val dao = StepDatabase.get(app).stepDao()
+                val todayStr = java.time.LocalDate.now().toString()
+                val hourly = dao.getHourlyForDay(todayStr)
+                val health = dao.getDailyHealth(todayStr)
+                val lastSleep = dao.getLastSleep()
+                val workouts = dao.getRecentWorkouts(10)
+                val weekAgo = java.time.LocalDate.now().minusDays(7)
+                    .atStartOfDay(java.time.ZoneId.systemDefault())
+                    .toInstant().toEpochMilli()
+                val hrRecords = dao.getHeartRateSince(weekAgo)
+                val hrHistory = hrRecords.map { Pair(it.timestamp, it.bpm) }
+                _state.value = _state.value.copy(
+                    todayHourlySteps = hourly,
+                    spo2 = health?.spo2Avg ?: _state.value.spo2,
+                    stress = health?.stressAvg ?: _state.value.stress,
+                    hrResting = health?.hrResting ?: _state.value.hrResting,
+                    lastSleep = lastSleep ?: _state.value.lastSleep,
+                    recentWorkouts = workouts,
+                    hrHistory = if (hrHistory.isNotEmpty()) hrHistory else _state.value.hrHistory,
+                    healthHistory = dao.getRecentHealth(30),
+                )
+
+                // 3. Health Connect
+                try {
+                    if (healthConnectReader.isAvailable()) {
+                        val hcSteps = healthConnectReader.readTodaySteps()
+                        val hcHR = healthConnectReader.readLatestHeartRate()
+                        _state.value = _state.value.copy(
+                            healthConnectSteps = hcSteps,
+                            healthConnectHR = hcHR,
+                        )
+                    }
+                } catch (_: Exception) {}
+
+                // 4. Watch data (if connected)
                 protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
                 protocolHandler?.sendCommand(CommandHelper.buildActivityFetchToday())
-                Thread.sleep(1000)
+                delay(1000)
                 activitySync?.requestPast()
-                Thread.sleep(500)
+                delay(500)
 
-                // 3. Weather
+                // 5. Weather
                 fetchAndSendWeather()
             } catch (_: Exception) {}
         }
@@ -885,7 +892,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         autoReconnectEnabled = false // don't reconnect on manual disconnect
-        PedometerApp.onForegroundChanged = null
+        stopGpsRelay()
         WatchNotificationBridge.protocolHandler = null
         healthService?.stopRealtimeStats()
         healthService = null
@@ -1062,8 +1069,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        stopGpsRelay()
+        stopStepPolling()
         phoneStepCounter.stop()
-        PedometerApp.onForegroundChanged = null // fix memory leak #1
+        PedometerApp.onForegroundChanged = null
         disconnect()
     }
 }
