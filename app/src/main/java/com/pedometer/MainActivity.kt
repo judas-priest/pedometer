@@ -135,6 +135,7 @@ class MainActivity : ComponentActivity() {
                             )
                             2 -> when {
                                 showAlarms -> {
+                                    LaunchedEffect(Unit) { vm.getAlarms() }
                                     androidx.activity.compose.BackHandler { showAlarms = false }
                                     AlarmsScreen(
                                         alarms = state.alarms,
