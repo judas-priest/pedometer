@@ -20,7 +20,7 @@ class AlarmService(private val protocolHandler: ProtocolHandler) {
         const val COMMAND_TYPE = 17
         const val CMD_GET = 0
         const val CMD_CREATE = 1
-        const val CMD_EDIT = 3
+        const val CMD_EDIT = 2
         const val CMD_DELETE = 4
         const val CMD_ACK = 5
     }
