@@ -35,6 +35,8 @@ import com.pedometer.util.AlarmService
 import com.pedometer.util.WatchSettings
 import com.pedometer.util.CalendarService
 import com.pedometer.util.WatchAlarm
+import com.pedometer.util.WatchReminder
+import com.pedometer.util.ReminderService
 import com.pedometer.util.UtilityService
 import com.pedometer.watchface.DataUploadService
 import com.pedometer.watchface.WatchfaceInfo
@@ -87,6 +89,7 @@ data class WatchState(
     val healthHistory: List<DailyHealth> = emptyList(),
     val uploadProgress: Int = -1, // -1 = not uploading
     val alarms: List<WatchAlarm> = emptyList(),
+    val reminders: List<WatchReminder> = emptyList(),
 )
 
 enum class ConnectionStatus {
@@ -118,6 +121,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private var utilityService: UtilityService? = null
     private var alarmService: AlarmService? = null
     private var calendarService: CalendarService? = null
+    private var reminderService: ReminderService? = null
     private var watchSettings: WatchSettings? = null
     private val phoneStepCounter = PhoneStepCounter(app)
     private val healthConnectReader = HealthConnectReader(app)
@@ -355,7 +359,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                             calendarService?.syncCalendar()
                             Thread.sleep(200)
 
-                            // 9. Send canned messages for quick reply
+                            // 10. Fetch reminders
+                            reminderService?.getReminders()
+                            Thread.sleep(200)
+
+                            // 11. Send canned messages for quick reply
                             notificationService?.sendCannedMessages()
                             Thread.sleep(200)
 
@@ -456,6 +464,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
                 calendarService = CalendarService(handler, getApplication())
                 watchSettings = WatchSettings(handler, getApplication())
+
+                val remService = ReminderService(handler)
+                remService.onRemindersReceived = { list ->
+                    _state.value = _state.value.copy(reminders = list)
+                }
+                reminderService = remService
 
                 val sync = ActivitySync(handler,
                     onGpsTrack = { workoutStartMs, points ->
@@ -828,7 +842,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun syncContacts() { watchSettings?.syncContacts() }
     fun setDnd(enabled: Boolean) { watchSettings?.setDnd(enabled) }
     fun setWearingMode(mode: Int) { watchSettings?.setWearingMode(mode) }
-    fun createReminder(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) { watchSettings?.createReminder(title, y, m, d, h, min) }
+    fun createReminder(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) {
+        reminderService?.createReminder(title, y, m, d, h, min)
+    }
+    fun deleteReminderById(id: Int) { reminderService?.deleteReminder(id) }
 
     @android.annotation.SuppressLint("MissingPermission")
     private fun startGpsRelay() {
@@ -883,6 +900,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         utilityService = null
         alarmService = null
         calendarService = null
+        reminderService = null
         watchSettings = null
         protocolHandler = null
         authService = null
@@ -996,7 +1014,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             NotificationService.COMMAND_TYPE -> notificationService?.handleCommand(cmd)
             WatchfaceService.COMMAND_TYPE -> watchfaceService?.handleCommand(cmd)
             DataUploadService.COMMAND_TYPE -> dataUploadService?.handleCommand(cmd)
-            AlarmService.COMMAND_TYPE -> alarmService?.handleCommand(cmd)
+            AlarmService.COMMAND_TYPE -> {
+                alarmService?.handleCommand(cmd)
+                reminderService?.handleCommand(cmd)
+            }
             else -> Log.d(TAG, "Unhandled command type=${cmd.type}")
         }
     }

@@ -149,6 +149,8 @@ class MainActivity : ComponentActivity() {
                                 onDndChange = { vm.setDnd(it) },
                                 onWearingModeChange = { vm.setWearingMode(it) },
                                 onSyncContacts = { vm.syncContacts() },
+                                onCreateReminder = { title, y, m, d, h, min -> vm.createReminder(title, y, m, d, h, min) },
+                                onDeleteReminder = { vm.deleteReminderById(it) },
                             )
                         }
                     }

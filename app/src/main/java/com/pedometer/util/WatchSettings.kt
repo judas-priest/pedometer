@@ -79,24 +79,6 @@ class WatchSettings(
         return contacts
     }
 
-    // ── Reminders ─────────────────────────────────────────────────────────
-
-    fun createReminder(title: String, year: Int, month: Int, day: Int, hour: Int, minute: Int) {
-        val cmd = XiaomiProto.Command.newBuilder()
-            .setType(SCHEDULE_TYPE)
-            .setSubtype(9) // create reminder
-            .setSchedule(XiaomiProto.Schedule.newBuilder()
-                .setCreateReminder(XiaomiProto.ReminderDetails.newBuilder()
-                    .setTitle(title)
-                    .setDate(XiaomiProto.Date.newBuilder().setYear(year).setMonth(month).setDay(day))
-                    .setTime(XiaomiProto.Time.newBuilder().setHour(hour).setMinute(minute))
-                    .setRepeatMode(0) // once
-                    .setRepeatFlags(64)))
-            .build()
-        protocolHandler.sendCommand(cmd)
-        Log.i(TAG, "Created reminder: $title at $year-$month-$day $hour:$minute")
-    }
-
     // ── DND ───────────────────────────────────────────────────────────────
 
     fun setDnd(enabled: Boolean) {
