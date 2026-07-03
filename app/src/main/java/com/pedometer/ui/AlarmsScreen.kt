@@ -102,6 +102,7 @@ fun AlarmsScreen(
                     onClick = {
                         val h = newHour.toIntOrNull()?.coerceIn(0, 23) ?: 7
                         val m = newMin.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                        android.util.Log.i("AlarmsScreen", "Creating alarm $h:$m")
                         onCreateAlarm(h, m)
                     },
                     modifier = Modifier.fillMaxWidth(),

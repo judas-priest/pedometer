@@ -20,8 +20,8 @@ class AlarmService(private val protocolHandler: ProtocolHandler) {
         const val COMMAND_TYPE = 17
         const val CMD_GET = 0
         const val CMD_CREATE = 1
-        const val CMD_EDIT = 2
-        const val CMD_DELETE = 3
+        const val CMD_EDIT = 3
+        const val CMD_DELETE = 4
         const val CMD_ACK = 5
     }
 
@@ -51,6 +51,7 @@ class AlarmService(private val protocolHandler: ProtocolHandler) {
             .build()
         protocolHandler.sendCommand(cmd)
         Log.i(TAG, "Creating alarm: $hour:$minute repeat=$repeatMode")
+        getAlarms()
     }
 
     fun editAlarm(alarm: WatchAlarm) {
@@ -71,6 +72,7 @@ class AlarmService(private val protocolHandler: ProtocolHandler) {
             .build()
         protocolHandler.sendCommand(cmd)
         Log.i(TAG, "Editing alarm ${alarm.id}: ${alarm.hour}:${alarm.minute} enabled=${alarm.enabled}")
+        getAlarms()
     }
 
     fun deleteAlarm(id: Int) {
@@ -82,6 +84,7 @@ class AlarmService(private val protocolHandler: ProtocolHandler) {
             .build()
         protocolHandler.sendCommand(cmd)
         Log.i(TAG, "Deleting alarm $id")
+        getAlarms()
     }
 
     fun handleCommand(cmd: XiaomiProto.Command) {
