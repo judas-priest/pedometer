@@ -2,7 +2,6 @@ package com.pedometer.ui
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -20,14 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.pedometer.health.UserProfile
 import com.pedometer.vm.ConnectionStatus
 import com.pedometer.vm.WatchState
-import com.pedometer.watchface.WatchfaceInfo
 
 @Composable
 fun SettingsTab(
@@ -39,29 +35,16 @@ fun SettingsTab(
     onProfileChange: (UserProfile) -> Unit = {},
     onOpenDebug: () -> Unit = {},
     onOpenNotificationApps: () -> Unit = {},
-    onFindWatch: () -> Unit = {},
-    onRequestWatchfaces: () -> Unit = {},
-    onSetActiveWatchface: (String) -> Unit = {},
-    onDeleteWatchface: (String) -> Unit = {},
-    onUploadWatchface: (ByteArray) -> Unit = {},
-    onCreateAlarm: (Int, Int) -> Unit = { _, _ -> },
-    onDeleteAlarm: (Int) -> Unit = {},
-    onToggleAlarm: (com.pedometer.util.WatchAlarm) -> Unit = {},
-    onDndChange: (Boolean) -> Unit = {},
-    onWearingModeChange: (Int) -> Unit = {},
-    onSyncContacts: () -> Unit = {},
-    onCreateReminder: (String, Int, Int, Int, Int, Int) -> Unit = { _, _, _, _, _, _ -> },
-    onDeleteReminder: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val profile = state.profile
+    val connected = state.connectionStatus == ConnectionStatus.Connected
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         if (results.values.all { it }) onConnect()
     }
-
-    val profile = state.profile
 
     Column(
         modifier = Modifier
@@ -71,215 +54,22 @@ fun SettingsTab(
     ) {
         Spacer(Modifier.height(4.dp))
 
-        // Profile
-        Text("Профиль", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
-
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                var heightText by remember { mutableStateOf(profile.heightCm.toString()) }
-                var weightText by remember { mutableStateOf(profile.weightKg.toString()) }
-                var goalText by remember { mutableStateOf(profile.stepGoal.toString()) }
-
-                OutlinedTextField(
-                    value = heightText,
-                    onValueChange = {
-                        heightText = it
-                        it.toIntOrNull()?.let { h ->
-                            onProfileChange(profile.copy(heightCm = h))
-                        }
-                    },
-                    label = { Text("Рост (см)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = weightText,
-                    onValueChange = {
-                        weightText = it
-                        it.toIntOrNull()?.let { w ->
-                            onProfileChange(profile.copy(weightKg = w))
-                        }
-                    },
-                    label = { Text("Вес (кг)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                Spacer(Modifier.height(8.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Пол:", modifier = Modifier.width(50.dp))
-                    FilterChip(
-                        selected = profile.isMale,
-                        onClick = { onProfileChange(profile.copy(isMale = true)) },
-                        label = { Text("М") },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    FilterChip(
-                        selected = !profile.isMale,
-                        onClick = { onProfileChange(profile.copy(isMale = false)) },
-                        label = { Text("Ж") },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = goalText,
-                    onValueChange = {
-                        goalText = it
-                        it.toIntOrNull()?.let { g ->
-                            onProfileChange(profile.copy(stepGoal = g))
-                        }
-                    },
-                    label = { Text("Цель шагов") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Weather
-        Spacer(Modifier.height(16.dp))
-        Text("Погода", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
-
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                var cityText by remember { mutableStateOf(profile.weatherCity) }
-                OutlinedTextField(
-                    value = cityText,
-                    onValueChange = {
-                        cityText = it
-                        onProfileChange(profile.copy(weatherCity = it))
-                    },
-                    label = { Text("Город") },
-                    placeholder = { Text("Авто (GPS)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Text(
-                    "Оставьте пустым для автоопределения по GPS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Battery & ColorOS tips (only when watch connected)
-        if (state.connectionStatus == ConnectionStatus.Connected) {
-            val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as PowerManager
-            val isWhitelisted = pm.isIgnoringBatteryOptimizations(context.packageName)
-
-            if (!isWhitelisted) {
-                Spacer(Modifier.height(8.dp))
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Оптимизация батареи", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Отключите оптимизацию чтобы соединение с часами не разрывалось",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        FilledTonalButton(onClick = {
-                            context.startActivity(Intent(
-                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                Uri.parse("package:${context.packageName}"),
-                            ))
-                        }) {
-                            Text("Отключить оптимизацию")
-                        }
-                    }
-                }
-            }
-        }
-
-        // Notifications & Music
-        Spacer(Modifier.height(8.dp))
-        val nlEnabled = try {
-            val cn = android.content.ComponentName(context, com.pedometer.music.MediaListenerService::class.java)
-            val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-            flat?.contains(cn.flattenToString()) == true
-        } catch (_: Exception) { false }
-
-        if (!nlEnabled) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Уведомления и музыка", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Разрешите доступ к уведомлениям для пересылки на часы и управления плеером",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = {
-                        context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
-                    }) {
-                        Text("Разрешить")
-                    }
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = { onOpenNotificationApps() },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Уведомления")
-                }
-                OutlinedButton(
-                    onClick = {
-                        com.pedometer.notification.WatchNotificationBridge.sendToWatch(
-                            id = 12345,
-                            packageName = "com.pedometer",
-                            appName = "Шагомер",
-                            title = "Тест",
-                            body = "Тестовое уведомление!",
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Тест")
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Watch
-        Text("Часы", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // ── Connection ───────────────────────────────────────────────────
+        Text("Подключение", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
 
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 OutlinedTextField(
-                    value = state.macAddress,
-                    onValueChange = onMacChange,
-                    label = { Text("MAC-адрес") },
-                    placeholder = { Text("XX:XX:XX:XX:XX:XX") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
+                    value = state.macAddress, onValueChange = onMacChange,
+                    label = { Text("MAC-адрес") }, placeholder = { Text("XX:XX:XX:XX:XX:XX") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = state.authKey,
-                    onValueChange = onAuthKeyChange,
-                    label = { Text("Ключ авторизации") },
-                    placeholder = { Text("0x...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
+                    value = state.authKey, onValueChange = onAuthKeyChange,
+                    label = { Text("Ключ авторизации") }, placeholder = { Text("0x...") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
                 )
                 Spacer(Modifier.height(12.dp))
 
@@ -301,9 +91,7 @@ fun SettingsTab(
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = state.authKey.isNotBlank() && state.macAddress.isNotBlank(),
-                        ) {
-                            Text("Подключить")
-                        }
+                        ) { Text("Подключить") }
                     }
                     ConnectionStatus.Connecting, ConnectionStatus.Authenticating -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -323,361 +111,144 @@ fun SettingsTab(
                             FilledTonalButton(
                                 onClick = onDisconnect,
                                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                            ) {
-                                Text("Отключить")
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onFindWatch,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("🔔 Найти часы")
+                            ) { Text("Отключить") }
                         }
                     }
                 }
             }
         }
 
-        // Alarms
-        if (state.connectionStatus == ConnectionStatus.Connected) {
-            Spacer(Modifier.height(16.dp))
-            Text("Будильники", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
+        // ── Notifications ────────────────────────────────────────────────
+        Spacer(Modifier.height(16.dp))
+        Text("Уведомления", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
 
+        val nlEnabled = try {
+            val cn = android.content.ComponentName(context, com.pedometer.music.MediaListenerService::class.java)
+            val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+            flat?.contains(cn.flattenToString()) == true
+        } catch (_: Exception) { false }
+
+        if (!nlEnabled) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    if (state.alarms.isEmpty()) {
-                        Text("Нет будильников", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        state.alarms.forEach { alarm ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    "%02d:%02d".format(alarm.hour, alarm.minute),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                val repeatLabel = when (alarm.repeatMode) {
-                                    1 -> "Ежедневно"
-                                    5 -> "По дням"
-                                    else -> "Один раз"
-                                }
-                                Text(repeatLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(8.dp))
-                                Switch(
-                                    checked = alarm.enabled,
-                                    onCheckedChange = { onToggleAlarm(alarm.copy(enabled = it)) },
-                                )
-                                IconButton(onClick = { onDeleteAlarm(alarm.id) }) {
-                                    Text("✕", color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                            if (alarm != state.alarms.last()) HorizontalDivider()
-                        }
-                    }
+                    Text("Доступ к уведомлениям", style = MaterialTheme.typography.titleSmall)
+                    Text("Разрешите для пересылки на часы и управления плеером", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-
-                    // Add alarm
-                    var newHour by remember { mutableStateOf("7") }
-                    var newMin by remember { mutableStateOf("00") }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = newHour,
-                            onValueChange = { newHour = it.filter { c -> c.isDigit() }.take(2) },
-                            label = { Text("Ч") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                        Text(":", style = MaterialTheme.typography.titleLarge)
-                        OutlinedTextField(
-                            value = newMin,
-                            onValueChange = { newMin = it.filter { c -> c.isDigit() }.take(2) },
-                            label = { Text("М") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                        FilledTonalButton(onClick = {
-                            val h = newHour.toIntOrNull()?.coerceIn(0, 23) ?: 7
-                            val m = newMin.toIntOrNull()?.coerceIn(0, 59) ?: 0
-                            onCreateAlarm(h, m)
-                        }) {
-                            Text("+")
-                        }
-                    }
+                    FilledTonalButton(onClick = {
+                        context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+                    }) { Text("Разрешить") }
                 }
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onOpenNotificationApps() }, modifier = Modifier.weight(1f)) { Text("Приложения") }
+                OutlinedButton(
+                    onClick = {
+                        com.pedometer.notification.WatchNotificationBridge.sendToWatch(
+                            id = 12345, packageName = "com.pedometer", appName = "Шагомер",
+                            title = "Тест", body = "Тестовое уведомление!",
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Тест") }
             }
         }
 
-        // Reminders / Events
-        if (state.connectionStatus == ConnectionStatus.Connected) {
-            Spacer(Modifier.height(16.dp))
-            Text("События", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
+        // ── Profile ──────────────────────────────────────────────────────
+        Spacer(Modifier.height(16.dp))
+        Text("Профиль", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
 
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    if (state.reminders.isEmpty()) {
-                        Text("Нет событий", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        state.reminders.forEach { reminder ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(reminder.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        "%02d.%02d.%04d %02d:%02d".format(reminder.day, reminder.month, reminder.year, reminder.hour, reminder.minute),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                IconButton(onClick = { onDeleteReminder(reminder.id) }) {
-                                    Text("✕", color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                            if (reminder != state.reminders.last()) HorizontalDivider()
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                var heightText by remember { mutableStateOf(profile.heightCm.toString()) }
+                var weightText by remember { mutableStateOf(profile.weightKg.toString()) }
+                var goalText by remember { mutableStateOf(profile.stepGoal.toString()) }
 
-                    var newTitle by remember { mutableStateOf("") }
-                    var newDate by remember { mutableStateOf("") }
-                    var newTime by remember { mutableStateOf("") }
-                    OutlinedTextField(
-                        value = newTitle,
-                        onValueChange = { newTitle = it },
-                        label = { Text("Событие") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = newDate,
-                            onValueChange = { newDate = it },
-                            label = { Text("ДД.ММ.ГГГГ") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                        OutlinedTextField(
-                            value = newTime,
-                            onValueChange = { newTime = it },
-                            label = { Text("ЧЧ:ММ") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(
-                        onClick = {
-                            val parts = newDate.split(".")
-                            val timeParts = newTime.split(":")
-                            if (parts.size == 3 && timeParts.size == 2 && newTitle.isNotBlank()) {
-                                val d = parts[0].toIntOrNull() ?: return@FilledTonalButton
-                                val m = parts[1].toIntOrNull() ?: return@FilledTonalButton
-                                val y = parts[2].toIntOrNull() ?: return@FilledTonalButton
-                                val h = timeParts[0].toIntOrNull() ?: return@FilledTonalButton
-                                val min = timeParts[1].toIntOrNull() ?: return@FilledTonalButton
-                                onCreateReminder(newTitle, y, m, d, h, min)
-                                newTitle = ""
-                                newDate = ""
-                                newTime = ""
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Добавить событие")
-                    }
+                OutlinedTextField(
+                    value = heightText,
+                    onValueChange = { heightText = it; it.toIntOrNull()?.let { h -> onProfileChange(profile.copy(heightCm = h)) } },
+                    label = { Text("Рост (см)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = weightText,
+                    onValueChange = { weightText = it; it.toIntOrNull()?.let { w -> onProfileChange(profile.copy(weightKg = w)) } },
+                    label = { Text("Вес (кг)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Пол:", modifier = Modifier.width(50.dp))
+                    FilterChip(selected = profile.isMale, onClick = { onProfileChange(profile.copy(isMale = true)) }, label = { Text("М") })
+                    Spacer(Modifier.width(8.dp))
+                    FilterChip(selected = !profile.isMale, onClick = { onProfileChange(profile.copy(isMale = false)) }, label = { Text("Ж") })
                 }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = goalText,
+                    onValueChange = { goalText = it; it.toIntOrNull()?.let { g -> onProfileChange(profile.copy(stepGoal = g)) } },
+                    label = { Text("Цель шагов") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
             }
         }
 
-        // Watchfaces
-        if (state.connectionStatus == ConnectionStatus.Connected) {
-            Spacer(Modifier.height(16.dp))
-            Text("Циферблаты", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
+        // ── Weather ──────────────────────────────────────────────────────
+        Spacer(Modifier.height(16.dp))
+        Text("Погода", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
 
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    if (state.watchfaces.isEmpty()) {
-                        FilledTonalButton(
-                            onClick = onRequestWatchfaces,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Загрузить список")
-                        }
-                    } else {
-                        state.watchfaces.forEach { face ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        face.name.ifBlank { face.id },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    if (face.active) {
-                                        Text("Активный", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
-                                if (!face.active) {
-                                    TextButton(onClick = { onSetActiveWatchface(face.id) }) {
-                                        Text("Выбрать")
-                                    }
-                                }
-                                if (face.canDelete) {
-                                    TextButton(onClick = { onDeleteWatchface(face.id) }) {
-                                        Text("Удалить", color = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
-                            if (face != state.watchfaces.last()) {
-                                HorizontalDivider()
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onRequestWatchfaces,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Обновить")
-                        }
-                    }
-                }
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                var cityText by remember { mutableStateOf(profile.weatherCity) }
+                OutlinedTextField(
+                    value = cityText,
+                    onValueChange = { cityText = it; onProfileChange(profile.copy(weatherCity = it)) },
+                    label = { Text("Город") }, placeholder = { Text("Авто (GPS)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                )
+                Text("Пусто = автоопределение по GPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
 
-            // Upload watchface
-            Spacer(Modifier.height(8.dp))
-            val filePickerLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.GetContent()
-            ) { uri ->
-                if (uri != null) {
-                    try {
-                        val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
-                        if (bytes != null && bytes.isNotEmpty()) {
-                            onUploadWatchface(bytes)
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-
-            if (state.uploadProgress >= 0) {
+        // ── Battery optimization ─────────────────────────────────────────
+        if (connected) {
+            val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
+                Spacer(Modifier.height(16.dp))
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Загрузка циферблата...", style = MaterialTheme.typography.titleSmall)
+                        Text("Оптимизация батареи", style = MaterialTheme.typography.titleSmall)
+                        Text("Отключите чтобы соединение с часами не разрывалось", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = { state.uploadProgress / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text("${state.uploadProgress}%", style = MaterialTheme.typography.labelSmall)
+                        FilledTonalButton(onClick = {
+                            context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")))
+                        }) { Text("Отключить оптимизацию") }
                     }
-                }
-            } else {
-                FilledTonalButton(
-                    onClick = { filePickerLauncher.launch("*/*") },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Загрузить циферблат (.bin)")
                 }
             }
         }
 
-        // Export data
-        Spacer(Modifier.height(8.dp))
+        // ── Export / Debug / About ───────────────────────────────────────
+        Spacer(Modifier.height(16.dp))
         val exportScope = rememberCoroutineScope()
         OutlinedButton(
             onClick = {
                 exportScope.launch {
                     val file = com.pedometer.util.DataExporter.exportAll(context)
-                    if (file != null) {
-                        com.pedometer.util.DataExporter.shareFile(context, file)
-                    }
+                    if (file != null) com.pedometer.util.DataExporter.shareFile(context, file)
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Экспорт данных (CSV)")
-        }
+        ) { Text("Экспорт данных (CSV)") }
 
-        // Watch settings (DND, wearing mode, contacts)
-        if (state.connectionStatus == ConnectionStatus.Connected) {
-            Spacer(Modifier.height(16.dp))
-            Text("Настройки часов", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
-
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // DND sync
-                    var dndEnabled by remember { mutableStateOf(false) }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("Не беспокоить (DND)", style = MaterialTheme.typography.bodyMedium)
-                        Switch(checked = dndEnabled, onCheckedChange = {
-                            dndEnabled = it
-                            onDndChange(it)
-                        })
-                    }
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    // Wearing mode
-                    Text("Режим ношения", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Браслет" to 0, "Клипса" to 1, "Ожерелье" to 2).forEach { (label, mode) ->
-                            FilterChip(
-                                selected = false,
-                                onClick = { onWearingModeChange(mode) },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    // Sync contacts
-                    OutlinedButton(
-                        onClick = onSyncContacts,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Синхронизировать контакты")
-                    }
-                }
-            }
-        }
-
-        // BLE Debug button
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(
-            onClick = { onOpenDebug() },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("BLE Debug")
-        }
+        OutlinedButton(onClick = onOpenDebug, modifier = Modifier.fillMaxWidth()) { Text("Отладка") }
 
         Spacer(Modifier.height(16.dp))
-
-        Text("О приложении", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Шагомер", style = MaterialTheme.typography.titleSmall)
