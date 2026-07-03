@@ -2,7 +2,6 @@ package com.pedometer.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -11,10 +10,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.pedometer.util.WatchReminder
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemindersScreen(
     reminders: List<WatchReminder>,
@@ -22,13 +24,20 @@ fun RemindersScreen(
     onDeleteReminder: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    var selectedHour by remember { mutableIntStateOf(12) }
+    var selectedMinute by remember { mutableIntStateOf(0) }
+    var newTitle by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
             Text("События", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
@@ -67,44 +76,82 @@ fun RemindersScreen(
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Новое событие", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(8.dp))
-                var newTitle by remember { mutableStateOf("") }
-                var newDate by remember { mutableStateOf("") }
-                var newTime by remember { mutableStateOf("") }
+
                 OutlinedTextField(
                     value = newTitle, onValueChange = { newTitle = it },
                     label = { Text("Название") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = newDate, onValueChange = { newDate = it },
-                        label = { Text("ДД.ММ.ГГГГ") }, modifier = Modifier.weight(1f), singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                    OutlinedTextField(
-                        value = newTime, onValueChange = { newTime = it },
-                        label = { Text("ЧЧ:ММ") }, modifier = Modifier.weight(1f), singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
+                    OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) {
+                        Text(if (selectedDate != null)
+                            "%02d.%02d.%04d".format(selectedDate!!.dayOfMonth, selectedDate!!.monthValue, selectedDate!!.year)
+                        else "Дата")
+                    }
+                    OutlinedButton(onClick = { showTimePicker = true }, modifier = Modifier.weight(1f)) {
+                        Text(if (selectedDate != null) "%02d:%02d".format(selectedHour, selectedMinute) else "Время")
+                    }
                 }
+
                 Spacer(Modifier.height(8.dp))
                 FilledTonalButton(
                     onClick = {
-                        val parts = newDate.split("."); val timeParts = newTime.split(":")
-                        if (parts.size == 3 && timeParts.size == 2 && newTitle.isNotBlank()) {
-                            val d = parts[0].toIntOrNull() ?: return@FilledTonalButton
-                            val m = parts[1].toIntOrNull() ?: return@FilledTonalButton
-                            val y = parts[2].toIntOrNull() ?: return@FilledTonalButton
-                            val h = timeParts[0].toIntOrNull() ?: return@FilledTonalButton
-                            val min = timeParts[1].toIntOrNull() ?: return@FilledTonalButton
-                            onCreateReminder(newTitle, y, m, d, h, min)
-                            newTitle = ""; newDate = ""; newTime = ""
-                        }
+                        val date = selectedDate ?: return@FilledTonalButton
+                        if (newTitle.isBlank()) return@FilledTonalButton
+                        onCreateReminder(newTitle, date.year, date.monthValue, date.dayOfMonth, selectedHour, selectedMinute)
+                        newTitle = ""; selectedDate = null
                     },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = newTitle.isNotBlank() && selectedDate != null,
                 ) { Text("Добавить") }
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        selectedDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showDatePicker = false
+                    showTimePicker = true
+                }) { Text("Далее") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Отмена") }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = selectedHour,
+            initialMinute = selectedMinute,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedHour = timePickerState.hour
+                    selectedMinute = timePickerState.minute
+                    showTimePicker = false
+                }) { Text("Готово") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Отмена") }
+            },
+            text = { TimePicker(state = timePickerState) },
+        )
     }
 }

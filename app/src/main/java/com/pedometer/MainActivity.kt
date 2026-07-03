@@ -71,54 +71,6 @@ class MainActivity : ComponentActivity() {
                     return@PedometerTheme
                 }
 
-                if (showAlarms) {
-                    androidx.activity.compose.BackHandler { showAlarms = false }
-                    AlarmsScreen(
-                        alarms = state.alarms,
-                        onCreateAlarm = { h, m -> vm.createAlarm(h, m) },
-                        onDeleteAlarm = { vm.deleteAlarm(it) },
-                        onToggleAlarm = { vm.editAlarm(it) },
-                        onBack = { showAlarms = false },
-                    )
-                    return@PedometerTheme
-                }
-
-                if (showReminders) {
-                    androidx.activity.compose.BackHandler { showReminders = false }
-                    RemindersScreen(
-                        reminders = state.reminders,
-                        onCreateReminder = { title, y, m, d, h, min -> vm.createReminder(title, y, m, d, h, min) },
-                        onDeleteReminder = { vm.deleteReminderById(it) },
-                        onBack = { showReminders = false },
-                    )
-                    return@PedometerTheme
-                }
-
-                if (showWatchfaces) {
-                    androidx.activity.compose.BackHandler { showWatchfaces = false }
-                    WatchfacesScreen(
-                        watchfaces = state.watchfaces,
-                        uploadProgress = state.uploadProgress,
-                        onRequestWatchfaces = { vm.requestWatchfaces() },
-                        onSetActiveWatchface = { vm.setActiveWatchface(it) },
-                        onDeleteWatchface = { vm.deleteWatchface(it) },
-                        onUploadWatchface = { vm.uploadWatchface(it) },
-                        onBack = { showWatchfaces = false },
-                    )
-                    return@PedometerTheme
-                }
-
-                if (showWatchSettings) {
-                    androidx.activity.compose.BackHandler { showWatchSettings = false }
-                    WatchSettingsScreen(
-                        onDndChange = { vm.setDnd(it) },
-                        onWearingModeChange = { vm.setWearingMode(it) },
-                        onSyncContacts = { vm.syncContacts() },
-                        onBack = { showWatchSettings = false },
-                    )
-                    return@PedometerTheme
-                }
-
                 val pagerState = rememberPagerState(pageCount = { 4 })
                 val scope = rememberCoroutineScope()
 
@@ -181,14 +133,56 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onRefresh = { vm.refreshData() },
                             )
-                            2 -> DeviceTab(
-                                state = state,
-                                onOpenAlarms = { showAlarms = true },
-                                onOpenReminders = { showReminders = true },
-                                onOpenWatchfaces = { showWatchfaces = true },
-                                onOpenWatchSettings = { showWatchSettings = true },
-                                onFindWatch = { vm.findWatch() },
-                            )
+                            2 -> when {
+                                showAlarms -> {
+                                    androidx.activity.compose.BackHandler { showAlarms = false }
+                                    AlarmsScreen(
+                                        alarms = state.alarms,
+                                        onCreateAlarm = { h, m -> vm.createAlarm(h, m) },
+                                        onDeleteAlarm = { vm.deleteAlarm(it) },
+                                        onToggleAlarm = { vm.editAlarm(it) },
+                                        onBack = { showAlarms = false },
+                                    )
+                                }
+                                showReminders -> {
+                                    androidx.activity.compose.BackHandler { showReminders = false }
+                                    RemindersScreen(
+                                        reminders = state.reminders,
+                                        onCreateReminder = { title, y, m, d, h, min -> vm.createReminder(title, y, m, d, h, min) },
+                                        onDeleteReminder = { vm.deleteReminderById(it) },
+                                        onBack = { showReminders = false },
+                                    )
+                                }
+                                showWatchfaces -> {
+                                    androidx.activity.compose.BackHandler { showWatchfaces = false }
+                                    WatchfacesScreen(
+                                        watchfaces = state.watchfaces,
+                                        uploadProgress = state.uploadProgress,
+                                        onRequestWatchfaces = { vm.requestWatchfaces() },
+                                        onSetActiveWatchface = { vm.setActiveWatchface(it) },
+                                        onDeleteWatchface = { vm.deleteWatchface(it) },
+                                        onUploadWatchface = { vm.uploadWatchface(it) },
+                                        onBack = { showWatchfaces = false },
+                                    )
+                                }
+                                showWatchSettings -> {
+                                    androidx.activity.compose.BackHandler { showWatchSettings = false }
+                                    WatchSettingsScreen(
+                                        onDndChange = { vm.setDnd(it) },
+                                        onWearingModeChange = { vm.setWearingMode(it) },
+                                        onSyncContacts = { vm.syncContacts() },
+                                        onBack = { showWatchSettings = false },
+                                    )
+                                }
+                                else -> DeviceTab(
+                                    state = state,
+                                    onOpenAlarms = { showAlarms = true },
+                                    onOpenReminders = { showReminders = true },
+                                    onOpenWatchfaces = { showWatchfaces = true },
+                                    onOpenWatchSettings = { showWatchSettings = true },
+                                    onFindWatch = { vm.findWatch() },
+                                )
+                            }
                             3 -> SettingsTab(
                                 state = state,
                                 onAuthKeyChange = vm::updateAuthKey,
