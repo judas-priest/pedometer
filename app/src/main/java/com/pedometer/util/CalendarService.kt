@@ -29,6 +29,7 @@ class CalendarService(
 
         val events = readUpcomingEvents()
         val calendarSync = XiaomiProto.CalendarSync.newBuilder()
+            .setDisabled(false)
 
         for (event in events.take(MAX_EVENTS)) {
             calendarSync.addEvent(
