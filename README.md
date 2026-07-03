@@ -1,6 +1,12 @@
-# Pedometer
+<p align="center">
+  <img src="docs/assets/logo.svg" width="96" alt="Pedometer logo"/>
+</p>
 
-Android companion app for **Redmi Watch 5 Lite** (M2352W1) — a complete replacement for Mi Fitness.
+<h1 align="center">Pedometer</h1>
+
+<p align="center">
+  Android companion app for <b>Redmi Watch 5 Lite</b> (M2352W1) — a complete replacement for Mi Fitness.
+</p>
 
 Direct SPP (Bluetooth Classic) connection to the watch using reverse-engineered Xiaomi protobuf protocol. No cloud, no Mi Fitness, no data collection.
 
