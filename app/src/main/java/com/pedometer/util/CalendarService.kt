@@ -15,7 +15,7 @@ class CalendarService(
 ) {
     companion object {
         private const val TAG = "CalendarService"
-        const val COMMAND_TYPE = 16
+        const val COMMAND_TYPE = 12
         const val CMD_SET = 1
         const val MAX_EVENTS = 20
     }
