@@ -37,7 +37,8 @@ class WatchConnectionService : Service() {
         val notification = buildNotification("Connecting...")
         ServiceCompat.startForeground(
             this, NOTIFICATION_ID, notification,
-            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         )
         Log.i(TAG, "Foreground service started")
         return START_STICKY
