@@ -108,7 +108,9 @@ fun RemindersScreen(
                     onClick = {
                         val date = selectedDate ?: return@FilledTonalButton
                         if (newTitle.isBlank()) return@FilledTonalButton
+                        System.out.println("REMINDERS_DEBUG: onClick title=$newTitle date=${date.year}-${date.monthValue}-${date.dayOfMonth} $selectedHour:$selectedMinute")
                         onCreateEvent(newTitle, date.year, date.monthValue, date.dayOfMonth, selectedHour, selectedMinute)
+                        System.out.println("REMINDERS_DEBUG: onCreateEvent returned")
                         newTitle = ""; selectedDate = null
                     },
                     modifier = Modifier.fillMaxWidth(),

@@ -850,10 +850,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     fun createCalendarEvent(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) {
         val app = getApplication<Application>()
-        viewModelScope.launch(Dispatchers.IO) {
-            CalendarService.addToSystemCalendar(app, title, y, m, d, h, min)
-            refreshCalendarEvents()
-            calendarService?.syncCalendar()
+        viewModelScope.launch(Dispatchers.Main) {
+            val ok = CalendarService.addToSystemCalendar(app, title, y, m, d, h, min)
+            if (ok) {
+                refreshCalendarEvents()
+                launch(Dispatchers.IO) { calendarService?.syncCalendar() }
+            }
         }
     }
 

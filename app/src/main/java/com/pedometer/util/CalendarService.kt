@@ -21,37 +21,45 @@ class CalendarService(
         const val CMD_SET = 1
         const val MAX_EVENTS = 20
 
-        fun addToSystemCalendar(context: Context, title: String, year: Int, month: Int, day: Int, hour: Int, minute: Int) {
+        fun addToSystemCalendar(context: Context, title: String, year: Int, month: Int, day: Int, hour: Int, minute: Int): Boolean {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR)
                 != PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "No WRITE_CALENDAR permission")
-                return
+                android.widget.Toast.makeText(context, "Нет разрешения на запись в календарь", android.widget.Toast.LENGTH_SHORT).show()
+                return false
             }
             val calId = getCalendarId(context)
             if (calId < 0) {
-                Log.w(TAG, "No calendar account found")
-                return
+                android.widget.Toast.makeText(context, "Не найден аккаунт календаря", android.widget.Toast.LENGTH_SHORT).show()
+                return false
             }
-            val cal = java.util.GregorianCalendar(year, month - 1, day, hour, minute)
-            val startMs = cal.timeInMillis
-            val endMs = startMs + 60 * 60 * 1000
-
-            val values = ContentValues().apply {
-                put(CalendarContract.Events.CALENDAR_ID, calId)
-                put(CalendarContract.Events.TITLE, title)
-                put(CalendarContract.Events.DTSTART, startMs)
-                put(CalendarContract.Events.DTEND, endMs)
-                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+            return try {
+                val cal = java.util.GregorianCalendar(year, month - 1, day, hour, minute)
+                val values = ContentValues().apply {
+                    put(CalendarContract.Events.CALENDAR_ID, calId)
+                    put(CalendarContract.Events.TITLE, title)
+                    put(CalendarContract.Events.DTSTART, cal.timeInMillis)
+                    put(CalendarContract.Events.DTEND, cal.timeInMillis + 60 * 60 * 1000L)
+                    put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                }
+                val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+                if (uri != null) {
+                    android.widget.Toast.makeText(context, "Событие добавлено", android.widget.Toast.LENGTH_SHORT).show()
+                    true
+                } else {
+                    android.widget.Toast.makeText(context, "Ошибка: insert вернул null", android.widget.Toast.LENGTH_SHORT).show()
+                    false
+                }
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "Ошибка: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                false
             }
-            val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-            Log.i(TAG, "Added to system calendar: $title → $uri")
         }
 
         fun readUpcomingEventsUI(context: Context): List<com.pedometer.ui.CalendarEventUI> {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR)
                 != PackageManager.PERMISSION_GRANTED) return emptyList()
             val now = System.currentTimeMillis()
-            val weekLater = now + 7 * 24 * 60 * 60 * 1000L
+            val weekLater = now + 30 * 24 * 60 * 60 * 1000L
             val events = mutableListOf<com.pedometer.ui.CalendarEventUI>()
             try {
                 val cursor = context.contentResolver.query(
