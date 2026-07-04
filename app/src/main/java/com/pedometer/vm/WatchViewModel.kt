@@ -844,6 +844,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun setWearingMode(mode: Int) { watchSettings?.setWearingMode(mode) }
     fun createReminder(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) {
         reminderService?.createReminder(title, y, m, d, h, min)
+        calendarService?.addEventAndSync(title, y, m, d, h, min)
     }
     fun deleteReminderById(id: Int) { reminderService?.deleteReminder(id) }
 
