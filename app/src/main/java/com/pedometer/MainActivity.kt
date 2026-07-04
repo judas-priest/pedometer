@@ -146,11 +146,12 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 showReminders -> {
+                                    LaunchedEffect(Unit) { vm.refreshCalendarEvents() }
                                     androidx.activity.compose.BackHandler { showReminders = false }
                                     RemindersScreen(
-                                        reminders = state.reminders,
-                                        onCreateReminder = { title, y, m, d, h, min -> vm.createReminder(title, y, m, d, h, min) },
-                                        onDeleteReminder = { vm.deleteReminderById(it) },
+                                        events = state.calendarEvents,
+                                        onCreateEvent = { title, y, m, d, h, min -> vm.createCalendarEvent(title, y, m, d, h, min) },
+                                        onDeleteEvent = { vm.deleteCalendarEvent(it) },
                                         onBack = { showReminders = false },
                                     )
                                 }

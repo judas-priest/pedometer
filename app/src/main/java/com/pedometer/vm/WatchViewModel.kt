@@ -90,6 +90,7 @@ data class WatchState(
     val uploadProgress: Int = -1, // -1 = not uploading
     val alarms: List<WatchAlarm> = emptyList(),
     val reminders: List<WatchReminder> = emptyList(),
+    val calendarEvents: List<com.pedometer.ui.CalendarEventUI> = emptyList(),
 )
 
 enum class ConnectionStatus {
@@ -844,9 +845,32 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun setWearingMode(mode: Int) { watchSettings?.setWearingMode(mode) }
     fun createReminder(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) {
         reminderService?.createReminder(title, y, m, d, h, min)
-        calendarService?.addEventAndSync(title, y, m, d, h, min)
     }
     fun deleteReminderById(id: Int) { reminderService?.deleteReminder(id) }
+
+    fun createCalendarEvent(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            CalendarService.addToSystemCalendar(app, title, y, m, d, h, min)
+            refreshCalendarEvents()
+            calendarService?.syncCalendar()
+        }
+    }
+
+    fun deleteCalendarEvent(eventId: Long) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            CalendarService.deleteFromSystemCalendar(app, eventId)
+            refreshCalendarEvents()
+            calendarService?.syncCalendar()
+        }
+    }
+
+    fun refreshCalendarEvents() {
+        val app = getApplication<Application>()
+        val events = CalendarService.readUpcomingEventsUI(app)
+        _state.value = _state.value.copy(calendarEvents = events)
+    }
 
     @android.annotation.SuppressLint("MissingPermission")
     private fun startGpsRelay() {

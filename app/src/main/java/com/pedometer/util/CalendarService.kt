@@ -20,6 +20,85 @@ class CalendarService(
         const val COMMAND_TYPE = 12
         const val CMD_SET = 1
         const val MAX_EVENTS = 20
+
+        fun addToSystemCalendar(context: Context, title: String, year: Int, month: Int, day: Int, hour: Int, minute: Int) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR)
+                != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "No WRITE_CALENDAR permission")
+                return
+            }
+            val calId = getCalendarId(context)
+            if (calId < 0) {
+                Log.w(TAG, "No calendar account found")
+                return
+            }
+            val cal = java.util.GregorianCalendar(year, month - 1, day, hour, minute)
+            val startMs = cal.timeInMillis
+            val endMs = startMs + 60 * 60 * 1000
+
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.CALENDAR_ID, calId)
+                put(CalendarContract.Events.TITLE, title)
+                put(CalendarContract.Events.DTSTART, startMs)
+                put(CalendarContract.Events.DTEND, endMs)
+                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+            }
+            val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+            Log.i(TAG, "Added to system calendar: $title → $uri")
+        }
+
+        fun readUpcomingEventsUI(context: Context): List<com.pedometer.ui.CalendarEventUI> {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR)
+                != PackageManager.PERMISSION_GRANTED) return emptyList()
+            val now = System.currentTimeMillis()
+            val weekLater = now + 7 * 24 * 60 * 60 * 1000L
+            val events = mutableListOf<com.pedometer.ui.CalendarEventUI>()
+            try {
+                val cursor = context.contentResolver.query(
+                    CalendarContract.Events.CONTENT_URI,
+                    arrayOf(CalendarContract.Events._ID, CalendarContract.Events.TITLE,
+                        CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND,
+                        CalendarContract.Events.ALL_DAY),
+                    "${CalendarContract.Events.DTSTART} >= ? AND ${CalendarContract.Events.DTSTART} <= ?",
+                    arrayOf(now.toString(), weekLater.toString()),
+                    "${CalendarContract.Events.DTSTART} ASC"
+                )
+                cursor?.use {
+                    while (it.moveToNext()) {
+                        events.add(com.pedometer.ui.CalendarEventUI(
+                            id = it.getLong(0),
+                            title = it.getString(1) ?: "",
+                            startMs = it.getLong(2),
+                            endMs = it.getLong(3),
+                            allDay = it.getInt(4) == 1,
+                        ))
+                    }
+                }
+            } catch (e: Exception) { Log.e(TAG, "Read calendar failed: ${e.message}") }
+            return events
+        }
+
+        fun deleteFromSystemCalendar(context: Context, eventId: Long) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR)
+                != PackageManager.PERMISSION_GRANTED) return
+            try {
+                val uri = android.content.ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
+                context.contentResolver.delete(uri, null, null)
+                Log.i(TAG, "Deleted calendar event $eventId")
+            } catch (e: Exception) { Log.e(TAG, "Delete failed: ${e.message}") }
+        }
+
+        private fun getCalendarId(context: Context): Long {
+            try {
+                val cursor = context.contentResolver.query(
+                    CalendarContract.Calendars.CONTENT_URI,
+                    arrayOf(CalendarContract.Calendars._ID),
+                    null, null, null
+                )
+                cursor?.use { if (it.moveToFirst()) return it.getLong(0) }
+            } catch (_: Exception) {}
+            return -1
+        }
     }
 
     fun syncCalendar() {
@@ -53,57 +132,6 @@ class CalendarService(
             .build()
         protocolHandler.sendCommand(cmd)
         Log.i(TAG, "Synced ${events.size} calendar events")
-    }
-
-    fun addEventAndSync(title: String, year: Int, month: Int, day: Int, hour: Int, minute: Int) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR)
-            != PackageManager.PERMISSION_GRANTED) {
-            Log.w(TAG, "No WRITE_CALENDAR permission")
-            return
-        }
-
-        try {
-            // Find first calendar account
-            val calId = getFirstCalendarId()
-            if (calId < 0) {
-                Log.w(TAG, "No calendar account found")
-                return
-            }
-
-            val cal = java.util.GregorianCalendar(year, month - 1, day, hour, minute)
-            val startMs = cal.timeInMillis
-            val endMs = startMs + 60 * 60 * 1000 // 1 hour
-
-            val values = ContentValues().apply {
-                put(CalendarContract.Events.CALENDAR_ID, calId)
-                put(CalendarContract.Events.TITLE, title)
-                put(CalendarContract.Events.DTSTART, startMs)
-                put(CalendarContract.Events.DTEND, endMs)
-                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-            }
-
-            val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-            Log.i(TAG, "Added calendar event: $title → $uri")
-
-            // Re-sync to watch
-            syncCalendar()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to add calendar event: ${e.message}")
-        }
-    }
-
-    private fun getFirstCalendarId(): Long {
-        try {
-            val cursor = context.contentResolver.query(
-                CalendarContract.Calendars.CONTENT_URI,
-                arrayOf(CalendarContract.Calendars._ID),
-                null, null, null
-            )
-            cursor?.use {
-                if (it.moveToFirst()) return it.getLong(0)
-            }
-        } catch (_: Exception) {}
-        return -1
     }
 
     data class CalEvent(
