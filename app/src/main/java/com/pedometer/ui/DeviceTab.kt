@@ -62,7 +62,7 @@ fun DeviceTab(
             Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 DeviceFeatureCard("Будильники", "${state.alarms.size}", Modifier.weight(1f), onOpenAlarms)
-                DeviceFeatureCard("События", "${state.reminders.size}", Modifier.weight(1f), onOpenReminders)
+                DeviceFeatureCard("События", "${state.calendarEvents.size}", Modifier.weight(1f), onOpenReminders)
             }
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

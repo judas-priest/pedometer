@@ -1,5 +1,6 @@
 package com.pedometer.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -13,26 +14,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import com.pedometer.util.WatchAlarm
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlarmsScreen(
     alarms: List<WatchAlarm>,
     onCreateAlarm: (Int, Int) -> Unit,
     onDeleteAlarm: (Int) -> Unit,
     onToggleAlarm: (WatchAlarm) -> Unit,
+    onEditAlarm: (WatchAlarm) -> Unit,
     onBack: () -> Unit,
 ) {
+    var editingAlarm by remember { mutableStateOf<WatchAlarm?>(null) }
+    var showEditTimePicker by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .verticalScroll(rememberScrollState()),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
-            Text("Будильники", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Будильники", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
+
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
 
         if (alarms.isEmpty()) {
@@ -49,7 +58,12 @@ fun AlarmsScreen(
                                 "%02d:%02d".format(alarm.hour, alarm.minute),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        editingAlarm = alarm
+                                        showEditTimePicker = true
+                                    },
                             )
                             val repeatLabel = when (alarm.repeatMode) {
                                 1 -> "Ежедневно"; 5 -> "По дням"; else -> "Один раз"
@@ -102,7 +116,6 @@ fun AlarmsScreen(
                     onClick = {
                         val h = newHour.toIntOrNull()?.coerceIn(0, 23) ?: 7
                         val m = newMin.toIntOrNull()?.coerceIn(0, 59) ?: 0
-                        android.util.Log.i("AlarmsScreen", "Creating alarm $h:$m")
                         onCreateAlarm(h, m)
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -110,5 +123,25 @@ fun AlarmsScreen(
             }
         }
         Spacer(Modifier.height(24.dp))
+        } // Column(padding horizontal)
+    }
+
+    if (showEditTimePicker && editingAlarm != null) {
+        val alarm = editingAlarm!!
+        val timePickerState = rememberTimePickerState(initialHour = alarm.hour, initialMinute = alarm.minute, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { showEditTimePicker = false; editingAlarm = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    onEditAlarm(alarm.copy(hour = timePickerState.hour, minute = timePickerState.minute))
+                    showEditTimePicker = false
+                    editingAlarm = null
+                }) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditTimePicker = false; editingAlarm = null }) { Text("Отмена") }
+            },
+            text = { TimePicker(state = timePickerState) },
+        )
     }
 }

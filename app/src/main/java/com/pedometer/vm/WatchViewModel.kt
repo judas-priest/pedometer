@@ -139,6 +139,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         )
 
         _state.value = _state.value.copy(profile = userProfile)
+        refreshCalendarEvents()
         // Auto-connect if MAC and key saved
         val savedMac = _state.value.macAddress
         val savedKey = _state.value.authKey
@@ -768,6 +769,16 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         todayWalkMinutes = today.walkMinutes,
                         stepHistory = history,
                     )
+                } else {
+                    // New day — StepProvider has no data yet, reset
+                    _state.value = _state.value.copy(
+                        todayWalkSteps = 0,
+                        todayRunSteps = 0,
+                        todayWalkMinutes = 0,
+                        stepHistory = history,
+                    )
+                }
+                if (today != null) {
                     val dao = StepDatabase.get(app).stepDao()
                     dao.upsertDaily(DailySteps(
                         date = today.date,
@@ -852,6 +863,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.Main) {
             val ok = CalendarService.addToSystemCalendar(app, title, y, m, d, h, min)
+            if (ok) {
+                refreshCalendarEvents()
+                launch(Dispatchers.IO) { calendarService?.syncCalendar() }
+            }
+        }
+    }
+
+    fun updateCalendarEvent(eventId: Long, title: String, y: Int, m: Int, d: Int, h: Int, min: Int) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.Main) {
+            val ok = CalendarService.updateInSystemCalendar(app, eventId, title, y, m, d, h, min)
             if (ok) {
                 refreshCalendarEvents()
                 launch(Dispatchers.IO) { calendarService?.syncCalendar() }

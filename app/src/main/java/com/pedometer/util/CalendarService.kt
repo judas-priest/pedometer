@@ -38,7 +38,7 @@ class CalendarService(
                     put(CalendarContract.Events.CALENDAR_ID, calId)
                     put(CalendarContract.Events.TITLE, title)
                     put(CalendarContract.Events.DTSTART, cal.timeInMillis)
-                    put(CalendarContract.Events.DTEND, cal.timeInMillis + 60 * 60 * 1000L)
+                    put(CalendarContract.Events.DTEND, cal.timeInMillis + 15 * 60 * 1000L)
                     put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
                 }
                 val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
@@ -84,6 +84,24 @@ class CalendarService(
                 }
             } catch (e: Exception) { Log.e(TAG, "Read calendar failed: ${e.message}") }
             return events
+        }
+
+        fun updateInSystemCalendar(context: Context, eventId: Long, title: String, year: Int, month: Int, day: Int, hour: Int, minute: Int): Boolean {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR)
+                != PackageManager.PERMISSION_GRANTED) return false
+            return try {
+                val cal = java.util.GregorianCalendar(year, month - 1, day, hour, minute)
+                val values = ContentValues().apply {
+                    put(CalendarContract.Events.TITLE, title)
+                    put(CalendarContract.Events.DTSTART, cal.timeInMillis)
+                    put(CalendarContract.Events.DTEND, cal.timeInMillis + 15 * 60 * 1000L)
+                }
+                val uri = android.content.ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
+                context.contentResolver.update(uri, values, null, null) > 0
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "Ошибка: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                false
+            }
         }
 
         fun deleteFromSystemCalendar(context: Context, eventId: Long) {

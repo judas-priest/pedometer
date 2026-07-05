@@ -19,6 +19,7 @@ class PhoneStepCounter(context: Context) : SensorEventListener {
     private val stepDetector: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
 
     private var initialSteps: Long = -1L
+    private var startDay: Int = java.time.LocalDate.now().dayOfYear
 
     private val _stepsSinceStart = MutableStateFlow(0L)
     val stepsSinceStart: StateFlow<Long> = _stepsSinceStart
@@ -47,8 +48,10 @@ class PhoneStepCounter(context: Context) : SensorEventListener {
             val totalSteps = event.values[0].toLong()
             _totalStepsSinceBoot.value = totalSteps
 
-            if (initialSteps < 0) {
+            val today = java.time.LocalDate.now().dayOfYear
+            if (initialSteps < 0 || today != startDay) {
                 initialSteps = totalSteps
+                startDay = today
             }
             _stepsSinceStart.value = totalSteps - initialSteps
             Log.d(TAG, "Steps: total=$totalSteps sinceStart=${_stepsSinceStart.value}")
