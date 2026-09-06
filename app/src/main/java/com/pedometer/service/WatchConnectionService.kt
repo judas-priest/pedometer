@@ -36,6 +36,7 @@ class WatchConnectionService : Service() {
         private const val TAG = "WatchConnectionService"
         private const val CHANNEL_ID = "pedometer_connection"
         private const val NOTIFICATION_ID = 1
+        private const val DISCONNECTED_TEXT = "Часы отключены"
         const val ACTION_DISCONNECT = "com.pedometer.action.DISCONNECT"
     }
 
@@ -67,7 +68,7 @@ class WatchConnectionService : Service() {
         createNotificationChannel()
         scope.launch {
             repo.data.collect { data ->
-                updateNotification(statusText(data.connectionStatus))
+                statusText(data.connectionStatus)?.let { updateNotification(it) }
             }
         }
         stepCollector.start()
@@ -82,7 +83,8 @@ class WatchConnectionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
             ServiceCompat.startForeground(
-                this, NOTIFICATION_ID, buildNotification(statusText(repo.data.value.connectionStatus)),
+                this, NOTIFICATION_ID,
+                buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
                 foregroundTypes(),
             )
         } catch (e: SecurityException) {
@@ -91,7 +93,8 @@ class WatchConnectionService : Service() {
             Log.e(TAG, "startForeground rejected full mask, retrying with CONNECTED_DEVICE", e)
             try {
                 ServiceCompat.startForeground(
-                    this, NOTIFICATION_ID, buildNotification(statusText(repo.data.value.connectionStatus)),
+                    this, NOTIFICATION_ID,
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: SecurityException) {
@@ -102,7 +105,8 @@ class WatchConnectionService : Service() {
             Log.e(TAG, "startForeground rejected full mask, retrying with CONNECTED_DEVICE", e)
             try {
                 ServiceCompat.startForeground(
-                    this, NOTIFICATION_ID, buildNotification(statusText(repo.data.value.connectionStatus)),
+                    this, NOTIFICATION_ID,
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: IllegalArgumentException) {
@@ -160,11 +164,16 @@ class WatchConnectionService : Service() {
     private fun granted(permission: String) =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
-    private fun statusText(status: ConnectionStatus): String = when (status) {
+    /**
+     * Notification text: only the two stable states. Connecting/Authenticating are
+     * transient (seconds per attempt, and reconnect backoff cycles through them), and
+     * showing "Подключение..." for each attempt just makes the notification flap.
+     * A hung attempt is capped by WatchLink's 30s watchdog, which lands on Disconnected.
+     */
+    private fun statusText(status: ConnectionStatus): String? = when (status) {
         ConnectionStatus.Connected -> "Часы подключены"
-        ConnectionStatus.Connecting -> "Подключение..."
-        ConnectionStatus.Authenticating -> "Авторизация..."
         ConnectionStatus.Disconnected -> "Часы отключены"
+        ConnectionStatus.Connecting, ConnectionStatus.Authenticating -> null
     }
 
     private fun updateNotification(text: String) {
