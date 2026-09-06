@@ -3,11 +3,9 @@ package com.pedometer.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.provider.ContactsContract
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import android.util.Log

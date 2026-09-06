@@ -16,8 +16,6 @@ class PhoneStepCounter(context: Context) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val stepSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-    @Suppress("unused") // reserved for future cadence tracking
-    private val stepDetector: Sensor? = null
 
     private var initialSteps: Long = -1L
     private var startDay: Int = java.time.LocalDate.now().dayOfYear
