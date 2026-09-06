@@ -88,6 +88,8 @@ class WatchRepository(private val context: Context) {
     @Volatile private var calendarService: CalendarService? = null
     @Volatile private var reminderService: ReminderService? = null
 
+    /** Set by a manual disconnect; presence monitor must not override the user. */
+    @Volatile private var userDisconnected = false
     private var weatherJob: Job? = null
     private var initJob: Job? = null
     @Volatile private var lastHrSaveTime = 0L
@@ -129,6 +131,7 @@ class WatchRepository(private val context: Context) {
             .getString(KEY_MAC, "")?.takeIf { it.isNotBlank() }
 
     fun connect() {
+        userDisconnected = false
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         link.connect(
             prefs.getString(KEY_MAC, "") ?: "",
@@ -137,6 +140,7 @@ class WatchRepository(private val context: Context) {
     }
 
     fun disconnect() {
+        userDisconnected = true
         weatherJob?.cancel(); weatherJob = null
         initJob?.cancel(); initJob = null
         link.disconnect()
@@ -144,14 +148,15 @@ class WatchRepository(private val context: Context) {
     }
 
     /**
-     * Presence signal from WatchPresenceMonitor. Present → (re)connect when idle;
-     * absent → stop the reconnect machinery while the link is not up (an active link
-     * is left alone — a missed scan must not tear down a working connection).
+     * Presence signal from WatchPresenceMonitor. Present → (re)connect when idle and the
+     * user has not manually disconnected; absent → stop the reconnect machinery. Note the
+     * guard only protects an idle link: Connecting/Authenticating attempts killed by a
+     * missed scan self-heal on the next present scan.
      */
     fun onWatchPresence(present: Boolean) {
         val status = _data.value.connectionStatus
         if (present) {
-            if (status == ConnectionStatus.Disconnected && hasCredentials) connect()
+            if (status == ConnectionStatus.Disconnected && hasCredentials && !userDisconnected) connect()
         } else if (status != ConnectionStatus.Connected) {
             Log.i(TAG, "Watch absent — suspending reconnect attempts")
             link.disconnect()

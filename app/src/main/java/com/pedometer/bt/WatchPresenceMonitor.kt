@@ -10,10 +10,13 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Cheap wear-presence proxy: while started, runs a ~3s low-power BLE scan for the watch's
@@ -44,7 +47,7 @@ class WatchPresenceMonitor(
             .adapter?.bluetoothLeScanner
 
     private var loopJob: Job? = null
-    private var callback: ScanCallback? = null
+    @Volatile private var callback: ScanCallback? = null
 
     @Volatile private var lastPresent = false
 
@@ -77,18 +80,20 @@ class WatchPresenceMonitor(
         ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.BLUETOOTH_SCAN) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** @return true if seen, false if the window passed without a match, null if scanning unavailable. */
+    /** @return true if seen, false if the window passed without a match, null if unknown (scan unavailable or failed). */
     @SuppressLint("MissingPermission")
     private suspend fun scanOnce(): Boolean? {
         val ble = scanner ?: return null
-        val found = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        val found = CompletableDeferred<Boolean?>()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 found.complete(true)
             }
             override fun onScanFailed(errorCode: Int) {
+                // A failed scan is UNKNOWN, not absence — report null so the loop skips it
+                // instead of tearing down a connect attempt on an OEM scan hiccup.
                 Log.w(TAG, "Scan failed: $errorCode")
-                found.complete(false)
+                found.complete(null)
             }
         }
         val filter = ScanFilter.Builder().setDeviceAddress(mac).build()
@@ -98,11 +103,12 @@ class WatchPresenceMonitor(
         return try {
             callback = cb
             ble.startScan(listOf(filter), settings, cb)
-            val r = kotlinx.coroutines.withTimeoutOrNull(SCAN_WINDOW_MS) { found.await() }
-            r ?: false
+            withTimeoutOrNull(SCAN_WINDOW_MS) { found.await() }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Scan error: ${e.message}")
-            false
+            null
         } finally {
             stopScan()
             callback = null
