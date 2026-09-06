@@ -123,6 +123,11 @@ class WatchRepository(private val context: Context) {
                 !prefs.getString(KEY_AUTH, "").isNullOrBlank()
         }
 
+    /** MAC of the configured watch, or null — consumed by WatchPresenceMonitor. */
+    val configuredMac: String?
+        get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_MAC, "")?.takeIf { it.isNotBlank() }
+
     fun connect() {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         link.connect(
@@ -136,6 +141,21 @@ class WatchRepository(private val context: Context) {
         initJob?.cancel(); initJob = null
         link.disconnect()
         stopGpsRelayIfActive()
+    }
+
+    /**
+     * Presence signal from WatchPresenceMonitor. Present → (re)connect when idle;
+     * absent → stop the reconnect machinery while the link is not up (an active link
+     * is left alone — a missed scan must not tear down a working connection).
+     */
+    fun onWatchPresence(present: Boolean) {
+        val status = _data.value.connectionStatus
+        if (present) {
+            if (status == ConnectionStatus.Disconnected && hasCredentials) connect()
+        } else if (status != ConnectionStatus.Connected) {
+            Log.i(TAG, "Watch absent — suspending reconnect attempts")
+            link.disconnect()
+        }
     }
 
     /** Ask the consumer (ViewModel) to stop fused-location updates — idempotent on its side. */

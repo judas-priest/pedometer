@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import com.pedometer.MainActivity
 import com.pedometer.PedometerApp
 import com.pedometer.bt.ConnectionStatus
+import com.pedometer.bt.WatchPresenceMonitor
 import com.pedometer.health.StepCollector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,8 @@ class WatchConnectionService : Service() {
         )
     }
 
+    private var presenceMonitor: WatchPresenceMonitor? = null
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onCreate() {
@@ -68,6 +71,12 @@ class WatchConnectionService : Service() {
             }
         }
         stepCollector.start()
+        // Poll for the watch over BLE and drive connect/disconnect from its presence:
+        // no watch in range → no reconnect attempts, no wasted battery.
+        repo.configuredMac?.let { mac ->
+            presenceMonitor = WatchPresenceMonitor(this, mac, repo.scope, repo::onWatchPresence)
+            presenceMonitor?.start()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -191,6 +200,8 @@ class WatchConnectionService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "Foreground service destroyed")
+        presenceMonitor?.stop()
+        presenceMonitor = null
         stepCollector.stop()
         scope.cancel()
         super.onDestroy()
