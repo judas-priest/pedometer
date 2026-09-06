@@ -49,10 +49,7 @@ object StepProviderReader {
                     extras,
                 )
                 if (result != null && result.keySet().isNotEmpty()) {
-                    Log.i(TAG, "Call '$method' for $dateStr: keys=${result.keySet()}")
-                    for (key in result.keySet()) {
-                        Log.i(TAG, "  $key = ${result.get(key)}")
-                    }
+                    Log.d(TAG, "Call '$method' for $dateStr: keys=${result.keySet()}")
                     val json = result.getString("result") ?: result.getString("data")
                     if (json != null) {
                         return parseDayJson(dateStr, json)
@@ -70,13 +67,8 @@ object StepProviderReader {
             )
             if (cursor != null) {
                 var data: DayStepData? = null
-                Log.i(TAG, "Query $dateStr: ${cursor.count} rows, cols=${cursor.columnNames.joinToString()}")
+                Log.d(TAG, "Query $dateStr: ${cursor.count} rows")
                 if (cursor.moveToFirst()) {
-                    // Log ALL values for debugging
-                    val allVals = (0 until cursor.columnCount).joinToString(" | ") { i ->
-                        "${cursor.getColumnName(i)}=${cursor.getString(i)}"
-                    }
-                    Log.i(TAG, "  RAW: $allVals")
                     // day_offset* = correct daily values
                     // day_step* = cumulative since boot (NOT daily)
                     data = DayStepData(

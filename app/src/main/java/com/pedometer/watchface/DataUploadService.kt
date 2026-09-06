@@ -3,6 +3,11 @@ package com.pedometer.watchface
 import android.util.Log
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.proto.XiaomiProto
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -30,6 +35,8 @@ class DataUploadService(
     var onProgress: ((Int) -> Unit)? = null
     var onComplete: ((Boolean) -> Unit)? = null
 
+    private val scope = CoroutineScope(Dispatchers.IO)
+    private var uploadJob: Job? = null
     private var currentType: Byte = 0
     private var currentBytes: ByteArray? = null
     private var chunkSize = 2048
@@ -107,7 +114,7 @@ class DataUploadService(
 
         Log.i(TAG, "Uploading ${fullPayload.size} bytes in $totalParts chunks of $partSize")
 
-        Thread {
+        uploadJob = scope.launch {
             for (i in 0 until totalParts) {
                 val startIdx = i * partSize
                 val endIdx = minOf((i + 1) * partSize, fullPayload.size)
@@ -124,13 +131,12 @@ class DataUploadService(
                 Log.d(TAG, "Chunk ${i + 1}/$totalParts ($progress%)")
                 onProgress?.invoke(progress)
 
-                // Small delay between chunks to not overwhelm
-                Thread.sleep(50)
+                delay(50)
             }
 
             Log.i(TAG, "Upload complete!")
             finish(true)
-        }.start()
+        }
     }
 
     private fun finish(success: Boolean) {

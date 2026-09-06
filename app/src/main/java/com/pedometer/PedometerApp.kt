@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.pedometer.service.PhoneCallReceiver
 
 class PedometerApp : Application() {
     companion object {
@@ -15,6 +16,7 @@ class PedometerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        PhoneCallReceiver.registerTelephonyCallback(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 isInForeground = true

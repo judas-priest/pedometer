@@ -14,10 +14,12 @@ class MediaListenerService : NotificationListenerService() {
 
         val DEFAULT_WHITELIST = emptySet<String>()
 
-        // Regular phone calls handled by PhoneCallReceiver — skip here
-        private val PHONE_CALL_BLACKLIST = setOf(
+        // Phone dialer packages — use their notification for caller name
+        private val PHONE_CALL_PACKAGES = setOf(
             "com.android.incallui",
             "com.android.dialer",
+            "com.android.contacts",
+            "com.android.server.telecom",
             "com.samsung.android.incallui",
             "com.asus.asusincallui",
             "com.oplus.incallui",
@@ -53,8 +55,20 @@ class MediaListenerService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val isCall = notification.category == Notification.CATEGORY_CALL
 
-        // Regular phone calls handled by PhoneCallReceiver
-        if (isCall && pkg in PHONE_CALL_BLACKLIST) return
+        // Phone calls: use notification title (has contact name)
+        if (isCall || pkg.contains("incall") || pkg.contains("dialer") || pkg.contains("telecom") || pkg.contains("contacts")) {
+            val extras = notification.extras
+            val callerName = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+            val callerText = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            if (!callerName.isNullOrBlank()) {
+                com.pedometer.service.PhoneCallReceiver.callHandledByListener = true
+                WatchNotificationBridge.sendToWatch(
+                    id = 99999, packageName = "phone", appName = "phone",
+                    title = callerName, body = callerText ?: "Входящий вызов", isCall = true,
+                )
+                return
+            }
+        }
 
         // Skip media/transport notifications (music player track changes)
         // But allow ongoing calls (VoIP)
@@ -89,8 +103,8 @@ class MediaListenerService : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         val sbn = sbn ?: return
         val notification = sbn.notification ?: return
-        // VoIP call ended — dismiss call screen on watch
-        if (notification.category == Notification.CATEGORY_CALL && sbn.packageName !in PHONE_CALL_BLACKLIST) {
+        // Call ended (phone or VoIP) — dismiss call screen on watch
+        if (notification.category == Notification.CATEGORY_CALL) {
             Log.i(TAG, "VoIP call ended")
             WatchNotificationBridge.sendToWatch(
                 id = 0, packageName = "phone", appName = "phone",
@@ -99,13 +113,18 @@ class MediaListenerService : NotificationListenerService() {
         }
     }
 
+    private val appNameCache = HashMap<String, String>()
+
     private fun getAppName(packageName: String): String {
-        return try {
+        appNameCache[packageName]?.let { return it }
+        val name = try {
             val pm = applicationContext.packageManager
             val info = pm.getApplicationInfo(packageName, 0)
             pm.getApplicationLabel(info).toString()
         } catch (_: Exception) {
             packageName.substringAfterLast('.')
         }
+        appNameCache[packageName] = name
+        return name
     }
 }

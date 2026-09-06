@@ -163,11 +163,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 onAppBackground()
             }
         }
-        // App launches in foreground — trigger initial refresh + polling
+        // App launches in foreground — trigger initial refresh + polling + sensor
         onAppForeground()
-
-        // Start phone step counter (event-driven, always active)
-        phoneStepCounter.start()
         viewModelScope.launch {
             phoneStepCounter.stepsSinceStart.collect { steps ->
                 _state.value = _state.value.copy(phoneSteps = steps)
@@ -308,24 +305,24 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
 
                         viewModelScope.launch(Dispatchers.IO) {
-                            Thread.sleep(500)
+                            delay(500)
                             Log.i(TAG, "POST-AUTH: initializing watch")
 
                             // 1. getDeviceInfo
                             protocolHandler?.sendCommand(CommandHelper.buildDeviceInfoRequest())
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 2. getBattery
                             protocolHandler?.sendCommand(CommandHelper.buildBatteryRequest())
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 3. setCurrentTime
                             sendCurrentTime()
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 4. setUserInfo
                             sendUserInfo()
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 5. setLocale
                             val localeCmd = XiaomiProto.Command.newBuilder()
@@ -336,11 +333,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                                         .setCode(java.util.Locale.getDefault().toLanguageTag().replace("-", "_").lowercase())))
                                 .build()
                             protocolHandler?.sendCommand(localeCmd)
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 6. Health config init
                             healthService?.initialize()
-                            Thread.sleep(300)
+                            delay(300)
                             // Start realtime stats only if app is in foreground
                             if (PedometerApp.isInForeground) {
                                 healthService?.startRealtimeStats()
@@ -351,26 +348,26 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
                             // 7. Fetch alarms
                             alarmService?.getAlarms()
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 8. Sync contacts
                             watchSettings?.syncContacts()
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 9. Sync calendar
                             calendarService?.syncCalendar()
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 10. Fetch reminders
                             reminderService?.getReminders()
-                            Thread.sleep(200)
+                            delay(200)
 
                             // 11. Send canned messages for quick reply
                             notificationService?.sendCannedMessages()
-                            Thread.sleep(200)
+                            delay(200)
 
-                            // 8. Send weather (activity files fetched by HealthService.initialize())
-                            Thread.sleep(500)
+                            // 12. Send weather (activity files fetched by HealthService.initialize())
+                            delay(500)
                             try { fetchAndSendWeather() } catch (e: Exception) { Log.e(TAG, "Weather init failed", e) }
                             Log.i(TAG, "POST-AUTH: init complete")
                         }
@@ -719,13 +716,15 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun uploadWatchface(data: ByteArray) { dataUploadService?.uploadWatchface(data) }
     fun onAppForeground() {
         Log.i(TAG, "App foreground — starting step polling + full refresh")
+        phoneStepCounter.start()
         refreshData()
         startStepPolling()
     }
 
     fun onAppBackground() {
-        Log.i(TAG, "App background — stopping step polling")
+        Log.i(TAG, "App background — stopping step polling + sensor")
         stopStepPolling()
+        phoneStepCounter.stop()
     }
 
     private fun startStepPolling() {
@@ -745,7 +744,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: Exception) {
                     Log.e(TAG, "StepProvider poll failed", e)
                 }
-                delay(10_000)
+                delay(30_000)
             }
         }
     }
@@ -899,27 +898,25 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     @android.annotation.SuppressLint("MissingPermission")
     private fun startGpsRelay() {
         Log.i(TAG, "Starting GPS relay for workout")
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val client = com.google.android.gms.location.LocationServices
-                    .getFusedLocationProviderClient(getApplication<Application>())
-                val request = com.google.android.gms.location.LocationRequest.Builder(
-                    com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 1000
-                ).build()
-                val callback = object : com.google.android.gms.location.LocationCallback() {
-                    override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
-                        val loc = result.lastLocation ?: return
-                        healthService?.sendGpsLocation(
-                            loc.latitude, loc.longitude, loc.altitude,
-                            loc.speed, loc.bearing
-                        )
-                    }
+        try {
+            val client = com.google.android.gms.location.LocationServices
+                .getFusedLocationProviderClient(getApplication<Application>())
+            val request = com.google.android.gms.location.LocationRequest.Builder(
+                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 5000
+            ).build()
+            val callback = object : com.google.android.gms.location.LocationCallback() {
+                override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+                    val loc = result.lastLocation ?: return
+                    healthService?.sendGpsLocation(
+                        loc.latitude, loc.longitude, loc.altitude,
+                        loc.speed, loc.bearing
+                    )
                 }
-                gpsCallback = callback
-                client.requestLocationUpdates(request, callback, android.os.Looper.getMainLooper())
-            } catch (e: Exception) {
-                Log.e(TAG, "GPS relay failed: ${e.message}")
             }
+            gpsCallback = callback
+            client.requestLocationUpdates(request, callback, android.os.Looper.getMainLooper())
+        } catch (e: Exception) {
+            Log.e(TAG, "GPS relay failed: ${e.message}")
         }
     }
 
@@ -938,6 +935,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun cleanupServices() {
+        weatherJob?.cancel()
+        weatherJob = null
         healthService?.stopRealtimeStats()
         healthService = null
         musicService = null

@@ -16,7 +16,8 @@ class PhoneStepCounter(context: Context) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val stepSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-    private val stepDetector: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+    @Suppress("unused") // reserved for future cadence tracking
+    private val stepDetector: Sensor? = null
 
     private var initialSteps: Long = -1L
     private var startDay: Int = java.time.LocalDate.now().dayOfYear
@@ -28,18 +29,19 @@ class PhoneStepCounter(context: Context) : SensorEventListener {
     val totalStepsSinceBoot: StateFlow<Long> = _totalStepsSinceBoot
 
     val isAvailable: Boolean get() = stepSensor != null
+    private var listening = false
 
     fun start() {
-        if (stepSensor == null) {
-            Log.w(TAG, "Step counter sensor not available")
-            return
-        }
+        if (stepSensor == null || listening) return
         sensorManager.registerListener(this, stepSensor, SensorManager.SENSOR_DELAY_UI)
+        listening = true
         Log.i(TAG, "Step counter started")
     }
 
     fun stop() {
+        if (!listening) return
         sensorManager.unregisterListener(this)
+        listening = false
         Log.i(TAG, "Step counter stopped")
     }
 
@@ -54,7 +56,6 @@ class PhoneStepCounter(context: Context) : SensorEventListener {
                 startDay = today
             }
             _stepsSinceStart.value = totalSteps - initialSteps
-            Log.d(TAG, "Steps: total=$totalSteps sinceStart=${_stepsSinceStart.value}")
         }
     }
 
