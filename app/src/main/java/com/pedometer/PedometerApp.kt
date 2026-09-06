@@ -5,30 +5,37 @@ import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.pedometer.repo.WatchRepository
 import com.pedometer.service.PhoneCallReceiver
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class PedometerApp : Application() {
     companion object {
-        var isInForeground = false
+        private val _foreground = MutableStateFlow(false)
+        val foreground: StateFlow<Boolean> = _foreground
+        val isInForeground: Boolean get() = _foreground.value
+
+        lateinit var repository: WatchRepository
             private set
-        var onForegroundChanged: ((Boolean) -> Unit)? = null
     }
 
     override fun onCreate() {
         super.onCreate()
+        repository = WatchRepository.get(this)
         PhoneCallReceiver.registerTelephonyCallback(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
-                isInForeground = true
+                _foreground.value = true
                 Log.i("PedometerApp", "App → FOREGROUND")
-                onForegroundChanged?.invoke(true)
             }
 
             override fun onStop(owner: LifecycleOwner) {
-                isInForeground = false
+                _foreground.value = false
                 Log.i("PedometerApp", "App → BACKGROUND")
-                onForegroundChanged?.invoke(false)
             }
         })
+        repository.scope.launch { PedometerApp.foreground.collect { repository.onForegroundChanged(it) } }
     }
 }
