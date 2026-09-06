@@ -1,5 +1,6 @@
 package com.pedometer
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,11 +16,13 @@ import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import com.pedometer.debug.DebugScreen
 import com.pedometer.music.MediaListenerService
+import com.pedometer.service.WatchConnectionService
 import com.pedometer.ui.*
 import com.pedometer.ui.theme.PedometerTheme
 import com.pedometer.vm.WatchViewModel
@@ -35,6 +38,12 @@ class MainActivity : ComponentActivity() {
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
         packageManager.setComponentEnabledSetting(cn,
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+
+        // Start the foreground service that owns the watch connection (cold start path;
+        // BootReceiver covers the reboot path).
+        if (PedometerApp.repository.hasCredentials) {
+            ContextCompat.startForegroundService(this, Intent(this, WatchConnectionService::class.java))
+        }
 
         setContent {
             PedometerTheme {

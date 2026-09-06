@@ -68,7 +68,7 @@
         <service
             android:name=".service.WatchConnectionService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice|location" />
+            android:foregroundServiceType="connectedDevice|health|location" />
         <receiver
             android:name=".service.CommandReceiver"
             android:exported="true">

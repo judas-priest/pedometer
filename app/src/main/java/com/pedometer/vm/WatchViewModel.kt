@@ -2,7 +2,9 @@ package com.pedometer.vm
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pedometer.data.DailyHealth
@@ -18,6 +20,7 @@ import com.pedometer.health.HealthConnectReader
 import com.pedometer.health.StepProviderReader
 import com.pedometer.health.UserProfile
 import com.pedometer.repo.withWatchData
+import com.pedometer.service.WatchConnectionService
 import com.pedometer.util.CalendarService
 import com.pedometer.util.WatchAlarm
 import com.pedometer.util.WatchReminder
@@ -106,13 +109,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(profile = userProfile)
         refreshCalendarEvents()
 
-        // Auto-connect if MAC and key saved (moves to WatchConnectionService in a later task)
-        if (repo.hasCredentials) {
-            viewModelScope.launch {
-                delay(2000) // wait for UI to settle
-                repo.connect()
-            }
-        }
+        // Auto-connect is handled by WatchConnectionService, started from MainActivity
+        // (and BootReceiver after reboot).
 
         // Watch data arrives from the repository
         viewModelScope.launch {
@@ -175,9 +173,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             .edit().putString(KEY_MAC, mac).apply()
     }
 
-    fun connect() { repo.connect() }
+    fun connect() {
+        val ctx = getApplication<Application>()
+        ContextCompat.startForegroundService(ctx, Intent(ctx, WatchConnectionService::class.java))
+    }
 
-    fun disconnect() { repo.disconnect() }
+    fun disconnect() {
+        val ctx = getApplication<Application>()
+        val intent = Intent(ctx, WatchConnectionService::class.java)
+            .setAction(WatchConnectionService.ACTION_DISCONNECT)
+        ctx.startService(intent)
+    }
 
     fun onAppForeground() {
         Log.i(TAG, "App foreground — starting step polling + full refresh")

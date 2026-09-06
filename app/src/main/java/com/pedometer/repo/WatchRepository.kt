@@ -135,6 +135,13 @@ class WatchRepository(private val context: Context) {
         weatherJob?.cancel(); weatherJob = null
         initJob?.cancel(); initJob = null
         link.disconnect()
+        stopGpsRelayIfActive()
+    }
+
+    /** Ask the consumer (ViewModel) to stop fused-location updates — idempotent on its side. */
+    private fun stopGpsRelayIfActive() {
+        val cb = onGpsRelayNeeded
+        cb?.invoke(false)
     }
 
     fun onProfileChanged(newProfile: UserProfile) {
@@ -162,6 +169,7 @@ class WatchRepository(private val context: Context) {
         alarmService = null
         calendarService = null
         reminderService = null
+        stopGpsRelayIfActive()
     }
 
     private fun onAuthenticated() {
