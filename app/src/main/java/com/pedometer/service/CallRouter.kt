@@ -23,12 +23,14 @@ class CallRouter(private val fallbackDelayMs: Long = 2_000L) {
     private var ringingAtMs: Long? = null
     private var shown = false
 
+    @Synchronized
     fun onRinging(nowMs: Long): CallAction {
         ringingAtMs = nowMs
         shown = false
         return CallAction.None
     }
 
+    @Synchronized
     fun onDialerNotification(title: String, text: String?): CallAction {
         if (shown) return CallAction.None
         if (title.isBlank()) return CallAction.None
@@ -38,6 +40,7 @@ class CallRouter(private val fallbackDelayMs: Long = 2_000L) {
     }
 
     /** Called periodically while ringing; emits the fallback once the window expires. */
+    @Synchronized
     fun onTick(nowMs: Long, fallbackTitle: String): CallAction {
         if (shown) return CallAction.None
         val started = ringingAtMs ?: return CallAction.None
@@ -46,6 +49,7 @@ class CallRouter(private val fallbackDelayMs: Long = 2_000L) {
         return CallAction.Show(fallbackTitle, DEFAULT_BODY)
     }
 
+    @Synchronized
     fun onIdle(): CallAction {
         val wasShown = shown
         shown = false

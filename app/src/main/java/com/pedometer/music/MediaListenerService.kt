@@ -5,6 +5,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.pedometer.notification.WatchNotificationBridge
+import com.pedometer.service.PhoneCallReceiver
 
 class MediaListenerService : NotificationListenerService() {
     companion object {
@@ -23,6 +24,8 @@ class MediaListenerService : NotificationListenerService() {
             "com.samsung.android.incallui",
             "com.asus.asusincallui",
             "com.oplus.incallui",
+            "com.oplus.dialer",
+            "com.oplus.contacts",
         )
 
         fun getWhitelist(context: android.content.Context): Set<String> {
@@ -56,16 +59,12 @@ class MediaListenerService : NotificationListenerService() {
         val isCall = notification.category == Notification.CATEGORY_CALL
 
         // Phone calls: use notification title (has contact name)
-        if (isCall || pkg.contains("incall") || pkg.contains("dialer") || pkg.contains("telecom") || pkg.contains("contacts")) {
+        if (isCall || pkg in PHONE_CALL_PACKAGES) {
             val extras = notification.extras
             val callerName = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             val callerText = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()
             if (!callerName.isNullOrBlank()) {
-                com.pedometer.service.PhoneCallReceiver.callHandledByListener = true
-                WatchNotificationBridge.sendToWatch(
-                    id = 99999, packageName = "phone", appName = "phone",
-                    title = callerName, body = callerText ?: "Входящий вызов", isCall = true,
-                )
+                PhoneCallReceiver.apply(PhoneCallReceiver.router.onDialerNotification(callerName, callerText))
                 return
             }
         }
@@ -106,10 +105,7 @@ class MediaListenerService : NotificationListenerService() {
         // Call ended (phone or VoIP) — dismiss call screen on watch
         if (notification.category == Notification.CATEGORY_CALL) {
             Log.i(TAG, "VoIP call ended")
-            WatchNotificationBridge.sendToWatch(
-                id = 0, packageName = "phone", appName = "phone",
-                title = "", body = "", isCall = false,
-            )
+            PhoneCallReceiver.apply(PhoneCallReceiver.router.onIdle())
         }
     }
 
