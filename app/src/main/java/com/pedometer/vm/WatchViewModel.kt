@@ -93,9 +93,7 @@ data class WatchState(
     val calendarEvents: List<com.pedometer.ui.CalendarEventUI> = emptyList(),
 )
 
-enum class ConnectionStatus {
-    Disconnected, Connecting, Authenticating, Connected
-}
+typealias ConnectionStatus = com.pedometer.bt.ConnectionStatus
 
 class WatchViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
