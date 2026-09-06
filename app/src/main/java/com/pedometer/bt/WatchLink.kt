@@ -61,9 +61,9 @@ class WatchLink(
     /** Current attempt epoch; bumped to invalidate in-flight/zombie attempts. */
     @Volatile private var attemptId = 0
 
-    private var connectJob: Job? = null
-    private var reconnectJob: Job? = null
-    private var watchdogJob: Job? = null
+    @Volatile private var connectJob: Job? = null
+    @Volatile private var reconnectJob: Job? = null
+    @Volatile private var watchdogJob: Job? = null
 
     private var mac: String = ""
     private var authKey: String = ""
@@ -112,61 +112,84 @@ class WatchLink(
                 val auth = AuthService(authKey)
 
                 // Blocking: up to ~24s. If the user disconnected or a newer attempt started
-                // meanwhile, tear down what we just made and bail without touching shared state.
+                // meanwhile, the epoch-validated commit below discards this connection
+                // without touching shared state.
                 val ok = connection.connect(device)
-                var stale: Boolean
-                synchronized(stateLock) {
-                    stale = attemptId != myAttempt
-                    if (!stale && ok) _status.value = ConnectionStatus.Authenticating
-                }
-                if (stale) {
-                    Log.i(TAG, "Attempt $myAttempt stale after connect() — discarding")
-                    try { connection.disconnect() } catch (_: Exception) {}
-                    synchronized(stateLock) {
-                        if (spp === connection) spp = null
-                        if (protocolHandler === handler) protocolHandler = null
-                    }
-                    return@launch
-                }
+
                 if (!ok) {
-                    // Close the local connection first (kills its server thread) so a late
-                    // accept cannot come back to life after we've reported failure.
+                    // connection.disconnect() does NOT kill SppConnection's server thread:
+                    // accept() ignores interrupts, so a failed attempt can leave a listening
+                    // socket behind for up to its ~30s accept timeout. That is benign — the
+                    // epoch guards make every callback from a late accept inert (stale
+                    // attemptId -> silently dropped) — but we still close the local socket
+                    // so the attempt cannot be half-alive after we report failure.
                     try { connection.disconnect() } catch (_: Exception) {}
                     Log.w(TAG, "SPP failed for $mac")
                     fail(myAttempt, "SPP connect failed")
                     return@launch
                 }
 
-                spp = connection
                 val built = ProtocolHandler(
                     authService = auth,
                     connection = { data -> connection.write(data) },
                     onAuthenticated = {
                         // Re-validate the epoch under the lock so a watchdog abort that lands
                         // between the old status check and this write cannot be overwritten:
-                        // either we win (Connected) or the abort already bumped attemptId and
-                        // we silently do nothing.
+                        // either we win (Connected, authorized=true) or the abort already
+                        // bumped attemptId and we silently do nothing.
+                        var authorized = false
                         synchronized(stateLock) {
-                            if (attemptId != myAttempt) return@synchronized
-                            policy.onConnected()
-                            _status.value = ConnectionStatus.Connected
+                            // Authenticating is required too: markDisconnected() (transport
+                            // drop) resets status without bumping the epoch, so attemptId
+                            // alone cannot see that this connection is already dead.
+                            if (attemptId == myAttempt && _status.value == ConnectionStatus.Authenticating) {
+                                policy.onConnected()
+                                _status.value = ConnectionStatus.Connected
+                                authorized = true
+                            }
                         }
-                        onAuthenticated?.invoke()
+                        // Accepted residual window (1 instruction wide): a newer attempt or
+                        // disconnect() may start between releasing stateLock and the invoke,
+                        // so the consumer can observe a notification from a just-superseded
+                        // attempt. Notification only, never a state write — harmless, and
+                        // preferable to invoking callbacks while holding stateLock.
+                        if (authorized) onAuthenticated?.invoke()
                     },
                     onCommand = { cmd -> onCommand?.invoke(cmd) },
                 )
                 built.onActivityData = { data -> onActivityData?.invoke(data) }
                 handler = built
-                protocolHandler = built
+
+                // Commit the entire post-connect handover under one epoch-validated lock:
+                // a zombie from a superseded attempt must not install its socket/handler
+                // over a newer attempt's fields, and a disconnect() that lands after the
+                // connect() must not end up with a fresh live socket re-assigned into spp.
+                var committed = false
+                synchronized(stateLock) {
+                    // A transport drop during connect() resets status without bumping the
+                    // epoch (markDisconnected already scheduled a reconnect) — treat that
+                    // as stale too rather than resuscitating the dead socket.
+                    committed = attemptId == myAttempt && _status.value != ConnectionStatus.Disconnected
+                    if (committed) {
+                        _status.value = ConnectionStatus.Authenticating
+                        spp = connection
+                        protocolHandler = built
+                        startWatchdog(myAttempt) // reentrant; re-checks the same epoch
+                    }
+                }
+                if (!committed) {
+                    Log.i(TAG, "Attempt $myAttempt stale after connect() — discarding")
+                    try { connection.disconnect() } catch (_: Exception) {}
+                    return@launch
+                }
 
                 built.start()
-                startWatchdog(myAttempt)
             } catch (e: Exception) {
                 Log.e(TAG, "Connect failed: ${e.message}", e)
-                if (attemptId == myAttempt) {
-                    try { connection.disconnect() } catch (_: Exception) {}
-                    fail(myAttempt, "Connect failed")
-                }
+                // Always tear down the local connection — even for a superseded attempt,
+                // whose socket nobody else will clean up. fail() no-ops on a stale epoch.
+                try { connection.disconnect() } catch (_: Exception) {}
+                fail(myAttempt, "Connect failed")
             }
         }
     }
@@ -174,15 +197,22 @@ class WatchLink(
     /**
      * If auth has not completed in 30s, treat the attempt as failed. Aborting bumps the
      * epoch, so an in-flight auth callback landing afterwards is rejected by its guard.
+     *
+     * Arming is epoch-validated and called from the commit block (reentrant lock), so a
+     * watchdog job always belongs to the attempt that installed spp/protocolHandler and
+     * can never cancel a newer attempt's watchdog.
      */
     private fun startWatchdog(myAttempt: Int) {
-        watchdogJob?.cancel()
-        watchdogJob = scope.launch(Dispatchers.IO) {
-            delay(30_000)
-            if (abortAttempt(myAttempt, "Auth watchdog fired — giving up on this attempt")) {
-                closeSockets()
-                onDisconnected?.invoke()
-                scheduleReconnect()
+        synchronized(stateLock) {
+            if (attemptId != myAttempt) return
+            watchdogJob?.cancel()
+            watchdogJob = scope.launch(Dispatchers.IO) {
+                delay(30_000)
+                if (abortAttempt(myAttempt, "Auth watchdog fired — giving up on this attempt")) {
+                    closeSockets()
+                    onDisconnected?.invoke()
+                    scheduleReconnect()
+                }
             }
         }
     }
@@ -240,10 +270,20 @@ class WatchLink(
             return
         }
         Log.i(TAG, "Reconnect attempt ${policy.attempts} in ${delayMs}ms")
+        val scheduledFor: Int
+        synchronized(stateLock) { scheduledFor = attemptId }
         reconnectJob?.cancel()
         reconnectJob = scope.launch(Dispatchers.IO) {
             delay(delayMs)
-            if (_status.value == ConnectionStatus.Disconnected) startConnectAttempt()
+            synchronized(stateLock) {
+                if (attemptId != scheduledFor || _status.value != ConnectionStatus.Disconnected) return@launch
+                // Epoch re-validation also closes the disconnect window: disconnect() is the
+                // only thing that can suspend retries while a job is pending, and it bumps
+                // attemptId under this same lock BEFORE suspending — so a job that still
+                // matches scheduledFor here cannot belong to a suspended policy. connect()
+                // and retryNow() resume retries before starting, so they are unaffected.
+                startConnectAttempt() // bumps attemptId under its own lock, reentrant-safe
+            }
         }
     }
 
