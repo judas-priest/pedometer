@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.ComponentName
 import android.content.pm.PackageManager
+import com.pedometer.BuildConfig
 import com.pedometer.debug.DebugScreen
 import com.pedometer.music.MediaListenerService
 import com.pedometer.service.WatchConnectionService
@@ -68,7 +69,7 @@ class MainActivity : ComponentActivity() {
                     return@PedometerTheme
                 }
 
-                if (showDebug) {
+                if (showDebug && BuildConfig.DEBUG) {
                     androidx.activity.compose.BackHandler { showDebug = false }
                     DebugScreen(mac = state.macAddress.ifBlank { "E8:E6:09:31:23:D8" })
                     return@PedometerTheme

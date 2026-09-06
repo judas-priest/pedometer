@@ -245,8 +245,10 @@ fun SettingsTab(
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Экспорт данных (CSV)") }
 
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onOpenDebug, modifier = Modifier.fillMaxWidth()) { Text("Отладка") }
+        if (com.pedometer.BuildConfig.DEBUG) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onOpenDebug, modifier = Modifier.fillMaxWidth()) { Text("Отладка") }
+        }
 
         Spacer(Modifier.height(16.dp))
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
