@@ -22,24 +22,32 @@ class CallRouter(private val fallbackDelayMs: Long = 2_000L) {
 
     private var ringingAtMs: Long? = null
     private var shown = false
+    /** True once the card shows a resolved caller NAME (dialer path) — a later name cannot improve it. */
+    private var shownWithName = false
 
     @Synchronized
     fun onRinging(nowMs: Long): CallAction {
         ringingAtMs = nowMs
         shown = false
+        shownWithName = false
         return CallAction.None
     }
 
     @Synchronized
     fun onDialerNotification(title: String, text: String?): CallAction {
-        if (shown) return CallAction.None
+        if (shownWithName) return CallAction.None
         if (title.isBlank()) return CallAction.None
         shown = true
+        shownWithName = true
         val body = text?.takeIf { it.isNotBlank() } ?: DEFAULT_BODY
         return CallAction.Show(title, body)
     }
 
-    /** Called periodically while ringing; emits the fallback once the window expires. */
+    /**
+     * Called periodically while ringing; emits the fallback once the window expires.
+     * Marks [shown] but NOT [shownWithName]: the fallback title is a raw number, so a
+     * dialer notification that arrives later must still be able to upgrade the card.
+     */
     @Synchronized
     fun onTick(nowMs: Long, fallbackTitle: String): CallAction {
         if (shown) return CallAction.None

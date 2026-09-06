@@ -28,6 +28,9 @@ class MediaListenerService : NotificationListenerService() {
             "com.oplus.contacts",
         )
 
+        /** Titles like "+7 999 123-45-67" — system call notifications never resolve contacts. */
+        private val NUMBER_ONLY_TITLE = Regex("^[+0-9][0-9 ()\\-.]{4,}$")
+
         fun getWhitelist(context: android.content.Context): Set<String> {
             val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
             return prefs.getStringSet(KEY_PACKAGES, null) ?: emptySet()
@@ -64,6 +67,13 @@ class MediaListenerService : NotificationListenerService() {
             val callerName = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             val callerText = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()
             if (!callerName.isNullOrBlank()) {
+                if (callerName.matches(NUMBER_ONLY_TITLE)) {
+                    // System call notifications (com.android.server.telecom and friends) carry
+                    // the RAW number in EXTRA_TITLE — they never resolve contacts. Do not claim
+                    // the router's "shown" slot with it: the 2s telephony fallback does the
+                    // contact lookup and shows the name (or the number if not in contacts).
+                    return
+                }
                 PhoneCallReceiver.apply(PhoneCallReceiver.router.onDialerNotification(callerName, callerText))
                 return
             }

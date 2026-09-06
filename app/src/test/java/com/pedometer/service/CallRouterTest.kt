@@ -78,4 +78,27 @@ class CallRouterTest {
             router.onDialerNotification("Папа", null),
         )
     }
+
+    @Test
+    fun `a late dialer name upgrades a fallback-shown number card`() {
+        val router = CallRouter(fallbackDelayMs = 2_000)
+        router.onRinging(nowMs = 0)
+        assertEquals(
+            CallAction.Show("+79990000000", "Входящий вызов"),
+            router.onTick(nowMs = 2_000, fallbackTitle = "+79990000000"),
+        )
+        assertEquals(
+            CallAction.Show("Мама", "Входящий вызов"),
+            router.onDialerNotification("Мама", null),
+        )
+        assertEquals(CallAction.None, router.onDialerNotification("Мама", null))
+    }
+
+    @Test
+    fun `a fallback number cannot overwrite a shown name`() {
+        val router = CallRouter(fallbackDelayMs = 2_000)
+        router.onRinging(nowMs = 0)
+        router.onDialerNotification("Мама", null)
+        assertEquals(CallAction.None, router.onTick(nowMs = 3_000, fallbackTitle = "+79990000000"))
+    }
 }
