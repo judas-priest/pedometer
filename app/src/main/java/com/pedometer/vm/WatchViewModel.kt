@@ -27,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -125,14 +126,16 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             repo.data.collect { data ->
                 if (data.roomRevision != lastRevision) {
                     lastRevision = data.roomRevision
-                    refreshData()
+                    // Room writes originate from the watch — do NOT ask the watch again,
+                    // otherwise each answer bumps roomRevision and re-triggers this loop.
+                    refreshData(alsoFetchFromWatch = false)
                 }
             }
         }
         repo.onGpsRelayNeeded = { needed -> if (needed) startGpsRelay() else stopGpsRelay() }
 
         viewModelScope.launch {
-            PedometerApp.foreground.collect { inForeground ->
+            PedometerApp.foreground.drop(1).collect { inForeground ->
                 if (inForeground) onAppForeground() else onAppBackground()
             }
         }
@@ -216,7 +219,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         stepPollingJob = null
     }
 
-    fun refreshData() {
+    fun refreshData(alsoFetchFromWatch: Boolean = true) {
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -288,7 +291,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             } catch (_: Exception) {}
 
             // 4. Watch data — battery, activity files, weather
-            repo.refreshFromWatch()
+            if (alsoFetchFromWatch) repo.refreshFromWatch()
         }
     }
 

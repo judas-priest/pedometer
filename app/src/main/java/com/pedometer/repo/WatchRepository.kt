@@ -30,6 +30,7 @@ import com.pedometer.watchface.DataUploadService
 import com.pedometer.watchface.WatchfaceService
 import com.pedometer.weather.WeatherProvider
 import com.pedometer.weather.WeatherService
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -63,30 +64,35 @@ class WatchRepository(private val context: Context) {
     }
 
     /** Internal, not private: PedometerApp launches the foreground-signal collector on it. */
-    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    internal val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
+            Log.e(TAG, "Uncaught in repository scope", e)
+        }
+    )
     private val _data = MutableStateFlow(WatchData())
     val data: StateFlow<WatchData> = _data
 
     private val link = WatchLink(context, scope)
 
-    // Watch-facing services — recreated on every successful connect.
-    private var healthService: HealthService? = null
-    private var musicService: MusicService? = null
-    private var weatherService: WeatherService? = null
-    private var notificationService: NotificationService? = null
-    private var watchfaceService: WatchfaceService? = null
-    private var activitySync: ActivitySync? = null
-    private var dataUploadService: DataUploadService? = null
-    private var utilityService: UtilityService? = null
-    private var alarmService: AlarmService? = null
-    private var calendarService: CalendarService? = null
-    private var reminderService: ReminderService? = null
+    // Watch-facing services — recreated on every successful connect. Written from the
+    // BT read/auth threads, read from main/IO — hence @Volatile.
+    @Volatile private var healthService: HealthService? = null
+    @Volatile private var musicService: MusicService? = null
+    @Volatile private var weatherService: WeatherService? = null
+    @Volatile private var notificationService: NotificationService? = null
+    @Volatile private var watchfaceService: WatchfaceService? = null
+    @Volatile private var activitySync: ActivitySync? = null
+    @Volatile private var dataUploadService: DataUploadService? = null
+    @Volatile private var utilityService: UtilityService? = null
+    @Volatile private var alarmService: AlarmService? = null
+    @Volatile private var calendarService: CalendarService? = null
+    @Volatile private var reminderService: ReminderService? = null
 
     private var weatherJob: Job? = null
     private var initJob: Job? = null
-    private var lastHrSaveTime = 0L
-    private var lastWeatherFetchTime = 0L
-    private var profile: UserProfile = UserProfile.load(context)
+    @Volatile private var lastHrSaveTime = 0L
+    @Volatile private var lastWeatherFetchTime = 0L
+    @Volatile private var profile: UserProfile = UserProfile.load(context)
 
     private val dao get() = StepDatabase.get(context).stepDao()
 
@@ -489,16 +495,11 @@ class WatchRepository(private val context: Context) {
     fun deleteAlarm(alarmId: Int) { alarmService?.deleteAlarm(alarmId) }
 
     fun getReminders() { reminderService?.getReminders() }
-    fun createReminder(title: String, y: Int, m: Int, d: Int, h: Int, min: Int) {
-        reminderService?.createReminder(title, y, m, d, h, min)
-    }
-    fun deleteReminderById(id: Int) { reminderService?.deleteReminder(id) }
     fun syncCalendar() { calendarService?.syncCalendar() }
     // WatchSettings is cheap and stateless — built per call rather than held.
     fun syncContacts() { watchSettings()?.syncContacts() }
     fun setDnd(enabled: Boolean) { watchSettings()?.setDnd(enabled) }
     fun setWearingMode(mode: Int) { watchSettings()?.setWearingMode(mode) }
-    fun startBreathing() { utilityService?.sendBreathingVibration() }
     private fun watchSettings(): WatchSettings? =
         link.protocolHandler?.let { WatchSettings(it, context) }
 

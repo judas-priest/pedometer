@@ -9,7 +9,7 @@ import com.pedometer.watchface.WatchfaceInfo
 /**
  * Everything the watch itself is the source of truth for.
  *
- * Owned by WatchRepository (later task), which outlives the Activity. The ViewModel merges it
+ * Owned by WatchRepository, which outlives the Activity. The ViewModel merges it
  * into WatchState for the UI — see withWatchData.
  *
  * Data that lands in Room (sleep, workouts, heart-rate history, daily health) is NOT here:
