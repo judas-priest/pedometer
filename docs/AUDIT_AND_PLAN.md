@@ -19,7 +19,7 @@
 
 ### P1 — Reliable Background Service
 - [x] Foreground service with TYPE_STEP_DETECTOR for real-time step events
-- [x] TYPE_STEP_COUNTER for daily totals (backup/cross-check + reboot snapshots)
+- [ ] TYPE_STEP_COUNTER for daily totals (backup/cross-check + reboot snapshots) — not implemented; daily totals come from the OPLUS StepProvider
 - [x] Boot receiver (BOOT_COMPLETED + MY_PACKAGE_REPLACED) to restart service
 - [x] Call startForeground() within 5 seconds of service creation (HEALTH type)
 - [x] Battery optimization whitelisting — card в SettingsTab с кнопкой "Отключить оптимизацию"
@@ -28,11 +28,11 @@
 ### P2 — Room DB & Hourly Data
 - [x] Room DB schema: 3 tables (DailySteps, HourlySteps, StepSnapshot) — `data/` package
 - [x] Room dependencies + KSP plugin added to build.gradle
-- [x] Bucket TYPE_STEP_DETECTOR events by hour into hourly_steps (in StepCounterService)
-- [x] Save TYPE_STEP_COUNTER snapshots for reboot delta computation
+- [x] Bucket TYPE_STEP_DETECTOR events by hour into hourly_steps — `StepCollector`, hosted by `WatchConnectionService` (implemented on branch audit-remediation, 2026-09-06)
+- [ ] TYPE_STEP_COUNTER reboot snapshots — `StepSnapshot` table exists, nothing writes to it since StepCounterService was removed
 - [x] Migrate StepProvider daily data to Room — upsertDaily() в periodic refresh loop
 - [x] Read hourly data in UI — HourlyStepChart в DayDetailScreen, данные из Room каждые 10с
-- [x] Handle TYPE_STEP_COUNTER reset on reboot — detect via snapshot comparison, clean old snapshots
+- [ ] Handle TYPE_STEP_COUNTER reset on reboot — detect via snapshot comparison, clean old snapshots (pending, nothing writes snapshots yet)
 
 ### P3 — UI Improvements
 - [x] Hourly chart in day detail (0-6-12-18-24, like OHealth) — HourlyStepChart

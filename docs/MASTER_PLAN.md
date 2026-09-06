@@ -61,14 +61,19 @@
 - [x] Background service persistence (boot receiver restarts step + watch services)
 
 ## Phase 9: Voice Assistant (Bonus)
-- [x] Research: feasible via Bluetooth SCO (HFP), not SPP
-- [x] VoiceAssistant skeleton (SCO setup, AudioRecord, 5s capture)
-- [x] Permissions: RECORD_AUDIO, MODIFY_AUDIO_SETTINGS
-- [x] STT integration (Android SpeechRecognizer, Russian)
-- [x] LLM integration (DeepSeek v3.1 via RouterAI, OpenAI-compatible API)
-- [x] TTS integration (Android TextToSpeech, Russian)
-- [x] Trigger from watch (button in Activity tab + watch notification)
-- [x] Show text response on watch screen via notification
+
+> **Removed 2026-07-02 (commit 6284dc2):** `VoiceAssistant.kt`, `LlmClient.kt` and `WhisperClient.kt`
+> were deleted as dead code — watch mic audio is not reachable over SPP without HFP. The research
+> notes below are kept for anyone who wants to retry via SCO.
+
+- [-] Research: feasible via Bluetooth SCO (HFP), not SPP
+- [-] VoiceAssistant skeleton (SCO setup, AudioRecord, 5s capture)
+- [-] Permissions: RECORD_AUDIO, MODIFY_AUDIO_SETTINGS
+- [-] STT integration (Android SpeechRecognizer, Russian)
+- [-] LLM integration (DeepSeek v3.1 via RouterAI, OpenAI-compatible API)
+- [-] TTS integration (Android TextToSpeech, Russian)
+- [-] Trigger from watch (button in Activity tab + watch notification)
+- [-] Show text response on watch screen via notification
 
 ## Phase 10: Creative Bonus Features
 - [x] Research watch hardware capabilities (documented in Research Notes below)

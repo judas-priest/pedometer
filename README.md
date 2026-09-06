@@ -12,7 +12,7 @@ Direct SPP (Bluetooth Classic) connection to the watch using reverse-engineered 
 
 ## Features
 
-- **Steps** — real-time step count from phone sensors + watch, walk/run breakdown, daily goal ring
+- **Steps** — daily count from the phone's step sensor (background) and the OPLUS step provider, walk/run breakdown from the watch, daily goal ring
 - **Heart Rate** — live HR from watch, today's chart, weekly trend
 - **SpO2 & Stress** — blood oxygen and stress levels from watch
 - **Sleep** — sleep stages (deep/light/REM/awake), duration, quality score
