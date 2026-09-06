@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import com.pedometer.MainActivity
 import com.pedometer.PedometerApp
 import com.pedometer.bt.ConnectionStatus
+import com.pedometer.health.StepCollector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +46,17 @@ class WatchConnectionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val repo get() = PedometerApp.repository
 
+    // Phone detector only counts while the watch is NOT syncing — see the
+    // double-counting note on StepCollector.collectEnabled.
+    private val stepCollector by lazy {
+        StepCollector(
+            this,
+            collectEnabled = {
+                PedometerApp.repository.data.value.connectionStatus != ConnectionStatus.Connected
+            },
+        )
+    }
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onCreate() {
@@ -55,6 +67,7 @@ class WatchConnectionService : Service() {
                 updateNotification(statusText(data.connectionStatus))
             }
         }
+        stepCollector.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -178,6 +191,7 @@ class WatchConnectionService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "Foreground service destroyed")
+        stepCollector.stop()
         scope.cancel()
         super.onDestroy()
     }
