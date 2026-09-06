@@ -58,10 +58,36 @@ class WatchConnectionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        ServiceCompat.startForeground(
-            this, NOTIFICATION_ID, buildNotification(statusText(repo.data.value.connectionStatus)),
-            foregroundTypes(),
-        )
+        try {
+            ServiceCompat.startForeground(
+                this, NOTIFICATION_ID, buildNotification(statusText(repo.data.value.connectionStatus)),
+                foregroundTypes(),
+            )
+        } catch (e: SecurityException) {
+            // Defense in depth: foregroundTypes() should never produce an unsafe mask, but if it
+            // does (or the OS adds a new check), degrade to the always-permitted CONNECTED_DEVICE.
+            Log.e(TAG, "startForeground rejected full mask, retrying with CONNECTED_DEVICE", e)
+            try {
+                ServiceCompat.startForeground(
+                    this, NOTIFICATION_ID, buildNotification(statusText(repo.data.value.connectionStatus)),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                )
+            } catch (retry: SecurityException) {
+                Log.e(TAG, "startForeground rejected even CONNECTED_DEVICE", retry)
+                throw retry
+            }
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "startForeground rejected full mask, retrying with CONNECTED_DEVICE", e)
+            try {
+                ServiceCompat.startForeground(
+                    this, NOTIFICATION_ID, buildNotification(statusText(repo.data.value.connectionStatus)),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                )
+            } catch (retry: IllegalArgumentException) {
+                Log.e(TAG, "startForeground rejected even CONNECTED_DEVICE", retry)
+                throw retry
+            }
+        }
 
         if (intent?.action == ACTION_DISCONNECT) {
             // Disconnect the watch but KEEP the service alive: it also hosts StepCollector
@@ -82,14 +108,23 @@ class WatchConnectionService : Service() {
 
     /**
      * Android 14+ throws SecurityException from startForeground() if a declared type's backing
-     * runtime permission is not granted: LOCATION needs ACCESS_FINE_LOCATION, HEALTH needs one
-     * of ACTIVITY_RECOGNITION / BODY_SENSORS / HIGH_SAMPLING_RATE_SENSORS. The user can deny
-     * either one in Settings, so the mask is built from what is actually granted.
+     * runtime permission is not granted. The user can deny any of them in Settings, so the mask
+     * is built from what is actually granted.
+     *
+     * LOCATION additionally requires ACCESS_BACKGROUND_LOCATION when the service is started
+     * FROM THE BACKGROUND (e.g. the BootReceiver path after reboot). A user who granted location
+     * "while in use" only would otherwise hit a SecurityException in onStartCommand on every
+     * reboot, so the LOCATION bit is only set when background location is granted too. This is
+     * behaviorally harmless: the GPS relay for workouts only starts from the foreground Activity.
+     *
+     * HEALTH needs one of ACTIVITY_RECOGNITION / BODY_SENSORS / HIGH_SAMPLING_RATE_SENSORS.
      * CONNECTED_DEVICE has no permission requirement and is always safe.
      */
     private fun foregroundTypes(): Int {
         var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        if (granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
+        if (granted(Manifest.permission.ACCESS_FINE_LOCATION) &&
+            granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        ) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
