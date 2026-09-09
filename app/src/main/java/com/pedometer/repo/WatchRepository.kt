@@ -471,6 +471,16 @@ class WatchRepository(private val context: Context) {
             sendLocale()
             delay(200)
 
+            // 5b. Sync the phonebook — the watch's NATIVE incoming-call screen (HFP pairing)
+            // resolves caller names against it. Without this the native screen shows a raw
+            // number and covers our notification card. Cheap enough (limit=50) per connect.
+            try {
+                watchSettings()?.syncContacts()
+            } catch (e: Exception) {
+                Log.w(TAG, "Contacts sync failed: ${e.message}")
+            }
+            delay(300)
+
             // 6. Health config init
             healthService?.initialize()
             delay(300)

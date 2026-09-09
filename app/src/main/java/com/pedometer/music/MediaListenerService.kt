@@ -66,6 +66,7 @@ class MediaListenerService : NotificationListenerService() {
             val extras = notification.extras
             val callerName = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             val callerText = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            Log.i(TAG, "Call notification: pkg=$pkg, title=$callerName, text=$callerText")
             if (!callerName.isNullOrBlank()) {
                 if (callerName.matches(NUMBER_ONLY_TITLE)) {
                     // System call notifications (com.android.server.telecom and friends) carry

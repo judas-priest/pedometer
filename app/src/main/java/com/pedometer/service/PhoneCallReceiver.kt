@@ -38,6 +38,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     },
                 )
                 callbackRegistered = true
+                Log.i(TAG, "TelephonyCallback registered")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to register TelephonyCallback: ${e.message}")
             }
@@ -60,6 +61,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
         private fun handleStateChange(context: Context, state: Int) {
             if (state == lastState) return
+            Log.i(TAG, "Telephony state: $lastState -> $state, savedNumber=$savedNumber")
             lastState = state
             when (state) {
                 TelephonyManager.CALL_STATE_RINGING -> {
@@ -67,9 +69,9 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     apply(router.onRinging(startedAt))
                     fallbackRunnable?.let { handler.removeCallbacks(it) }
                     val runnable = Runnable {
-                        val fallback = resolveContactName(context, savedNumber)
-                            ?: savedNumber
-                            ?: "Неизвестный"
+                        val lookedUp = resolveContactName(context, savedNumber)
+                        val fallback = lookedUp ?: savedNumber ?: "Неизвестный"
+                        Log.i(TAG, "Fallback: lookedUp=$lookedUp, sending '$fallback'")
                         apply(router.onTick(System.currentTimeMillis(), fallback))
                     }
                     fallbackRunnable = runnable
@@ -106,6 +108,7 @@ class PhoneCallReceiver : BroadcastReceiver() {
             "android.intent.action.PHONE_STATE" -> {
                 val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: return
                 val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+                Log.d(TAG, "PHONE_STATE broadcast: $stateStr, number=$number")
                 if (number != null) savedNumber = number
                 val state = when (stateStr) {
                     TelephonyManager.EXTRA_STATE_RINGING -> TelephonyManager.CALL_STATE_RINGING
