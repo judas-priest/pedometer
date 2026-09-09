@@ -30,7 +30,8 @@ class WatchSettings(
 
     // ── Contacts ──────────────────────────────────────────────────────────
 
-    fun syncContacts(limit: Int = 50) {
+    /** CAUTION: a large contact list crashes this firmware (reboot loop). Keep tiny, verify before raising. */
+    fun syncContacts(limit: Int = 10) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS)
             != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "No READ_CONTACTS permission")

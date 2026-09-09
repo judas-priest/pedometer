@@ -471,15 +471,10 @@ class WatchRepository(private val context: Context) {
             sendLocale()
             delay(200)
 
-            // 5b. Sync the phonebook — the watch's NATIVE incoming-call screen (HFP pairing)
-            // resolves caller names against it. Without this the native screen shows a raw
-            // number and covers our notification card. Cheap enough (limit=50) per connect.
-            try {
-                watchSettings()?.syncContacts()
-            } catch (e: Exception) {
-                Log.w(TAG, "Contacts sync failed: ${e.message}")
-            }
-            delay(300)
+            // NOTE: do NOT push the contact list here — a 50-contact payload crashes this
+            // firmware (reboot loop, observed 2026-09-09). Gadgetbridge caps at 10 with an
+            // unverified TODO. Caller names come from the on-demand type=21 sub=2→3 exchange
+            // in handlePhonebookCommand — that is the mechanism the watch actually uses.
 
             // 6. Health config init
             healthService?.initialize()
