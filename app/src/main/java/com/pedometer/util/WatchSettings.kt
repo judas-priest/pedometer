@@ -20,7 +20,12 @@ class WatchSettings(
     companion object {
         private const val TAG = "WatchSettings"
         const val SCHEDULE_TYPE = 17
-        const val PHONEBOOK_TYPE = 23
+
+        /** Phonebook service — Gadgetbridge XiaomiPhonebookService.COMMAND_TYPE. */
+        const val PHONEBOOK_COMMAND_TYPE = 21
+
+        /** type=21 subtype=7 = push the full contact list (CMD_SET_CONTACT_LIST). */
+        private const val CMD_SET_CONTACT_LIST = 7
     }
 
     // ── Contacts ──────────────────────────────────────────────────────────
@@ -43,8 +48,8 @@ class WatchSettings(
         }
 
         val cmd = XiaomiProto.Command.newBuilder()
-            .setType(PHONEBOOK_TYPE)
-            .setSubtype(0)
+            .setType(PHONEBOOK_COMMAND_TYPE)
+            .setSubtype(CMD_SET_CONTACT_LIST)
             .setPhonebook(XiaomiProto.Phonebook.newBuilder().setContactList(contactList))
             .build()
         protocolHandler.sendCommand(cmd)

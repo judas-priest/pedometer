@@ -704,8 +704,7 @@ class WatchRepository(private val context: Context) {
         )
     }
 
-    private fun handleCommand(cmd: XiaomiProto.Command) {
-        when (cmd.type) {
+    private fun handleCommand(cmd: XiaomiProto.Command) {        when (cmd.type) {
             CommandHelper.TYPE_SYSTEM -> handleSystemCommand(cmd)
             CommandHelper.TYPE_HEALTH -> {
                 healthService?.handleCommand(cmd)
@@ -720,7 +719,61 @@ class WatchRepository(private val context: Context) {
                 alarmService?.handleCommand(cmd)
                 reminderService?.handleCommand(cmd)
             }
+            // Phonebook: the watch asks for a caller's name at incoming-call time
+            // (Gadgetbridge XiaomiPhonebookService: CMD_GET_CONTACT=2 → response=3).
+            WatchSettings.PHONEBOOK_COMMAND_TYPE -> handlePhonebookCommand(cmd)
             else -> Log.d(TAG, "Unhandled command type=${cmd.type}")
+        }
+    }
+
+    /**
+     * The watch requests caller info (type=21, subtype=2) with the raw phone number at
+     * incoming-call time; reply with subtype=3 and the resolved contact name. Mirrors
+     * Gadgetbridge's XiaomiPhonebookService — this, not the pushed contact list, is how
+     * the watch's native call screen gets names.
+     */
+    private fun handlePhonebookCommand(cmd: XiaomiProto.Command) {
+        if (cmd.subtype != 2) {
+            Log.d(TAG, "Phonebook command subtype=${cmd.subtype} — ignoring")
+            return
+        }
+        val number = cmd.phonebook.requestedPhoneNumber
+        if (number.isBlank()) {
+            Log.w(TAG, "Phonebook request without number")
+            return
+        }
+        val name = resolveContactName(number) ?: number
+        Log.i(TAG, "Phonebook lookup: $number -> $name")
+        link.send(
+            XiaomiProto.Command.newBuilder()
+                .setType(WatchSettings.PHONEBOOK_COMMAND_TYPE)
+                .setSubtype(3)
+                .setPhonebook(
+                    XiaomiProto.Phonebook.newBuilder().setContactInfo(
+                        XiaomiProto.ContactInfo.newBuilder()
+                            .setDisplayName(name)
+                            .setPhoneNumber(number)
+                    )
+                )
+                .build()
+        )
+    }
+
+    private fun resolveContactName(phoneNumber: String): String? {
+        if (phoneNumber.isBlank()) return null
+        return try {
+            val uri = android.net.Uri.withAppendedPath(
+                android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                android.net.Uri.encode(phoneNumber),
+            )
+            context.contentResolver.query(
+                uri,
+                arrayOf(android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME),
+                null, null, null,
+            )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        } catch (e: Exception) {
+            Log.w(TAG, "Contact lookup failed: ${e.message}")
+            null
         }
     }
 

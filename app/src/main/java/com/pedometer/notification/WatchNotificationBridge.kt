@@ -25,7 +25,11 @@ object WatchNotificationBridge {
         body: String,
         isCall: Boolean = false,
     ) {
-        val handler = protocolHandler ?: return
+        val handler = protocolHandler
+        if (handler == null) {
+            Log.w(TAG, "sendToWatch dropped (not connected): $title")
+            return
+        }
 
         val notifId = id and 0x7FFFFFFF // ensure positive
         val notification3 = XiaomiProto.Notification3.newBuilder()
