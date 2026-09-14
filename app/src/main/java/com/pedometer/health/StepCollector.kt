@@ -7,6 +7,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.util.Log
 import com.pedometer.data.HourlySteps
+import com.pedometer.data.MinuteSteps
 import com.pedometer.data.StepDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +38,10 @@ class StepCollector(
     private var listening = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private var minuteBuf: Long = 0L   // minute start, epoch ms
+    private var minuteSteps = 0
+    private val pendingMinutes = mutableListOf<MinuteSteps>()
+
     private val accumulator = HourBucketAccumulator { date, hour, steps ->
         scope.launch {
             try {
@@ -66,11 +71,36 @@ class StepCollector(
         sensorManager.unregisterListener(this)
         listening = false
         accumulator.flush()
+        flushPendingMinutes()
         Log.i(TAG, "Step collector stopped")
+    }
+
+    private fun flushPendingMinutes() {
+        if (pendingMinutes.isEmpty()) return
+        val batch = ArrayList(pendingMinutes)
+        pendingMinutes.clear()
+        scope.launch {
+            try {
+                StepDatabase.get(appContext).stepDao().insertMinuteSteps(batch)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to persist minute steps", e)
+            }
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type != Sensor.TYPE_STEP_DETECTOR) return
+
+        val nowMs = System.currentTimeMillis()
+        val minuteStart = nowMs - nowMs % 60_000L
+        if (minuteBuf != 0L && minuteStart != minuteBuf) {
+            pendingMinutes.add(MinuteSteps(minute = minuteBuf, steps = minuteSteps))
+            if (pendingMinutes.size >= 5) flushPendingMinutes()
+            minuteSteps = 0
+        }
+        minuteBuf = minuteStart
+        minuteSteps += event.values[0].toInt().coerceAtLeast(1)
+
         if (!collectEnabled()) return
         val now = LocalDateTime.now()
         accumulator.add(now.toLocalDate().toString(), now.hour, event.values[0].toInt().coerceAtLeast(1))
