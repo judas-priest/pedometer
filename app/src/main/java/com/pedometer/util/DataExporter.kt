@@ -36,13 +36,28 @@ object DataExporter {
                     w.write("${h.date},${h.hrAvg},${h.hrMin},${h.hrMax},${h.hrResting},${h.spo2Avg},${h.spo2Min},${h.spo2Max},${h.stressAvg},${h.stressMin},${h.stressMax}\n")
                 }
 
-                // Heart rate
+                // Heart rate — full history
                 w.write("\n=== HEART RATE ===\n")
                 w.write("timestamp,bpm,source\n")
-                val weekAgo = System.currentTimeMillis() - 7 * 86400_000L
-                val hr = dao.getHeartRateSince(weekAgo)
+                val hr = dao.getHeartRateSince(0L)
                 for (r in hr) {
                     w.write("${r.timestamp},${r.bpm},${r.source}\n")
+                }
+
+                // Hourly steps — full history
+                w.write("\n=== HOURLY STEPS ===\n")
+                w.write("date,hour,steps\n")
+                val hourly = dao.getAllHourly()
+                for (h in hourly) {
+                    w.write("${h.date},${h.hour},${h.steps}\n")
+                }
+
+                // GPS tracks
+                w.write("\n=== GPS TRACKS ===\n")
+                w.write("workout_start,timestamp,lat,lon,speed\n")
+                val gps = dao.getAllGpsPoints()
+                for (p in gps) {
+                    w.write("${p.workoutStart},${p.timestamp},${p.lat},${p.lon},${p.speed}\n")
                 }
 
                 // Sleep

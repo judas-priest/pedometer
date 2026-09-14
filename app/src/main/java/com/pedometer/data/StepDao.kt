@@ -27,6 +27,9 @@ interface StepDao {
     @Query("SELECT * FROM hourly_steps WHERE date = :date ORDER BY hour")
     suspend fun getHourlyForDay(date: String): List<HourlySteps>
 
+    @Query("SELECT * FROM hourly_steps ORDER BY date, hour")
+    suspend fun getAllHourly(): List<HourlySteps>
+
     // Step snapshots (for reboot delta computation)
     @Insert
     suspend fun insertSnapshot(snapshot: StepSnapshot)
@@ -73,6 +76,9 @@ interface StepDao {
 
     @Query("SELECT * FROM gps_points WHERE workoutStart = :workoutStart ORDER BY timestamp")
     suspend fun getGpsPoints(workoutStart: Long): List<GpsPointRecord>
+
+    @Query("SELECT * FROM gps_points ORDER BY workoutStart, timestamp")
+    suspend fun getAllGpsPoints(): List<GpsPointRecord>
 
     // Heart rate
     @Insert
