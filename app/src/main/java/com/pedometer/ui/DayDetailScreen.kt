@@ -35,9 +35,14 @@ fun DayDetailScreen(
     state: WatchState,
     initialDate: LocalDate = LocalDate.now(),
     onBack: () -> Unit = {},
+    onLoadDayInsights: (String) -> Unit = {},
 ) {
     var selectedDate by remember { mutableStateOf(initialDate) }
     val context = LocalContext.current
+
+    LaunchedEffect(selectedDate) {
+        onLoadDayInsights(selectedDate.toString())
+    }
 
     val today = LocalDate.now()
     val oldestDate = state.stepHistory.minByOrNull { it.date }?.date?.let {
@@ -258,6 +263,47 @@ fun DayDetailScreen(
                 }
                 Spacer(Modifier.height(16.dp))
             }
+        }
+
+        // 6. Intensity + walks for this day
+        if (state.walksDay == selectedDate.toString()) {
+            Text(
+                "Интенсивность: ${state.intensityDay.earnedMinutes} мин (${state.intensityDay.moderateMinutes} умер. + ${state.intensityDay.intenseMinutes} инт.)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        if (state.walksForDay.isNotEmpty() && state.walksDay == selectedDate.toString()) {
+            Text("Прогулки", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            state.walksForDay.forEach { w ->
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val start = java.time.Instant.ofEpochMilli(w.startMinute)
+                            .atZone(java.time.ZoneId.systemDefault())
+                        val end = java.time.Instant.ofEpochMilli(w.endMinute)
+                            .atZone(java.time.ZoneId.systemDefault())
+                        Text(
+                            "Прогулка  %02d:%02d – %02d:%02d".format(start.hour, start.minute, end.hour, end.minute),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            "${w.durationMin} мин · %.1f км · ${w.stepsPerMin} шаг/мин".format(w.distanceM / 1000.0),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (w.hrAvg > 0) {
+                            Text(
+                                "❤ ${w.hrAvg} ср · ${w.hrMax} макс",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            Spacer(Modifier.height(8.dp))
         }
 
         // 7. SpO2 card

@@ -200,6 +200,40 @@ fun TodayScreen(
 
             // (metric detail opens as full screen via showMetric state above)
 
+            // 5. Intensity minutes + weekly summary
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Активность", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "${state.intensityToday.earnedMinutes} мин",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { (state.intensityWeek / 150f).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "За неделю ${state.intensityWeek} из 150 мин · сегодня ${state.intensityToday.moderateMinutes} умер. + ${state.intensityToday.intenseMinutes} инт.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Неделя", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${state.weekSteps} шагов за 7 дней",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             // 7. Last night sleep
             val sleep = state.lastSleep
             if (sleep != null && sleep.totalMinutes > 0) {
