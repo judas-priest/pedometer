@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import java.time.LocalTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -20,25 +21,28 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Cheap wear-presence proxy: while started, runs a ~3s low-power BLE scan for the watch's
- * MAC once a minute and reports whether the watch is around. This is the same pattern
+ * MAC and reports whether the watch is around. This is the same pattern
  * Gadgetbridge calls "Reconnect by BLE scan" — BT Classic watches never re-initiate the
  * connection themselves, so the phone must poll before dialing.
  *
  * "Present" means "reachable over the radio", not "worn" — a watch on the nightstand
  * still counts. The watch does not expose wearing state when disconnected.
  *
- * Reports nothing until the first scan window completes.
+ * Reports every completed scan window (dedup happens upstream in the repository);
+ * the interval backs off the longer the watch stays absent, and pauses entirely
+ * during quiet hours.
  */
 class WatchPresenceMonitor(
     context: Context,
     private val mac: String,
     private val scope: CoroutineScope,
+    private val quietHours: () -> QuietHours = { QuietHours.DISABLED },
     private val onPresenceChanged: (present: Boolean) -> Unit,
 ) {
     companion object {
         private const val TAG = "WatchPresenceMonitor"
         private const val SCAN_WINDOW_MS = 3_000L
-        private const val SCAN_INTERVAL_MS = 60_000L
+        private const val BASE_INTERVAL_MS = 60_000L
     }
 
     private val appContext = context.applicationContext
@@ -48,8 +52,7 @@ class WatchPresenceMonitor(
 
     private var loopJob: Job? = null
     @Volatile private var callback: ScanCallback? = null
-
-    @Volatile private var lastPresent = false
+    private val intervalPolicy = ScanIntervalPolicy()
 
     fun start() {
         if (loopJob != null) return
@@ -59,13 +62,19 @@ class WatchPresenceMonitor(
         }
         loopJob = scope.launch {
             while (true) {
+                val quiet = quietHours().isQuiet(LocalTime.now().hour)
+                if (quiet) {
+                    // Night window: no scan at all. The repo tore the link down on its own;
+                    // presence state simply freezes until morning.
+                    delay(BASE_INTERVAL_MS)
+                    continue
+                }
                 val found = scanOnce()
-                if (found != null && found != lastPresent) {
-                    Log.i(TAG, "Watch present: $found")
-                    lastPresent = found
+                if (found != null) {
+                    intervalPolicy.onScanResult(found)
                     onPresenceChanged(found)
                 }
-                delay(SCAN_INTERVAL_MS - SCAN_WINDOW_MS)
+                delay((intervalPolicy.nextIntervalMs() - SCAN_WINDOW_MS).coerceAtLeast(BASE_INTERVAL_MS / 2))
             }
         }
     }

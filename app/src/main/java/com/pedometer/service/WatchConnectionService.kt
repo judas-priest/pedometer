@@ -75,7 +75,11 @@ class WatchConnectionService : Service() {
         // Poll for the watch over BLE and drive connect/disconnect from its presence:
         // no watch in range → no reconnect attempts, no wasted battery.
         repo.configuredMac?.let { mac ->
-            presenceMonitor = WatchPresenceMonitor(this, mac, repo.scope, repo::onWatchPresence)
+            presenceMonitor = WatchPresenceMonitor(
+                this, mac, repo.scope,
+                quietHours = repo::currentQuietHours,
+                onPresenceChanged = repo::onWatchPresence,
+            )
             presenceMonitor?.start()
         }
     }
