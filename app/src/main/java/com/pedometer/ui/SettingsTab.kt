@@ -192,6 +192,19 @@ fun SettingsTab(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
                 Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = profile.stepLengthCm.let { if (it > 0) it.toString() else "" },
+                    onValueChange = { v ->
+                        val cm = v.toDoubleOrNull() ?: 0.0
+                        if (cm in 30.0..150.0) onProfileChange(profile.copy(stepLengthCm = cm))
+                    },
+                    label = { Text("Длина шага (см)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+                Text("Пусто = авто", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Пол:", modifier = Modifier.width(50.dp))
                     FilterChip(selected = profile.isMale, onClick = { onProfileChange(profile.copy(isMale = true)) }, label = { Text("М") })

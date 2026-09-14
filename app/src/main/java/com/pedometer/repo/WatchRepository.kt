@@ -10,6 +10,7 @@ import com.pedometer.data.DailyHealth
 import com.pedometer.data.GpsPointRecord
 import com.pedometer.data.HeartRateRecord
 import com.pedometer.data.HourlySteps
+import com.pedometer.data.MinuteSteps
 import com.pedometer.data.SleepRecord
 import com.pedometer.data.StepDatabase
 import com.pedometer.data.WorkoutRecord
@@ -402,21 +403,17 @@ class WatchRepository(private val context: Context) {
                 }
             },
             onHourlySteps = { date, hourlyList, minuteRows ->
-                // TEMP debug scaffolding — dump per-minute steps/distance for watch distance-algorithm analysis. Remove after analysis.
-                try {
-                    val dump = java.io.File(context.getExternalFilesDir(null), "minute_dump.csv")
-                    if (!dump.exists()) dump.appendText("timestamp,steps,distance_cm\n")
-                    dump.appendText(minuteRows.joinToString("") { (ts, s, d) -> "$ts,$s,$d\n" })
-                } catch (e: Exception) {
-                    Log.w(TAG, "minute dump failed: ${e.message}")
-                }
                 scope.launch(Dispatchers.IO) {
                     try {
                         // Watch data = source of truth, overwrite
                         for ((hour, steps) in hourlyList) {
                             dao.upsertHourly(HourlySteps(date = date, hour = hour, steps = steps))
                         }
-                        Log.i(TAG, "Saved ${hourlyList.size} hourly steps for $date from watch")
+                        val watchMinutes = minuteRows.map { (ts, s, dCm) ->
+                            MinuteSteps(minute = ts, steps = s, source = "watch", distanceM = dCm / 100)
+                        }
+                        if (watchMinutes.isNotEmpty()) dao.insertMinuteSteps(watchMinutes)
+                        Log.i(TAG, "Saved ${hourlyList.size} hourly + ${watchMinutes.size} minute rows for $date from watch")
                         bumpRoom()
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to save hourly steps", e)

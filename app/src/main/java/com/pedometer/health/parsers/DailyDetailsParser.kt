@@ -17,8 +17,7 @@ object DailyDetailsParser {
         val lastSpo2: Int,
         val lastStress: Int,
         val activeMinutes: Int,
-        // TEMP debug scaffolding (remove after distance-algorithm analysis):
-        // per-minute (timestampMs, steps, distanceCm) rows dumped to minute_dump.csv
+        // per-minute (timestampMs, steps, distanceCm) rows from the watch daily-details file
         val minuteRows: List<Triple<Long, Int, Int>> = emptyList(),
     )
 
@@ -55,7 +54,7 @@ object DailyDetailsParser {
         var lastStress = 0
         var pos = dataStart
         var minuteOffset = 0
-        val minuteRows = mutableListOf<Triple<Long, Int, Int>>() // TEMP debug dump
+        val minuteRows = mutableListOf<Triple<Long, Int, Int>>()
         val baseTimestamp = info.timestamp
 
         while (pos < dataEnd) {

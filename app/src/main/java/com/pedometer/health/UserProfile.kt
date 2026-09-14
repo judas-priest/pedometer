@@ -10,8 +10,11 @@ data class UserProfile(
     val stepGoal: Int = 8000,
     val age: Int = 30,
     val weatherCity: String = "",  // empty = auto GPS
+    val stepLengthCm: Double = 0.0, // 0 = auto from height
 ) {
-    val stepLengthM: Double get() = heightCm * (if (isMale) 0.415 else 0.413) / 100.0
+    val stepLengthM: Double
+        get() = if (stepLengthCm > 0) stepLengthCm / 100.0
+        else heightCm * (if (isMale) 0.415 else 0.413) / 100.0
 
     fun calcDistance(steps: Int): Double = steps * stepLengthM / 1000.0 // km
 
@@ -29,6 +32,7 @@ data class UserProfile(
                 stepGoal = p.getInt("goal", 8000),
                 age = p.getInt("age", 30),
                 weatherCity = p.getString("weather_city", "") ?: "",
+                stepLengthCm = p.getFloat("step_length_cm", 0f).toDouble(),
             )
         }
 
@@ -40,6 +44,7 @@ data class UserProfile(
                 .putInt("goal", profile.stepGoal)
                 .putInt("age", profile.age)
                 .putString("weather_city", profile.weatherCity)
+                .putFloat("step_length_cm", profile.stepLengthCm.toFloat())
                 .apply()
         }
     }

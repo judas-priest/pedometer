@@ -24,7 +24,7 @@ class ActivitySync(
     private val onHeartRateSamples: (List<HeartRateSample>) -> Unit = {},
     private val onSleepData: (SleepData) -> Unit = {},
     private val onWorkout: (WorkoutSummary) -> Unit = {},
-    private val onHourlySteps: (String, List<Pair<Int, Int>>, List<Triple<Long, Int, Int>>) -> Unit = { _, _, _ -> }, // date, (hour, steps), TEMP minute rows (tsMs, steps, distanceCm)
+    private val onHourlySteps: (String, List<Pair<Int, Int>>, List<Triple<Long, Int, Int>>) -> Unit = { _, _, _ -> }, // date, (hour, steps), per-minute rows (tsMs, steps, distanceCm)
     private val onGpsTrack: ((Long, List<GpsPoint>) -> Unit)? = null, // workoutStartMs, points
 ) {
     companion object {

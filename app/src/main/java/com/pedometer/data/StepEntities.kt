@@ -27,8 +27,10 @@ data class MinuteSteps(
     /** Epoch milliseconds truncated to the start of the minute. */
     val minute: Long,
     val steps: Int,
-    /** "phone" — detector minute buckets; reserved "watch" if minute data ever arrives. */
+    /** "phone" — detector minute buckets; "watch" — per-minute rows from the watch. */
     val source: String = "phone",
+    /** Watch-measured distance in meters (0 for phone rows — phone has no per-minute distance). */
+    @ColumnInfo(defaultValue = "0") val distanceM: Int = 0,
 )
 
 @Entity(tableName = "daily_health")

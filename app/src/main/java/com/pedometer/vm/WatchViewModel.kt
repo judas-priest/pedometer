@@ -374,6 +374,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     .map { WalkMinute(first = it.minute, steps = it.steps) }
                 val walks = WalkDetector.detect(minuteData)
 
+                // Watch-measured distance per minute (meters); phone rows have none.
+                val watchDistByMinute = dao.getMinuteStepsBetween(dayStart, dayEnd)
+                    .filter { it.source == "watch" && it.distanceM > 0 }
+                    .associate { it.minute to it.distanceM }
+
                 val cadenceModerate = walks.sumOf { w ->
                     val cadence = w.steps / w.activeMinutes.coerceAtLeast(1)
                     if (cadence >= 100) w.activeMinutes else 0
@@ -388,13 +393,14 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val cards = walks.map { seg ->
                     val segHr = hr.filter { it.timestamp in seg.startMinute..seg.endMinute + 60_000L }
                     val profile = _state.value.profile
+                    val watchDist = (seg.startMinute..seg.endMinute step 60_000L).sumOf { m -> watchDistByMinute[m] ?: 0 }
                     WalkCard(
                         startMinute = seg.startMinute,
                         endMinute = seg.endMinute,
                         durationMin = ((seg.endMinute - seg.startMinute) / 60_000L).toInt() + 1,
                         activeMinutes = seg.activeMinutes,
                         steps = seg.steps,
-                        distanceM = (seg.steps * profile.stepLengthM).toInt(),
+                        distanceM = if (watchDist > 0) watchDist else (seg.steps * profile.stepLengthM).toInt(),
                         stepsPerMin = seg.steps / seg.activeMinutes.coerceAtLeast(1),
                         hrAvg = if (segHr.isEmpty()) 0 else segHr.map { it.bpm }.average().toInt(),
                         hrMax = segHr.maxOfOrNull { it.bpm } ?: 0,
