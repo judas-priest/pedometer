@@ -219,7 +219,7 @@ class WatchRepository(private val context: Context) {
             suppress -> if (status != ConnectionStatus.Disconnected) link.disconnect()
             lastKnownPresent && status == ConnectionStatus.Disconnected &&
                 hasCredentials && !userDisconnected -> connect()
-            !lastKnownPresent && status != ConnectionStatus.Disconnected -> link.disconnect()
+            !lastKnownPresent && status != ConnectionStatus.Connected -> link.disconnect()
         }
     }
 
