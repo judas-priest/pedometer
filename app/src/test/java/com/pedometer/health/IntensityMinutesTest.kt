@@ -5,7 +5,7 @@ import org.junit.Test
 
 class IntensityMinutesTest {
 
-    private val maxHr = 190 // zones: moderate 95..132, intense 133..159 (50-69%, 70-84%)
+    private val maxHr = 190 // zones: moderate 95..132, intense 133+ (50-69%, 70% and above)
 
     @Test
     fun `resting hr earns nothing`() {
@@ -45,5 +45,16 @@ class IntensityMinutesTest {
         )
         assertEquals(0, m.moderateMinutes)
         assertEquals(1, m.intenseMinutes)
+    }
+
+    @Test
+    fun `boundary bps are contiguous — no dead zone`() {
+        // 131 = moderate top, 132 = formerly-dead zone, 133 = intense bottom, 165 = peak effort
+        val m = IntensityMinutes.compute(
+            listOf(0L to 131, 60_000L to 132, 120_000L to 133, 180_000L to 165),
+            maxHr,
+        )
+        assertEquals(2, m.moderateMinutes)
+        assertEquals(2, m.intenseMinutes)
     }
 }
