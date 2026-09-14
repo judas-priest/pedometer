@@ -8,6 +8,7 @@ data class UserProfile(
     val weightKg: Int = 70,
     val isMale: Boolean = true,
     val stepGoal: Int = 8000,
+    val age: Int = 30,
     val weatherCity: String = "",  // empty = auto GPS
 ) {
     val stepLengthM: Double get() = heightCm * (if (isMale) 0.415 else 0.413) / 100.0
@@ -26,6 +27,7 @@ data class UserProfile(
                 weightKg = p.getInt("weight", 70),
                 isMale = p.getBoolean("male", true),
                 stepGoal = p.getInt("goal", 8000),
+                age = p.getInt("age", 30),
                 weatherCity = p.getString("weather_city", "") ?: "",
             )
         }
@@ -36,6 +38,7 @@ data class UserProfile(
                 .putInt("weight", profile.weightKg)
                 .putBoolean("male", profile.isMale)
                 .putInt("goal", profile.stepGoal)
+                .putInt("age", profile.age)
                 .putString("weather_city", profile.weatherCity)
                 .apply()
         }

@@ -181,6 +181,17 @@ fun SettingsTab(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
                 Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = profile.age.let { if (it > 0) it.toString() else "" },
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.let { a -> if (a in 1..120) onProfileChange(profile.copy(age = a)) }
+                    },
+                    label = { Text("Возраст") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Пол:", modifier = Modifier.width(50.dp))
                     FilterChip(selected = profile.isMale, onClick = { onProfileChange(profile.copy(isMale = true)) }, label = { Text("М") })
