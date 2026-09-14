@@ -9,6 +9,10 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -60,6 +64,7 @@ class WatchConnectionService : Service() {
     }
 
     private var presenceMonitor: WatchPresenceMonitor? = null
+    private var wifiCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onBind(intent: Intent?): IBinder = binder
 
@@ -83,6 +88,8 @@ class WatchConnectionService : Service() {
             )
             presenceMonitor?.start()
         }
+
+        registerWifiGate()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -212,12 +219,50 @@ class WatchConnectionService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
+    /**
+     * Home scenario: report Wi-Fi transport changes to the repo. The callback is registered
+     * unconditionally — the on/off decision lives in the repo (settings flag), so toggling
+     * the setting never requires re-registering.
+     */
+    private fun registerWifiGate() {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                Log.i(TAG, "Wi-Fi available")
+                repo.onHomeWifiChanged(true)
+            }
+
+            override fun onLost(network: Network) {
+                Log.i(TAG, "Wi-Fi lost")
+                repo.onHomeWifiChanged(false)
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
+        try {
+            cm.registerNetworkCallback(request, cb)
+            wifiCallback = cb
+            // Initial state — callbacks only fire on transitions.
+            val wifiUp = cm.allNetworks.any {
+                cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            }
+            repo.onHomeWifiChanged(wifiUp)
+        } catch (e: Exception) {
+            Log.w(TAG, "Wi-Fi gate registration failed: ${e.message}")
+        }
+    }
+
     override fun onDestroy() {
         Log.i(TAG, "Foreground service destroyed")
         presenceMonitor?.stop()
         presenceMonitor = null
         stepCollector.stop()
         scope.cancel()
+        wifiCallback?.let {
+            try { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) } catch (_: Exception) {}
+        }
+        wifiCallback = null
         super.onDestroy()
     }
 }
