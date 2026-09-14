@@ -70,8 +70,10 @@ class WatchPresenceMonitor(
                     onQuietChanged()
                 }
                 if (quiet) {
-                    // Night window: no scan at all. onQuietChanged() above already told the
-                    // repo to apply the quiet policy; presence state freezes until morning.
+                    // Night window: no scan at all. Re-assert the policy every tick so any
+                    // connect that slipped past the gate (or raced the last evaluation)
+                    // is torn down within a minute.
+                    onQuietChanged()
                     delay(BASE_INTERVAL_MS)
                     continue
                 }

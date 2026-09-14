@@ -160,8 +160,23 @@ class WatchRepository(private val context: Context) {
         get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_MAC, "")?.takeIf { it.isNotBlank() }
 
+    /**
+     * Connects to the watch unless the connection policy says to suppress the link
+     * (quiet hours, or home Wi-Fi with the gate on) — a service cold start at night
+     * must not optimistically dial. The policy's own reconnect path only calls this
+     * when NOT suppressed, so the gate never blocks legitimate policy connects.
+     * A manual UI connect during quiet hours is intentionally a no-op: the window
+     * is the window; disable it in settings to connect at night.
+     */
     fun connect() {
         userDisconnected = false
+        val quiet = quietHours.isQuiet(java.time.LocalTime.now().hour)
+        val wifiGate = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_WIFI_GATE, true)
+        if ((quiet || (homeWifiConnected && wifiGate)) && !(watchWorkoutActive || gpsRelayActive)) {
+            Log.i(TAG, "connect() suppressed by policy (quiet=$quiet wifi=$homeWifiConnected gate=$wifiGate)")
+            return
+        }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         link.connect(
             prefs.getString(KEY_MAC, "") ?: "",
