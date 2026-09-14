@@ -5,10 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [DailySteps::class, HourlySteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class],
-    version = 7, // keep in sync with VERSION below
+    entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class],
+    version = 8, // keep in sync with VERSION below
     exportSchema = true,
 )
 abstract class StepDatabase : RoomDatabase() {
@@ -16,7 +17,7 @@ abstract class StepDatabase : RoomDatabase() {
 
     companion object {
         /** Mirror of the @Database version. Room needs a literal in the annotation. */
-        const val VERSION = 7
+        const val VERSION = 8
 
         /** Oldest schema version any installed build can still be sitting on. */
         const val OLDEST_SUPPORTED = 7
@@ -25,7 +26,19 @@ abstract class StepDatabase : RoomDatabase() {
          * Every schema change gets a Migration here and a version bump. There is deliberately
          * no destructive fallback: this database holds the only copy of the user's history.
          */
-        val MIGRATIONS: Array<Migration> = emptyArray()
+        val MIGRATIONS: Array<Migration> = arrayOf(
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `minute_steps` (" +
+                            "`minute` INTEGER NOT NULL, " +
+                            "`steps` INTEGER NOT NULL, " +
+                            "`source` TEXT NOT NULL, " +
+                            "PRIMARY KEY(`minute`, `source`))"
+                    )
+                }
+            },
+        )
 
         @Volatile
         private var INSTANCE: StepDatabase? = null

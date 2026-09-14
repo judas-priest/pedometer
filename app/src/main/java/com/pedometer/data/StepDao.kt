@@ -30,6 +30,13 @@ interface StepDao {
     @Query("SELECT * FROM hourly_steps ORDER BY date, hour")
     suspend fun getAllHourly(): List<HourlySteps>
 
+    // Minute steps (walk detection source)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMinuteSteps(steps: List<MinuteSteps>)
+
+    @Query("SELECT * FROM minute_steps WHERE minute >= :from AND minute < :to ORDER BY minute")
+    suspend fun getMinuteStepsBetween(from: Long, to: Long): List<MinuteSteps>
+
     // Step snapshots (for reboot delta computation)
     @Insert
     suspend fun insertSnapshot(snapshot: StepSnapshot)

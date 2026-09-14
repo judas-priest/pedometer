@@ -22,6 +22,15 @@ data class HourlySteps(
     val steps: Int = 0,
 )
 
+@Entity(tableName = "minute_steps", primaryKeys = ["minute", "source"])
+data class MinuteSteps(
+    /** Epoch milliseconds truncated to the start of the minute. */
+    val minute: Long,
+    val steps: Int,
+    /** "phone" — detector minute buckets; reserved "watch" if minute data ever arrives. */
+    val source: String = "phone",
+)
+
 @Entity(tableName = "daily_health")
 data class DailyHealth(
     @PrimaryKey val date: String,            // "2026-06-28"
