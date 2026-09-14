@@ -206,7 +206,7 @@ fun TodayScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Активность", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "${state.intensityToday.earnedMinutes} мин",
+                            "${state.intensityWeek} / 150 мин",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -214,22 +214,6 @@ fun TodayScreen(
                     LinearProgressIndicator(
                         progress = { (state.intensityWeek / 150f).coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        "За неделю ${state.intensityWeek} из 150 мин · сегодня ${state.intensityToday.moderateMinutes} умер. + ${state.intensityToday.intenseMinutes} инт.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Неделя", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "${state.weekSteps} шагов за 7 дней",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

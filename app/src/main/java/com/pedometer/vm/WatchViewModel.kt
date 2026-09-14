@@ -312,13 +312,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 )
 
                 // ── Weekly aggregates + today's intensity ──
+                // Week = calendar week starting Monday (user expectation), not a rolling 7-day window.
                 val maxHr = IntensityMinutes.maxHrFor(_state.value.profile.age)
                 val dayStart = java.time.LocalDate.parse(todayStr).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val dayEnd = dayStart + 86_400_000L
-                val weekStart = dayEnd - 7 * 86_400_000L
-                val weekHr = dao.getHeartRateBetween(weekStart, dayEnd)
+                val monday = java.time.LocalDate.parse(todayStr).with(java.time.DayOfWeek.MONDAY)
+                    .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val weekHr = dao.getHeartRateBetween(monday, dayEnd)
                 val intensityWeek = IntensityMinutes.compute(weekHr.map { it.timestamp to it.bpm }, maxHr).earnedMinutes
-                val weekSteps = dao.getRecentDays(7).sumOf { it.totalSteps }
+                val weekSteps = dao.getRecentDays(7)
+                    .filter { it.date >= java.time.LocalDate.parse(todayStr).with(java.time.DayOfWeek.MONDAY).toString() }
+                    .sumOf { it.totalSteps }
 
                 _state.value = _state.value.copy(
                     intensityToday = IntensityMinutes.compute(

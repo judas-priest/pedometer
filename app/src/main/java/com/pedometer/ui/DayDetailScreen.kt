@@ -268,7 +268,7 @@ fun DayDetailScreen(
         // 6. Intensity + walks for this day
         if (state.walksDay == selectedDate.toString()) {
             Text(
-                "Интенсивность: ${state.intensityDay.earnedMinutes} мин (${state.intensityDay.moderateMinutes} умер. + ${state.intensityDay.intenseMinutes} инт.)",
+                "Интенсивность: ${state.intensityDay.earnedMinutes} мин (${state.intensityDay.moderateMinutes} средней + ${state.intensityDay.intenseMinutes} высокой)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
