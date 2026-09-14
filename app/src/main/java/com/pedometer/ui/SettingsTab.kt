@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
+import com.pedometer.PedometerApp
 import com.pedometer.health.UserProfile
 import com.pedometer.vm.ConnectionStatus
 import com.pedometer.vm.WatchState
@@ -228,6 +229,93 @@ fun SettingsTab(
                             context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")))
                         }) { Text("Отключить оптимизацию") }
                     }
+                }
+            }
+        }
+
+        // ── Energy saving ────────────────────────────────────────────────
+        Spacer(Modifier.height(16.dp))
+        Text("Энергосбережение", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        val prefs = context.getSharedPreferences("pedometer_prefs", android.content.Context.MODE_PRIVATE)
+        var quietEnabled by remember { mutableStateOf(prefs.getBoolean("quiet_enabled", true)) }
+        var quietStart by remember { mutableStateOf(prefs.getInt("quiet_start", 0)) }
+        var quietEnd by remember { mutableStateOf(prefs.getInt("quiet_end", 7)) }
+        var wifiGate by remember { mutableStateOf(prefs.getBoolean("wifi_gate_enabled", true)) }
+
+        ElevatedCard {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Ночной режим", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Не искать часы и разрывать связь в этот интервал",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = quietEnabled, onCheckedChange = { on ->
+                        quietEnabled = on
+                        prefs.edit().putBoolean("quiet_enabled", on).apply()
+                        PedometerApp.repository.onQuietHoursChanged()
+                    })
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = quietStart.toString(),
+                        onValueChange = { v ->
+                            v.toIntOrNull()?.let { h ->
+                                if (h in 0..23) {
+                                    quietStart = h
+                                    prefs.edit().putInt("quiet_start", h).apply()
+                                    PedometerApp.repository.onQuietHoursChanged()
+                                }
+                            }
+                        },
+                        label = { Text("С (час)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = quietEnd.toString(),
+                        onValueChange = { v ->
+                            v.toIntOrNull()?.let { h ->
+                                if (h in 0..23) {
+                                    quietEnd = h
+                                    prefs.edit().putInt("quiet_end", h).apply()
+                                    PedometerApp.repository.onQuietHoursChanged()
+                                }
+                            }
+                        },
+                        label = { Text("До (час)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Дома — без связи", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Пока телефон на Wi-Fi, соединение с часами не держится",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = wifiGate, onCheckedChange = { on ->
+                        wifiGate = on
+                        prefs.edit().putBoolean("wifi_gate_enabled", on).apply()
+                        PedometerApp.repository.onWifiGateChanged()
+                    })
                 }
             }
         }

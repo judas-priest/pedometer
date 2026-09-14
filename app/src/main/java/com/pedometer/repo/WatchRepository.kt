@@ -197,6 +197,11 @@ class WatchRepository(private val context: Context) {
         applyConnectionPolicy("quiet hours edited")
     }
 
+    /** Settings changed the home-wifi gate — re-evaluate immediately. */
+    fun onWifiGateChanged() {
+        applyConnectionPolicy("wifi gate edited")
+    }
+
     /**
      * THE single decision point for holding or dropping the watch link.
      *
