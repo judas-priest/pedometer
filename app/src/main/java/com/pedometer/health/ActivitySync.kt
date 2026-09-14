@@ -24,7 +24,7 @@ class ActivitySync(
     private val onHeartRateSamples: (List<HeartRateSample>) -> Unit = {},
     private val onSleepData: (SleepData) -> Unit = {},
     private val onWorkout: (WorkoutSummary) -> Unit = {},
-    private val onHourlySteps: (String, List<Pair<Int, Int>>) -> Unit = { _, _ -> }, // date, list of (hour, steps)
+    private val onHourlySteps: (String, List<Pair<Int, Int>>, List<Triple<Long, Int, Int>>) -> Unit = { _, _, _ -> }, // date, (hour, steps), TEMP minute rows (tsMs, steps, distanceCm)
     private val onGpsTrack: ((Long, List<GpsPoint>) -> Unit)? = null, // workoutStartMs, points
 ) {
     companion object {
@@ -249,7 +249,7 @@ class ActivitySync(
                         if (result.hourlySteps.isNotEmpty()) {
                             val dateStr = java.time.Instant.ofEpochSecond(info.timestamp)
                                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
-                            onHourlySteps(dateStr, result.hourlySteps.map { (h, s) -> Pair(h, s) }.sortedBy { it.first })
+                            onHourlySteps(dateStr, result.hourlySteps.map { (h, s) -> Pair(h, s) }.sortedBy { it.first }, result.minuteRows)
                         }
                         if (result.totalDistanceM > 0 || result.activeMinutes > 0 || result.lastSpo2 > 0 || result.lastStress > 0) {
                             onDailySummary(DailySummary(

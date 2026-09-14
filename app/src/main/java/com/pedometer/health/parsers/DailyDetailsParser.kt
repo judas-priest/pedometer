@@ -17,6 +17,9 @@ object DailyDetailsParser {
         val lastSpo2: Int,
         val lastStress: Int,
         val activeMinutes: Int,
+        // TEMP debug scaffolding (remove after distance-algorithm analysis):
+        // per-minute (timestampMs, steps, distanceCm) rows dumped to minute_dump.csv
+        val minuteRows: List<Triple<Long, Int, Int>> = emptyList(),
     )
 
     fun parse(fileId: ByteArray, data: ByteArray): Result? {
@@ -52,6 +55,7 @@ object DailyDetailsParser {
         var lastStress = 0
         var pos = dataStart
         var minuteOffset = 0
+        val minuteRows = mutableListOf<Triple<Long, Int, Int>>() // TEMP debug dump
         val baseTimestamp = info.timestamp
 
         while (pos < dataEnd) {
@@ -109,6 +113,7 @@ object DailyDetailsParser {
             } catch (_: Exception) { break }
 
             val sampleTs = baseTimestamp + minuteOffset * 60L
+            minuteRows.add(Triple(sampleTs * 1000, steps, distanceCm))
             if (hr > 0 && hr < 255) {
                 samples.add(ActivitySync.HeartRateSample(timestamp = sampleTs * 1000, bpm = hr))
             }
@@ -136,6 +141,7 @@ object DailyDetailsParser {
             lastSpo2 = lastSpo2,
             lastStress = lastStress,
             activeMinutes = activeMinutes,
+            minuteRows = minuteRows,
         )
     }
 }

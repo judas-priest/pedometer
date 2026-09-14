@@ -401,7 +401,15 @@ class WatchRepository(private val context: Context) {
                     } catch (e: Exception) { Log.e(TAG, "Save GPS failed", e) }
                 }
             },
-            onHourlySteps = { date, hourlyList ->
+            onHourlySteps = { date, hourlyList, minuteRows ->
+                // TEMP debug scaffolding — dump per-minute steps/distance for watch distance-algorithm analysis. Remove after analysis.
+                try {
+                    val dump = java.io.File(context.getExternalFilesDir(null), "minute_dump.csv")
+                    if (!dump.exists()) dump.appendText("timestamp,steps,distance_cm\n")
+                    dump.appendText(minuteRows.joinToString("") { (ts, s, d) -> "$ts,$s,$d\n" })
+                } catch (e: Exception) {
+                    Log.w(TAG, "minute dump failed: ${e.message}")
+                }
                 scope.launch(Dispatchers.IO) {
                     try {
                         // Watch data = source of truth, overwrite
