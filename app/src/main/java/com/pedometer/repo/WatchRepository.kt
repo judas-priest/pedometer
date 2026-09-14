@@ -96,6 +96,9 @@ class WatchRepository(private val context: Context) {
     /** Set by a manual disconnect; presence monitor must not override the user. */
     @Volatile private var userDisconnected = false
 
+    /** Set by an explicit user connect; scenario gates (quiet/wifi) yield until the next manual disconnect or link drop. */
+    @Volatile private var manualOverride = false
+
     /** Latest presence report from WatchPresenceMonitor; false until the first scan completes. */
     @Volatile private var lastKnownPresent = false
 
@@ -165,15 +168,15 @@ class WatchRepository(private val context: Context) {
      * (quiet hours, or home Wi-Fi with the gate on) — a service cold start at night
      * must not optimistically dial. The policy's own reconnect path only calls this
      * when NOT suppressed, so the gate never blocks legitimate policy connects.
-     * A manual UI connect during quiet hours is intentionally a no-op: the window
-     * is the window; disable it in settings to connect at night.
+     * A manual UI connect bypasses the gate via [connectManually], which sets the
+     * manual-override latch checked here.
      */
     fun connect() {
         userDisconnected = false
         val quiet = quietHours.isQuiet(java.time.LocalTime.now().hour)
         val wifiGate = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_WIFI_GATE, true)
-        if ((quiet || (homeWifiConnected && wifiGate)) && !(watchWorkoutActive || gpsRelayActive)) {
+        if ((quiet || (homeWifiConnected && wifiGate)) && !(watchWorkoutActive || gpsRelayActive) && !manualOverride) {
             Log.i(TAG, "connect() suppressed by policy (quiet=$quiet wifi=$homeWifiConnected gate=$wifiGate)")
             return
         }
@@ -184,8 +187,20 @@ class WatchRepository(private val context: Context) {
         )
     }
 
+    /** Explicit user connect from the UI — scenario gates (quiet hours, home Wi-Fi) do not apply. */
+    fun connectManually() {
+        manualOverride = true
+        userDisconnected = false
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        link.connect(
+            prefs.getString(KEY_MAC, "") ?: "",
+            prefs.getString(KEY_AUTH, "") ?: "",
+        )
+    }
+
     fun disconnect() {
         userDisconnected = true
+        manualOverride = false
         weatherJob?.cancel(); weatherJob = null
         initJob?.cancel(); initJob = null
         link.disconnect()
@@ -261,6 +276,7 @@ class WatchRepository(private val context: Context) {
     private fun onLinkDropped() {
         watchWorkoutActive = false
         gpsRelayActive = false
+        manualOverride = false
         WatchNotificationBridge.protocolHandler = null
         weatherJob?.cancel(); weatherJob = null
         initJob?.cancel(); initJob = null

@@ -196,6 +196,13 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     fun connect() {
         val ctx = getApplication<Application>()
+        // Explicit user action bypasses the connection policy (quiet hours, home Wi-Fi):
+        // connect directly with the manual-override latch instead of relying on the
+        // service's AUTO path, which goes through repo.connect() and would be suppressed.
+        repo.connectManually()
+        // Keep the service for the notification/process lifetime. Its no-action branch
+        // calls repo.connect() again — harmless: WatchLink.connect() ignores a call
+        // while not Disconnected.
         ContextCompat.startForegroundService(ctx, Intent(ctx, WatchConnectionService::class.java))
     }
 
