@@ -94,6 +94,9 @@ interface StepDao {
     @Query("SELECT * FROM heart_rate WHERE timestamp > :since ORDER BY timestamp DESC")
     suspend fun getHeartRateSince(since: Long): List<HeartRateRecord>
 
+    @Query("SELECT * FROM heart_rate WHERE timestamp >= :from AND timestamp < :to ORDER BY timestamp")
+    suspend fun getHeartRateBetween(from: Long, to: Long): List<HeartRateRecord>
+
     @Query("SELECT * FROM heart_rate ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLastHeartRate(): HeartRateRecord?
 

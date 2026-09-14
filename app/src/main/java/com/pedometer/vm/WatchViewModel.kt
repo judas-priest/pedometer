@@ -15,10 +15,13 @@ import com.pedometer.data.WorkoutRecord
 import com.pedometer.data.StepDatabase
 import com.pedometer.PedometerApp
 import com.pedometer.health.DayStepData
+import com.pedometer.health.IntensityMinutes
 import com.pedometer.health.PhoneStepCounter
 import com.pedometer.health.HealthConnectReader
 import com.pedometer.health.StepProviderReader
 import com.pedometer.health.UserProfile
+import com.pedometer.health.WalkDetector
+import com.pedometer.health.WalkMinute
 import com.pedometer.repo.withWatchData
 import com.pedometer.service.WatchConnectionService
 import com.pedometer.util.CalendarService
@@ -72,6 +75,24 @@ data class WatchState(
     val alarms: List<WatchAlarm> = emptyList(),
     val reminders: List<WatchReminder> = emptyList(),
     val calendarEvents: List<com.pedometer.ui.CalendarEventUI> = emptyList(),
+    val intensityToday: IntensityMinutes.Result = IntensityMinutes.Result(0, 0, 0),
+    val intensityDay: IntensityMinutes.Result = IntensityMinutes.Result(0, 0, 0),
+    val walksDay: String = "",
+    val intensityWeek: Int = 0,
+    val weekSteps: Int = 0,
+    val walksForDay: List<WalkCard> = emptyList(),
+)
+
+data class WalkCard(
+    val startMinute: Long,
+    val endMinute: Long,
+    val durationMin: Int,
+    val activeMinutes: Int,
+    val steps: Int,
+    val distanceM: Int,
+    val stepsPerMin: Int,
+    val hrAvg: Int,
+    val hrMax: Int,
 )
 
 typealias ConnectionStatus = com.pedometer.bt.ConnectionStatus
@@ -283,6 +304,24 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     healthHistory = dao.getRecentHealth(30),
                 )
 
+                // ── Weekly aggregates + today's intensity ──
+                val maxHr = IntensityMinutes.maxHrFor(_state.value.profile.age)
+                val dayStart = java.time.LocalDate.parse(todayStr).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val dayEnd = dayStart + 86_400_000L
+                val weekStart = dayEnd - 7 * 86_400_000L
+                val weekHr = dao.getHeartRateBetween(weekStart, dayEnd)
+                val intensityWeek = IntensityMinutes.compute(weekHr.map { it.timestamp to it.bpm }, maxHr).earnedMinutes
+                val weekSteps = dao.getRecentDays(7).sumOf { it.totalSteps }
+
+                _state.value = _state.value.copy(
+                    intensityToday = IntensityMinutes.compute(
+                        dao.getHeartRateBetween(dayStart, dayEnd).map { it.timestamp to it.bpm }, maxHr,
+                    ),
+                    intensityWeek = intensityWeek,
+                    weekSteps = weekSteps,
+                )
+                loadDayInsights(todayStr)
+
                 // 3. Health Connect
                 try {
                     if (healthConnectReader.isAvailable()) {
@@ -298,6 +337,67 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
             // 4. Watch data — battery, activity files, weather
             if (alsoFetchFromWatch) repo.refreshFromWatch()
+        }
+    }
+
+    /**
+     * Computes walks + intensity for one date and stores them under walksDay.
+     * Intensity merges two estimators (Google Fit practice): HR-sample zones and walking
+     * cadence (>=100 steps/min == moderate); the better of the two counts. HR samples are
+     * sparse when the app is backgrounded — cadence keeps the metric honest.
+     */
+    fun loadDayInsights(dateStr: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val maxHr = IntensityMinutes.maxHrFor(_state.value.profile.age)
+                val day = java.time.LocalDate.parse(dateStr)
+                val dayStart = day.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val dayEnd = dayStart + 86_400_000L
+                val dao = StepDatabase.get(getApplication()).stepDao()
+
+                val hr = dao.getHeartRateBetween(dayStart, dayEnd)
+                val hrResult = IntensityMinutes.compute(hr.map { it.timestamp to it.bpm }, maxHr)
+
+                val minuteData = dao.getMinuteStepsBetween(dayStart, dayEnd)
+                    .filter { it.source == "phone" }
+                    .map { WalkMinute(first = it.minute, steps = it.steps) }
+                val walks = WalkDetector.detect(minuteData)
+
+                val cadenceModerate = walks.sumOf { w ->
+                    val cadence = w.steps / w.activeMinutes.coerceAtLeast(1)
+                    if (cadence >= 100) w.activeMinutes else 0
+                }
+                val moderate = maxOf(hrResult.moderateMinutes, cadenceModerate)
+                val intensity = IntensityMinutes.Result(
+                    moderateMinutes = moderate,
+                    intenseMinutes = hrResult.intenseMinutes,
+                    earnedMinutes = moderate + hrResult.intenseMinutes * 2,
+                )
+
+                val cards = walks.map { seg ->
+                    val segHr = hr.filter { it.timestamp in seg.startMinute..seg.endMinute + 60_000L }
+                    val profile = _state.value.profile
+                    WalkCard(
+                        startMinute = seg.startMinute,
+                        endMinute = seg.endMinute,
+                        durationMin = ((seg.endMinute - seg.startMinute) / 60_000L).toInt() + 1,
+                        activeMinutes = seg.activeMinutes,
+                        steps = seg.steps,
+                        distanceM = (seg.steps * profile.stepLengthM).toInt(),
+                        stepsPerMin = seg.steps / seg.activeMinutes.coerceAtLeast(1),
+                        hrAvg = if (segHr.isEmpty()) 0 else segHr.map { it.bpm }.average().toInt(),
+                        hrMax = segHr.maxOfOrNull { it.bpm } ?: 0,
+                    )
+                }
+
+                _state.value = _state.value.copy(
+                    walksForDay = cards,
+                    walksDay = dateStr,
+                    intensityDay = intensity,
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "loadDayInsights($dateStr) failed", e)
+            }
         }
     }
 
