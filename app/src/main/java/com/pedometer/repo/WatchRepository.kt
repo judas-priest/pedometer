@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.pedometer.bt.ConnectionStatus
 import com.pedometer.bt.ProtocolHandler
+import com.pedometer.bt.QuietHours
 import com.pedometer.bt.WatchLink
 import com.pedometer.data.DailyHealth
 import com.pedometer.data.GpsPointRecord
@@ -54,6 +55,10 @@ class WatchRepository(private val context: Context) {
         private const val PREFS_NAME = "pedometer_prefs"
         private const val KEY_AUTH = "auth_key"
         private const val KEY_MAC = "mac_address"
+        private const val KEY_QUIET_ENABLED = "quiet_enabled"
+        private const val KEY_QUIET_START = "quiet_start"
+        private const val KEY_QUIET_END = "quiet_end"
+        private const val KEY_WIFI_GATE = "wifi_gate_enabled"
 
         @Volatile private var INSTANCE: WatchRepository? = null
 
@@ -90,6 +95,31 @@ class WatchRepository(private val context: Context) {
 
     /** Set by a manual disconnect; presence monitor must not override the user. */
     @Volatile private var userDisconnected = false
+
+    /** Latest presence report from WatchPresenceMonitor; false until the first scan completes. */
+    @Volatile private var lastKnownPresent = false
+
+    /** Home Wi-Fi currently connected (from the service's network callback). */
+    @Volatile private var homeWifiConnected = false
+
+    /** Watch-side workout in progress (status 0=started,1=resumed,2=paused,3=finished). */
+    @Volatile private var watchWorkoutActive = false
+
+    /** Watch asked the phone to relay GPS — a workout is live even without a watch-side status. */
+    @Volatile private var gpsRelayActive = false
+
+    private val quietHours: QuietHours
+        get() {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return QuietHours(
+                enabled = prefs.getBoolean(KEY_QUIET_ENABLED, true),
+                startHour = prefs.getInt(KEY_QUIET_START, 0),
+                endHour = prefs.getInt(KEY_QUIET_END, 7),
+            )
+        }
+
+    /** Read-only accessor for the service, which hands it to WatchPresenceMonitor. */
+    fun currentQuietHours(): QuietHours = quietHours
     private var weatherJob: Job? = null
     private var initJob: Job? = null
     @Volatile private var lastHrSaveTime = 0L
@@ -148,18 +178,48 @@ class WatchRepository(private val context: Context) {
     }
 
     /**
-     * Presence signal from WatchPresenceMonitor. Present → (re)connect when idle and the
-     * user has not manually disconnected; absent → stop the reconnect machinery. Note the
-     * guard only protects an idle link: Connecting/Authenticating attempts killed by a
-     * missed scan self-heal on the next present scan.
+     * Presence signal from WatchPresenceMonitor. Reported on EVERY completed scan —
+     * this method is the dedup point. Feeds [applyConnectionPolicy].
      */
     fun onWatchPresence(present: Boolean) {
+        lastKnownPresent = present
+        applyConnectionPolicy("presence=$present")
+    }
+
+    /** Wi-Fi transport became available/unavailable (home scenario). */
+    fun onHomeWifiChanged(connected: Boolean) {
+        homeWifiConnected = connected
+        applyConnectionPolicy("wifi=$connected")
+    }
+
+    /** Settings changed the quiet-hours values — re-evaluate immediately. */
+    fun onQuietHoursChanged() {
+        applyConnectionPolicy("quiet hours edited")
+    }
+
+    /**
+     * THE single decision point for holding or dropping the watch link.
+     *
+     * Suppress the link during quiet hours or while on home Wi-Fi (both "user is home,
+     * watch is not being worn" proxies) — unless a workout is live. When not suppressed,
+     * behave like the plain presence logic: present → connect when idle, absent → stop
+     * retrying. A manual disconnect still wins over auto-reconnect.
+     */
+    private fun applyConnectionPolicy(reason: String) {
+        val quiet = quietHours.isQuiet(java.time.LocalTime.now().hour)
+        val wifiGate = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_WIFI_GATE, true)
+        val suppress = quiet || (homeWifiConnected && wifiGate)
+        val workoutActive = watchWorkoutActive || gpsRelayActive
         val status = _data.value.connectionStatus
-        if (present) {
-            if (status == ConnectionStatus.Disconnected && hasCredentials && !userDisconnected) connect()
-        } else if (status != ConnectionStatus.Connected) {
-            Log.i(TAG, "Watch absent — suspending reconnect attempts")
-            link.disconnect()
+        Log.i(TAG, "Policy[$reason]: quiet=$quiet wifi=$homeWifiConnected(gate=$wifiGate) " +
+            "workout=$workoutActive present=$lastKnownPresent -> suppress=$suppress status=$status")
+        when {
+            workoutActive -> Unit // never tear down a live workout, whatever the scenario says
+            suppress -> if (status != ConnectionStatus.Disconnected) link.disconnect()
+            lastKnownPresent && status == ConnectionStatus.Disconnected &&
+                hasCredentials && !userDisconnected -> connect()
+            !lastKnownPresent && status != ConnectionStatus.Disconnected -> link.disconnect()
         }
     }
 
@@ -179,6 +239,8 @@ class WatchRepository(private val context: Context) {
     }
 
     private fun onLinkDropped() {
+        watchWorkoutActive = false
+        gpsRelayActive = false
         WatchNotificationBridge.protocolHandler = null
         weatherJob?.cancel(); weatherJob = null
         initJob?.cancel(); initJob = null
@@ -230,10 +292,14 @@ class WatchRepository(private val context: Context) {
             }
         }
         health.onGpsNeeded = { needed ->
+            gpsRelayActive = needed
+            applyConnectionPolicy("gpsRelay=$needed")
             onGpsRelayNeeded?.invoke(needed)
         }
         health.onWorkoutEvent = { event ->
+            watchWorkoutActive = event.status != 3 // 0=started,1=resumed,2=paused,3=finished
             Log.i(TAG, "Workout event: ${event.sportName} status=${event.status}")
+            applyConnectionPolicy("workout status=${event.status}")
             when (event.status) {
                 0 -> { // started
                     WatchNotificationBridge.sendToWatch(
