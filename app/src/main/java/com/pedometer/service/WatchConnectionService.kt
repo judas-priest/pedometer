@@ -78,6 +78,7 @@ class WatchConnectionService : Service() {
             presenceMonitor = WatchPresenceMonitor(
                 this, mac, repo.scope,
                 quietHours = repo::currentQuietHours,
+                onQuietChanged = repo::onQuietHoursChanged,
                 onPresenceChanged = repo::onWatchPresence,
             )
             presenceMonitor?.start()

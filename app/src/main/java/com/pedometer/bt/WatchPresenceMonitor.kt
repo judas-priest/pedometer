@@ -37,6 +37,7 @@ class WatchPresenceMonitor(
     private val mac: String,
     private val scope: CoroutineScope,
     private val quietHours: () -> QuietHours = { QuietHours.DISABLED },
+    private val onQuietChanged: () -> Unit = {},
     private val onPresenceChanged: (present: Boolean) -> Unit,
 ) {
     companion object {
@@ -52,6 +53,7 @@ class WatchPresenceMonitor(
 
     private var loopJob: Job? = null
     @Volatile private var callback: ScanCallback? = null
+    @Volatile private var lastQuiet: Boolean? = null
     private val intervalPolicy = ScanIntervalPolicy()
 
     fun start() {
@@ -63,9 +65,13 @@ class WatchPresenceMonitor(
         loopJob = scope.launch {
             while (true) {
                 val quiet = quietHours().isQuiet(LocalTime.now().hour)
+                if (quiet != lastQuiet) {
+                    lastQuiet = quiet
+                    onQuietChanged()
+                }
                 if (quiet) {
-                    // Night window: no scan at all. The repo tore the link down on its own;
-                    // presence state simply freezes until morning.
+                    // Night window: no scan at all. onQuietChanged() above already told the
+                    // repo to apply the quiet policy; presence state freezes until morning.
                     delay(BASE_INTERVAL_MS)
                     continue
                 }
