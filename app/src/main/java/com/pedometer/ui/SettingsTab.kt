@@ -239,8 +239,8 @@ fun SettingsTab(
 
         val prefs = context.getSharedPreferences("pedometer_prefs", android.content.Context.MODE_PRIVATE)
         var quietEnabled by remember { mutableStateOf(prefs.getBoolean("quiet_enabled", true)) }
-        var quietStart by remember { mutableStateOf(prefs.getInt("quiet_start", 0)) }
-        var quietEnd by remember { mutableStateOf(prefs.getInt("quiet_end", 7)) }
+        var quietStartText by remember { mutableStateOf(prefs.getInt("quiet_start", 0).toString()) }
+        var quietEndText by remember { mutableStateOf(prefs.getInt("quiet_end", 7).toString()) }
         var wifiGate by remember { mutableStateOf(prefs.getBoolean("wifi_gate_enabled", true)) }
 
         ElevatedCard {
@@ -266,11 +266,11 @@ fun SettingsTab(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = quietStart.toString(),
+                        value = quietStartText,
                         onValueChange = { v ->
+                            quietStartText = v
                             v.toIntOrNull()?.let { h ->
                                 if (h in 0..23) {
-                                    quietStart = h
                                     prefs.edit().putInt("quiet_start", h).apply()
                                     PedometerApp.repository.onQuietHoursChanged()
                                 }
@@ -282,11 +282,11 @@ fun SettingsTab(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                     OutlinedTextField(
-                        value = quietEnd.toString(),
+                        value = quietEndText,
                         onValueChange = { v ->
+                            quietEndText = v
                             v.toIntOrNull()?.let { h ->
                                 if (h in 0..23) {
-                                    quietEnd = h
                                     prefs.edit().putInt("quiet_end", h).apply()
                                     PedometerApp.repository.onQuietHoursChanged()
                                 }
