@@ -135,6 +135,7 @@ fun ActivityScreen(
                     StatItem("Шагов", "%,d".format(periodSteps))
                     StatItem("Среднее", "%,d".format(periodAvg))
                     StatItem("Цель", "$periodGoalDays/${periodDays.size} дн")
+                    StatItem("Интенсив.", "${state.intensityWeek}/150")
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

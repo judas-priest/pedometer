@@ -200,24 +200,6 @@ fun TodayScreen(
 
             // (metric detail opens as full screen via showMetric state above)
 
-            // 5. Intensity minutes + weekly summary
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Активность", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "${state.intensityWeek} / 150 мин",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    LinearProgressIndicator(
-                        progress = { (state.intensityWeek / 150f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-
             // 7. Last night sleep
             val sleep = state.lastSleep
             if (sleep != null && sleep.totalMinutes > 0) {
