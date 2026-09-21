@@ -40,6 +40,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -336,13 +337,15 @@ class WatchRepository(private val context: Context) {
 
     private fun buildServices(handler: ProtocolHandler) {
         val health = HealthService(handler) { data ->
-            _data.value = _data.value.copy(
-                watchSteps = if (data.steps > 0) data.steps else _data.value.watchSteps,
-                watchCalories = if (data.calories > 0) data.calories else _data.value.watchCalories,
-                heartRate = if (data.heartRate > 0) data.heartRate else _data.value.heartRate,
-                standingHours = if (data.standingHours > 0) data.standingHours else _data.value.standingHours,
-                activeMinutes = if (data.activeMinutes > 0) data.activeMinutes else _data.value.activeMinutes,
-            )
+            _data.update {
+                it.copy(
+                    watchSteps = if (data.steps > 0) data.steps else it.watchSteps,
+                    watchCalories = if (data.calories > 0) data.calories else it.watchCalories,
+                    heartRate = if (data.heartRate > 0) data.heartRate else it.heartRate,
+                    standingHours = if (data.standingHours > 0) data.standingHours else it.standingHours,
+                    activeMinutes = if (data.activeMinutes > 0) data.activeMinutes else it.activeMinutes,
+                )
+            }
             // Persist heart rate to Room DB (max once per minute)
             val now = System.currentTimeMillis()
             if (data.heartRate > 0 && now - lastHrSaveTime >= 60_000) {

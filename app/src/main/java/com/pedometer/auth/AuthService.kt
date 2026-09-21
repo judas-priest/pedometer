@@ -39,7 +39,7 @@ class AuthService(authKeyHex: String) {
         if (!expectedHmac.contentEquals(watchHmac)) return false
 
         isInitialized = true
-        Log.i("AuthService", "Keys derived: encKey=${encryptionKey.joinToString("") { "%02x".format(it) }} decKey=${decryptionKey.joinToString("") { "%02x".format(it) }}")
+        Log.i("AuthService", "Keys derived (enc=${encryptionKey.size}B, dec=${decryptionKey.size}B)")
         return true
     }
 

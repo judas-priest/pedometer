@@ -50,7 +50,10 @@ data class DailyHealth(
     val distanceM: Int = 0,
 )
 
-@Entity(tableName = "heart_rate")
+@Entity(
+    tableName = "heart_rate",
+    indices = [Index(value = ["timestamp"])],
+)
 data class HeartRateRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,                     // epoch millis
@@ -95,7 +98,10 @@ data class GpsPointRecord(
     val speed: Float = 0f,
 )
 
-@Entity(tableName = "step_snapshots")
+@Entity(
+    tableName = "step_snapshots",
+    indices = [Index(value = ["timestamp"])],
+)
 data class StepSnapshot(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,                     // epoch millis

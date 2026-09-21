@@ -35,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -130,12 +131,14 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        _state.value = _state.value.copy(
-            authKey = prefs.getString(KEY_AUTH, "") ?: "",
-            macAddress = prefs.getString(KEY_MAC, "") ?: "",
-        )
+        _state.update {
+            it.copy(
+                authKey = prefs.getString(KEY_AUTH, "") ?: "",
+                macAddress = prefs.getString(KEY_MAC, "") ?: "",
+            )
+        }
 
-        _state.value = _state.value.copy(profile = userProfile)
+        _state.update { it.copy(profile = userProfile) }
         refreshCalendarEvents()
 
         // Auto-connect is handled by WatchConnectionService, started from MainActivity
@@ -144,7 +147,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         // Watch data arrives from the repository
         viewModelScope.launch {
             repo.data.collect { data ->
-                _state.value = _state.value.withWatchData(data)
+                _state.update { it.withWatchData(data) }
             }
         }
         // Room got new health data (sleep, workouts, HR, daily health) — re-read it
@@ -172,12 +175,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             phoneStepCounter.stepsSinceStart.collect { steps ->
-                _state.value = _state.value.copy(phoneSteps = steps)
+                _state.update { it.copy(phoneSteps = steps) }
             }
         }
         viewModelScope.launch {
             phoneStepCounter.totalStepsSinceBoot.collect { total ->
-                _state.value = _state.value.copy(phoneStepsSinceBoot = total)
+                _state.update { it.copy(phoneStepsSinceBoot = total) }
             }
         }
 
@@ -186,18 +189,18 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun updateProfile(profile: UserProfile) {
         userProfile = profile
         UserProfile.save(getApplication(), profile)
-        _state.value = _state.value.copy(profile = profile)
+        _state.update { it.copy(profile = profile) }
         repo.onProfileChanged(profile)
     }
 
     fun updateAuthKey(key: String) {
-        _state.value = _state.value.copy(authKey = key)
+        _state.update { it.copy(authKey = key) }
         getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_AUTH, key).apply()
     }
 
     fun updateMacAddress(mac: String) {
-        _state.value = _state.value.copy(macAddress = mac)
+        _state.update { it.copy(macAddress = mac) }
         getApplication<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_MAC, mac).apply()
     }
@@ -242,11 +245,13 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     val today = StepProviderReader.readToday(app)
                     if (today != null) {
-                        _state.value = _state.value.copy(
-                            todayWalkSteps = today.walkSteps,
-                            todayRunSteps = today.runSteps,
-                            todayWalkMinutes = today.walkMinutes,
-                        )
+                        _state.update {
+                            it.copy(
+                                todayWalkSteps = today.walkSteps,
+                                todayRunSteps = today.runSteps,
+                                todayWalkMinutes = today.walkMinutes,
+                            )
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "StepProvider poll failed", e)
@@ -268,26 +273,30 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 // Re-read the profile: step-length auto-calibration in WatchRepository may
                 // have updated SharedPreferences since this ViewModel was created.
                 userProfile = UserProfile.load(app)
-                _state.value = _state.value.copy(profile = userProfile)
+                _state.update { it.copy(profile = userProfile) }
 
                 // 1. StepProvider (OPLUS)
                 val today = StepProviderReader.readToday(app)
                 val history = StepProviderReader.readHistory(app, 30)
                 if (today != null) {
-                    _state.value = _state.value.copy(
-                        todayWalkSteps = today.walkSteps,
-                        todayRunSteps = today.runSteps,
-                        todayWalkMinutes = today.walkMinutes,
-                        stepHistory = history,
-                    )
+                    _state.update {
+                        it.copy(
+                            todayWalkSteps = today.walkSteps,
+                            todayRunSteps = today.runSteps,
+                            todayWalkMinutes = today.walkMinutes,
+                            stepHistory = history,
+                        )
+                    }
                 } else {
                     // New day — StepProvider has no data yet, reset
-                    _state.value = _state.value.copy(
-                        todayWalkSteps = 0,
-                        todayRunSteps = 0,
-                        todayWalkMinutes = 0,
-                        stepHistory = history,
-                    )
+                    _state.update {
+                        it.copy(
+                            todayWalkSteps = 0,
+                            todayRunSteps = 0,
+                            todayWalkMinutes = 0,
+                            stepHistory = history,
+                        )
+                    }
                 }
                 if (today != null) {
                     val dao = StepDatabase.get(app).stepDao()
@@ -333,16 +342,18 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     .toInstant().toEpochMilli()
                 val hrRecords = dao.getHeartRateSince(weekAgo)
                 val hrHistory = hrRecords.map { Pair(it.timestamp, it.bpm) }
-                _state.value = _state.value.copy(
-                    todayHourlySteps = hourly,
-                    spo2 = health?.spo2Avg ?: _state.value.spo2,
-                    stress = health?.stressAvg ?: _state.value.stress,
-                    hrResting = health?.hrResting ?: _state.value.hrResting,
-                    lastSleep = lastSleep ?: _state.value.lastSleep,
-                    recentWorkouts = workouts,
-                    hrHistory = if (hrHistory.isNotEmpty()) hrHistory else _state.value.hrHistory,
-                    healthHistory = dao.getRecentHealth(30),
-                )
+                _state.update {
+                    it.copy(
+                        todayHourlySteps = hourly,
+                        spo2 = health?.spo2Avg ?: it.spo2,
+                        stress = health?.stressAvg ?: it.stress,
+                        hrResting = health?.hrResting ?: it.hrResting,
+                        lastSleep = lastSleep ?: it.lastSleep,
+                        recentWorkouts = workouts,
+                        hrHistory = if (hrHistory.isNotEmpty()) hrHistory else it.hrHistory,
+                        healthHistory = dao.getRecentHealth(30),
+                    )
+                }
 
                 // ── Weekly aggregates + today's intensity ──
                 // Week = calendar week starting Monday (user expectation), not a rolling 7-day window.
@@ -358,13 +369,15 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     .filter { it.date >= java.time.LocalDate.parse(todayStr).with(java.time.DayOfWeek.MONDAY).toString() }
                     .sumOf { it.totalSteps }
 
-                _state.value = _state.value.copy(
-                    intensityToday = IntensityMinutes.compute(
-                        dao.getHeartRateBetween(dayStart, dayEnd).map { it.timestamp to it.bpm }, maxHr, restingHr,
-                    ),
-                    intensityWeek = intensityWeek,
-                    weekSteps = weekSteps,
-                )
+                _state.update {
+                    it.copy(
+                        intensityToday = IntensityMinutes.compute(
+                            dao.getHeartRateBetween(dayStart, dayEnd).map { r -> r.timestamp to r.bpm }, maxHr, restingHr,
+                        ),
+                        intensityWeek = intensityWeek,
+                        weekSteps = weekSteps,
+                    )
+                }
                 loadDayInsights(todayStr)
 
                 // 3. Health Connect
@@ -372,10 +385,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     if (healthConnectReader.isAvailable()) {
                         val hcSteps = healthConnectReader.readTodaySteps()
                         val hcHR = healthConnectReader.readLatestHeartRate()
-                        _state.value = _state.value.copy(
-                            healthConnectSteps = hcSteps,
-                            healthConnectHR = hcHR,
-                        )
+                        _state.update {
+                            it.copy(
+                                healthConnectSteps = hcSteps,
+                                healthConnectHR = hcHR,
+                            )
+                        }
                     }
                 } catch (_: Exception) {}
             } catch (_: Exception) {}
@@ -510,15 +525,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val todayResting = dao.getRestingHrBetween(dateStr, dateStr)
                     .firstOrNull()?.hrResting ?: 0
 
-                _state.value = _state.value.copy(
-                    walksForDay = dayCards,
-                    walksDay = dateStr,
-                    intensityDay = intensity,
-                    restingInsight = HealthInsights.restingHrInsight(baseline, todayResting),
-                    weekTrimp = weekTrimp,
-                    prevWeekTrimp = prevWeekTrimp,
-                    recentPaces = paces,
-                )
+                _state.update {
+                    it.copy(
+                        walksForDay = dayCards,
+                        walksDay = dateStr,
+                        intensityDay = intensity,
+                        restingInsight = HealthInsights.restingHrInsight(baseline, todayResting),
+                        weekTrimp = weekTrimp,
+                        prevWeekTrimp = prevWeekTrimp,
+                        recentPaces = paces,
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "loadDayInsights($dateStr) failed", e)
             }
@@ -559,7 +576,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshCalendarEvents() {
         val app = getApplication<Application>()
         val events = CalendarService.readUpcomingEventsUI(app)
-        _state.value = _state.value.copy(calendarEvents = events)
+        _state.update { it.copy(calendarEvents = events) }
     }
 
     fun getAlarms() = repo.getAlarms()
