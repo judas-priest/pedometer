@@ -439,14 +439,14 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     earnedMinutes = moderate + hrResult.intenseMinutes * 2,
                 )
 
-                // TRIMP week-over-week, relative to the selected day
+                // TRIMP week-over-week: trailing 7 days ending on the selected day vs the prior 7
                 val inWeek = cards.filter {
                     val d = java.time.Instant.ofEpochMilli(it.startMinute).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                    !d.isBefore(day) && d.isBefore(day.plusDays(1))
+                    !d.isBefore(day.minusDays(6)) && !d.isAfter(day)
                 }
                 val inPrevWeek = cards.filter {
                     val d = java.time.Instant.ofEpochMilli(it.startMinute).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                    d.isBefore(day) && !d.isBefore(day.minusDays(6))
+                    !d.isBefore(day.minusDays(13)) && d.isBefore(day.minusDays(6))
                 }
                 val weekTrimp = inWeek.sumOf { it.trimp }
                 val prevWeekTrimp = inPrevWeek.sumOf { it.trimp }
