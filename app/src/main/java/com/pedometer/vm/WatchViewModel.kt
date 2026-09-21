@@ -286,12 +286,19 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (today != null) {
                     val dao = StepDatabase.get(app).stepDao()
+                    // Daily calories: Keytel net sum over today's HR samples (~1 min each);
+                    // fallback to the old steps formula when the day has no HR data yet.
+                    val todayDayStart = java.time.LocalDate.parse(today.date)
+                        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    val todayHr = dao.getHeartRateBetween(todayDayStart, todayDayStart + 86_400_000L).map { it.bpm }
+                    val calories = if (todayHr.isEmpty()) userProfile.calcCalories(today.totalSteps)
+                        else HealthInsights.keytelSum(todayHr, userProfile.weightKg, userProfile.age, userProfile.heightCm).toDouble()
                     dao.upsertDaily(DailySteps(
                         date = today.date,
                         totalSteps = today.totalSteps,
                         walkSteps = today.walkSteps,
                         runSteps = today.runSteps,
-                        calories = userProfile.calcCalories(today.totalSteps),
+                        calories = calories,
                         distanceKm = userProfile.calcDistance(today.totalSteps),
                     ))
                 }

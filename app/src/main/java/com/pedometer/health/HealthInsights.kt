@@ -14,14 +14,24 @@ package com.pedometer.health
  */
 object HealthInsights {
 
+    /** Net kcal for ONE minute at the given HR. */
+    fun keytelPerMinute(hr: Int, weightKg: Int, age: Int, heightCm: Int = 179): Double {
+        val grossPerMin = (-55.0969 + 0.6309 * hr + 0.1988 * weightKg + 0.2017 * age) / 4.184
+        // Mifflin-St Jeor RMR (male) per minute, so "net" excludes what he'd burn resting anyway
+        val rmrPerMin = (10.0 * weightKg + 6.25 * heightCm - 5.0 * age + 5.0) / 1440.0
+        return (grossPerMin - rmrPerMin).coerceAtLeast(0.0)
+    }
+
+    /** Net kcal for a list of per-minute HR samples. 0 when the list is empty. */
+    fun keytelSum(bpms: List<Int>, weightKg: Int, age: Int, heightCm: Int = 179): Int {
+        if (bpms.isEmpty()) return 0
+        return bpms.sumOf { keytelPerMinute(it, weightKg, age, heightCm) }.toInt().coerceAtLeast(0)
+    }
+
     /** Net (above-resting) kcal burned during steady aerobic activity. 0 when no HR. */
     fun keytelKcal(hrAvg: Int, weightKg: Int, age: Int, durationMin: Int, heightCm: Int = 179): Int {
         if (hrAvg <= 0 || durationMin <= 0) return 0
-        val grossPerMin = (-55.0969 + 0.6309 * hrAvg + 0.1988 * weightKg + 0.2017 * age) / 4.184
-        // Mifflin-St Jeor RMR (male) per minute, so "net" excludes what he'd burn resting anyway
-        val rmrPerMin = (10.0 * weightKg + 6.25 * heightCm - 5.0 * age + 5.0) / 1440.0
-        val netPerMin = grossPerMin - rmrPerMin
-        return (netPerMin * durationMin).toInt().coerceAtLeast(0)
+        return keytelSum(List(durationMin) { hrAvg }, weightKg, age, heightCm)
     }
 
     /** Banister TRIMP training-load points. 0 when no HR. */

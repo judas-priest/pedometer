@@ -24,6 +24,12 @@ class HealthInsightsTest {
         assertEquals(0, HealthInsights.keytelKcal(hrAvg = 0, weightKg = 93, age = 33, durationMin = 60))
     }
 
+    @Test
+    fun `keytelSum is keytelKcal for uniform hr`() {
+        val sum = HealthInsights.keytelSum(List(98) { 131 }, 93, 33)
+        assertEquals(HealthInsights.keytelKcal(hrAvg = 131, weightKg = 93, age = 33, durationMin = 98), sum)
+    }
+
     // ── Banister TRIMP (max 185, rest 60) ──
 
     @Test
