@@ -236,3 +236,34 @@ Phase 8 — после того как основные фичи работаю�
 ## Техдолг (идеи, не запланировано)
 
 - **Экспорт в Health Connect**: шаги/пульс/сон/тренировки → экосистема Google (Google Fit, OHealth). Провайдер не написан, нужны runtime-разрешения. Код-инфраструктура Health Connect частично готова.
+
+## Техдолг — аудит 2026-09-22 (все тезисы проверены по коду)
+
+### Критичное
+- **Логи сливают секреты**: `AuthService.kt:42` — сессионные AES-ключи в logcat; `ProtocolHandler.kt:226,238` — весь исходящий трафик открытым текстом (уведомления, контакты). ProGuard не режет Log (`proguard-rules.pro` пуст, нет `-assumenosideeffects`). Фикс: убрать логи ключей/трафика + добавить strip-правила в release.
+- **БД без очистки и индексов**: `cleanOldHeartRate`/`cleanOldSnapshots` (`StepDao.kt:48,107`) — мёртвый код, никогда не вызываются; heart_rate растёт ~1440 строк/день; нет `@Index` на `heart_rate.timestamp` и `step_snapshots.timestamp` (full scan на всех временных запросах). Фикс: ретеншн (например 90 дней) + индексы через миграцию (data loss = unforgivable, миграцию писать честно).
+- **Гонки состояния**: 16 мест `_state.value = _state.value.copy(...)` из 4+ корутин (`WatchViewModel.kt:277,336,361,513,245,147,175`) — потерянные апдейты. Фикс: `MutableStateFlow.update {}` везде.
+
+### Среднее
+- **CommandReceiver exported без permission** (манифест:72-80) — любое приложение шлёт NOTIFY/FIND на часы (фейковые «сообщения от банка»). Это ADB-бэкдор. Фикс: `android:permission` под свою signature-пермишен или exported=false (adb-хаки через run-as).
+- **allowBackup не выключен** — auth key часов уезжает в облачный/D2D бэкап. Фикс: `dataExtractionRules`/`fullBackupContent`, исключить prefs с ключами.
+- **Presence-скан крутится при подключённых часах** (`WatchPresenceMonitor.start()` без gate) — ~3с BLE каждую минуту в никуда. Фикс: приостановить скан когда status==Connected.
+- **gpsRelayActive может залипнуть**: `WatchViewModel.onCleared()` (`:628`) зануляет `repo.onGpsRelayNeeded`, но не сбрасывает `repo.gpsRelayActive` → suppression-гейты (ночь/wifi) видят «workout активен» вечно и не рвут связь. Фикс: сброс состояния в репозитории.
+- **Крэш от кривого пакета**: `SppConnection.readLoop` (:192) ловит только IOException — RuntimeException от фрейма убивает процесс+FGS. Если умирает presence-цикл — автоподключение мертво до перезапуска сервиса (`start()` no-op при живом loopJob). Фикс: try/catch вокруг тела циклов, политика рестарта.
+- **Календарь на main thread**: ContentResolver в `refreshCalendarEvents` из `init`/`Dispatchers.Main` (`WatchViewModel.kt:139,530-547`) — джанк старта. Фикс: на IO.
+
+### Мелочи
+- HR-вставки по одной (`WatchRepository.kt:533-539`) вместо `@Insert(List)`/withTransaction; то же hourly upsert (:439-441).
+- DST: `+86_400_000L` вместо `plusDays(1).atStartOfDay(zone)` (`WatchViewModel.kt:298,352,407`; `DayDetailScreen.kt:531,537`) — ±1 час в переходные сутки.
+- `collectAsState` вместо `collectAsStateWithLifecycle` (MainActivity:52).
+- Фейковый спиннер pull-to-refresh: `delay(2000)` вместо факта загрузки (TodayScreen:96, ActivityScreen:68).
+- Лишние пермишены: SEND_SMS, READ_CALL_LOG, QUERY_ALL_PACKAGES — не используются.
+- Auth FAILED продолжает как успешный (`ProtocolHandler.kt:218`); HMAC сравнение не constant-time (`AuthService.kt:39` — `MessageDigest.isEqual`).
+- `write()` в сокет без синхронизации (`SppConnection.kt:167`) — интерливинг из разных корутин.
+- V1 CCM counter Int→Short wrap на 32767 пакетов (`ProtocolHandler.kt:251`); decrypt-failure молча пропускает шифротекст (`:130-139`).
+- charts: `pointerInput(data.size)` ловит устаревшие данные при неизменном размере (`Charts.kt:74`); min/max в draw-лямбде на каждом кадре.
+- RFCOMM server socket живёт до 30с после коннекта (`SppConnection.kt:44-72`, известный трейд-офф).
+
+### Эконом-режим связи (фича, решает главный жрун)
+- 157 mAh/цикл за живую связь — единственный рычаг: рвать при простое, коннект по событию (открытие приложения / уведомление / звонок / периодический синк 2ч). Требует `requestLink(reason)` в репозитории и перенаправления всех путей отправки. Цена: задержка уведомлений до ~минуты.
+- GNSS-релай тренировок: ~53 mAh за прогулку — обязательная плата (у часов нет GNSS). Проверено: включается/выключается ровно на время тренировки. Улучшение: освобождать GNSS на паузе тренировки (status=2) и кап на максимальную длительность.
