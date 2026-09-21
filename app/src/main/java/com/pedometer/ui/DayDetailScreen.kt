@@ -292,13 +292,6 @@ fun DayDetailScreen(
         }
         if (state.walksForDay.isNotEmpty() && state.walksDay == selectedDate.toString()) {
             Text("Прогулки", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (state.recentPaces.size >= 2) {
-                Text(
-                    "Темп последних прогулок: " + state.recentPaces.joinToString(" → ") { "%.1f".format(it) } + " мин/км",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             Spacer(Modifier.height(8.dp))
             state.walksForDay.forEach { w ->
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
