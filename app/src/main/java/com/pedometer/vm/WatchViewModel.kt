@@ -18,6 +18,7 @@ import com.pedometer.health.DayStepData
 import com.pedometer.health.IntensityMinutes
 import com.pedometer.health.PhoneStepCounter
 import com.pedometer.health.HealthConnectReader
+import com.pedometer.health.HealthInsights
 import com.pedometer.health.StepProviderReader
 import com.pedometer.health.UserProfile
 import com.pedometer.health.WalkDetector
@@ -81,6 +82,10 @@ data class WatchState(
     val intensityWeek: Int = 0,
     val weekSteps: Int = 0,
     val walksForDay: List<WalkCard> = emptyList(),
+    val restingInsight: HealthInsights.RestingHrInsight = HealthInsights.RestingHrInsight(0, 0, 0, false),
+    val weekTrimp: Int = 0,
+    val prevWeekTrimp: Int = 0,
+    val recentPaces: List<Float> = emptyList(), // min/km, last 5 walks, oldest first
 )
 
 data class WalkCard(
@@ -93,6 +98,9 @@ data class WalkCard(
     val stepsPerMin: Int,
     val hrAvg: Int,
     val hrMax: Int,
+    val kcal: Int = 0,
+    val trimp: Int = 0,
+    val paceMinPerKm: Float = 0f, // 0 = unknown (no distance)
 )
 
 typealias ConnectionStatus = com.pedometer.bt.ConnectionStatus
@@ -367,29 +375,62 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     fun loadDayInsights(dateStr: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val maxHr = IntensityMinutes.maxHrFor(_state.value.profile.age)
+                val profile = _state.value.profile
+                val maxHr = IntensityMinutes.maxHrFor(profile.age)
                 val day = java.time.LocalDate.parse(dateStr)
                 val dayStart = day.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val dayEnd = dayStart + 86_400_000L
+                val windowStart = dayStart - 28 * 86_400_000L
                 val dao = StepDatabase.get(getApplication()).stepDao()
                 val restingHr = currentRestingHr(dao)
 
-                val hr = dao.getHeartRateBetween(dayStart, dayEnd)
-                val hrResult = IntensityMinutes.compute(hr.map { it.timestamp to it.bpm }, maxHr, restingHr)
+                val hr = dao.getHeartRateBetween(windowStart, dayEnd)
+                val hrResult = IntensityMinutes.compute(
+                    hr.filter { it.timestamp >= dayStart }.map { it.timestamp to it.bpm }, maxHr,
+                    restingHr,
+                )
 
-                val minuteData = dao.getMinuteStepsBetween(dayStart, dayEnd)
+                val minuteData = dao.getMinuteStepsBetween(windowStart, dayEnd)
                     .filter { it.source == "phone" }
                     .map { WalkMinute(first = it.minute, steps = it.steps) }
                 val walks = WalkDetector.detect(minuteData)
 
                 // Watch-measured distance per minute (meters); phone rows have none.
-                val watchDistByMinute = dao.getMinuteStepsBetween(dayStart, dayEnd)
+                val watchDistByMinute = dao.getMinuteStepsBetween(windowStart, dayEnd)
                     .filter { it.source == "watch" && it.distanceM > 0 }
                     .associate { it.minute to it.distanceM }
 
-                val cadenceModerate = walks.sumOf { w ->
-                    val cadence = w.steps / w.activeMinutes.coerceAtLeast(1)
-                    if (cadence >= 100) w.activeMinutes else 0
+                val cards = walks.map { seg ->
+                    val segHr = hr.filter { it.timestamp in seg.startMinute..seg.endMinute + 60_000L }
+                    val hrAvg = if (segHr.isEmpty()) 0 else segHr.map { it.bpm }.average().toInt()
+                    val durationMin = ((seg.endMinute - seg.startMinute) / 60_000L).toInt() + 1
+                    val watchDist = (seg.startMinute..seg.endMinute step 60_000L).sumOf { m ->
+                        watchDistByMinute[m] ?: 0
+                    }
+                    val distanceM = if (watchDist > 0) watchDist else (seg.steps * profile.stepLengthM).toInt()
+                    WalkCard(
+                        startMinute = seg.startMinute,
+                        endMinute = seg.endMinute,
+                        durationMin = durationMin,
+                        activeMinutes = seg.activeMinutes,
+                        steps = seg.steps,
+                        distanceM = distanceM,
+                        stepsPerMin = seg.steps / seg.activeMinutes.coerceAtLeast(1),
+                        hrAvg = hrAvg,
+                        hrMax = segHr.maxOfOrNull { it.bpm } ?: 0,
+                        kcal = HealthInsights.keytelKcal(hrAvg, profile.weightKg, profile.age, durationMin, profile.heightCm),
+                        trimp = HealthInsights.trimp(hrAvg, durationMin, maxHr, restingHr),
+                        paceMinPerKm = if (distanceM > 0) durationMin / (distanceM / 1000f) else 0f,
+                    )
+                }
+
+                // Selected day's cards + intensity (only segments of that date)
+                val dayCards = cards.filter {
+                    val d = java.time.Instant.ofEpochMilli(it.startMinute).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    d == day
+                }
+                val cadenceModerate = dayCards.sumOf { w ->
+                    if (w.stepsPerMin >= 100) w.activeMinutes else 0
                 }
                 val moderate = maxOf(hrResult.moderateMinutes, cadenceModerate)
                 val intensity = IntensityMinutes.Result(
@@ -398,27 +439,40 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     earnedMinutes = moderate + hrResult.intenseMinutes * 2,
                 )
 
-                val cards = walks.map { seg ->
-                    val segHr = hr.filter { it.timestamp in seg.startMinute..seg.endMinute + 60_000L }
-                    val profile = _state.value.profile
-                    val watchDist = (seg.startMinute..seg.endMinute step 60_000L).sumOf { m -> watchDistByMinute[m] ?: 0 }
-                    WalkCard(
-                        startMinute = seg.startMinute,
-                        endMinute = seg.endMinute,
-                        durationMin = ((seg.endMinute - seg.startMinute) / 60_000L).toInt() + 1,
-                        activeMinutes = seg.activeMinutes,
-                        steps = seg.steps,
-                        distanceM = if (watchDist > 0) watchDist else (seg.steps * profile.stepLengthM).toInt(),
-                        stepsPerMin = seg.steps / seg.activeMinutes.coerceAtLeast(1),
-                        hrAvg = if (segHr.isEmpty()) 0 else segHr.map { it.bpm }.average().toInt(),
-                        hrMax = segHr.maxOfOrNull { it.bpm } ?: 0,
-                    )
+                // TRIMP week-over-week, relative to the selected day
+                val inWeek = cards.filter {
+                    val d = java.time.Instant.ofEpochMilli(it.startMinute).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    !d.isBefore(day) && d.isBefore(day.plusDays(1))
                 }
+                val inPrevWeek = cards.filter {
+                    val d = java.time.Instant.ofEpochMilli(it.startMinute).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    d.isBefore(day) && !d.isBefore(day.minusDays(6))
+                }
+                val weekTrimp = inWeek.sumOf { it.trimp }
+                val prevWeekTrimp = inPrevWeek.sumOf { it.trimp }
+
+                // Pace trend: last 5 walks BEFORE-or-on the selected day, oldest first
+                val paces = cards.filter { it.paceMinPerKm > 0 }
+                    .sortedByDescending { it.startMinute }
+                    .take(5)
+                    .sortedBy { it.startMinute }
+                    .map { it.paceMinPerKm }
+
+                // Resting-HR insight for the selected date
+                val fromDate = day.minusDays(28).toString()
+                val baseline = dao.getRestingHrBetween(fromDate, day.minusDays(1).toString())
+                    .map { it.hrResting }
+                val todayResting = dao.getRestingHrBetween(dateStr, dateStr)
+                    .firstOrNull()?.hrResting ?: 0
 
                 _state.value = _state.value.copy(
-                    walksForDay = cards,
+                    walksForDay = dayCards,
                     walksDay = dateStr,
                     intensityDay = intensity,
+                    restingInsight = HealthInsights.restingHrInsight(baseline, todayResting),
+                    weekTrimp = weekTrimp,
+                    prevWeekTrimp = prevWeekTrimp,
+                    recentPaces = paces,
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "loadDayInsights($dateStr) failed", e)

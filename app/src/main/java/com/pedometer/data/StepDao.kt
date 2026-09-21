@@ -57,6 +57,9 @@ interface StepDao {
     @Query("SELECT * FROM daily_health ORDER BY date DESC LIMIT :days")
     suspend fun getRecentHealth(days: Int): List<DailyHealth>
 
+    @Query("SELECT * FROM daily_health WHERE date >= :fromDate AND date <= :toDate AND hrResting > 0 ORDER BY date")
+    suspend fun getRestingHrBetween(fromDate: String, toDate: String): List<DailyHealth>
+
     // Workouts
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertWorkout(workout: WorkoutRecord)
