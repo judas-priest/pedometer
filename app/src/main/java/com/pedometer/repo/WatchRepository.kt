@@ -265,6 +265,36 @@ class WatchRepository(private val context: Context) {
         cb?.invoke(false)
     }
 
+    /**
+     * Auto-calibrates step length from a finished GPS walk: watch-measured distance over
+     * the phone's counted steps for the same window gives the true step length. Stored as
+     * an EMA (80/20) in the user profile so the steps→distance formula tracks reality.
+     * Fire-and-forget, best effort — never fails the workout save.
+     */
+    private suspend fun calibrateStepLength(w: ActivitySync.WorkoutSummary) {
+        try {
+            if (w.distanceM <= 1000) return
+            if (!w.sportName.contains("Ходь", ignoreCase = true)) return // "Ходьба" (ActivitySync subtype 0x02/0x16)
+            val steps = dao.getMinuteStepsBetween(w.startTime, w.endTime + 60_000L)
+                .filter { it.source == "phone" }
+                .sumOf { it.steps }
+            if (steps <= 3000) return
+            val newLen = w.distanceM / steps.toDouble()
+            if (newLen !in 0.50..1.10) {
+                Log.d(TAG, "Step-length calibration rejected: %.3f m (%d steps / %d m)".format(newLen, steps, w.distanceM))
+                return
+            }
+            val profile = UserProfile.load(context)
+            val prev = profile.stepLengthM
+            val ema = 0.8 * prev + 0.2 * newLen
+            UserProfile.save(context, profile.copy(stepLengthCm = ema * 100.0))
+            Log.d(TAG, "Step-length calibrated: %.3f m from %d steps / %d m (prev %.3f, EMA %.3f)"
+                .format(newLen, steps, w.distanceM, prev, ema))
+        } catch (e: Exception) {
+            Log.e(TAG, "Step-length calibration failed", e)
+        }
+    }
+
     fun onProfileChanged(newProfile: UserProfile) {
         profile = newProfile
     }
@@ -431,6 +461,7 @@ class WatchRepository(private val context: Context) {
                             calories = w.calories, hrAvg = w.hrAvg, hrMax = w.hrMax, hrMin = w.hrMin,
                         ))
                         bumpRoom()
+                        calibrateStepLength(w)
                     } catch (e: Exception) { Log.e(TAG, "Save workout failed", e) }
                 }
             },

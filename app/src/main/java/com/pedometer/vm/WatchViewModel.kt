@@ -265,6 +265,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Re-read the profile: step-length auto-calibration in WatchRepository may
+                // have updated SharedPreferences since this ViewModel was created.
+                userProfile = UserProfile.load(app)
+                _state.value = _state.value.copy(profile = userProfile)
+
                 // 1. StepProvider (OPLUS)
                 val today = StepProviderReader.readToday(app)
                 val history = StepProviderReader.readHistory(app, 30)
@@ -291,8 +296,21 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     val todayDayStart = java.time.LocalDate.parse(today.date)
                         .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                     val todayHr = dao.getHeartRateBetween(todayDayStart, todayDayStart + 86_400_000L).map { it.bpm }
-                    val calories = if (todayHr.isEmpty()) userProfile.calcCalories(today.totalSteps)
-                        else HealthInsights.keytelSum(todayHr, userProfile.weightKg, userProfile.age, userProfile.heightCm).toDouble()
+                    // MET ceiling: what today's actual walking speed could physically burn,
+                    // summed over phone minute rows with steps. Keytel alone overestimates
+                    // 2x for high-HR responders during brisk walks.
+                    val todayMinutes = dao.getMinuteStepsBetween(todayDayStart, todayDayStart + 86_400_000L)
+                        .filter { it.source == "phone" && it.steps > 0 }
+                    val todayCaps = todayMinutes.sumOf {
+                        val speedKmh = it.steps * userProfile.stepLengthM * 60.0 / 1000.0
+                        (HealthInsights.metFromSpeed(speedKmh) - 1.0) * 3.5 * userProfile.weightKg / 200.0
+                    }
+                    val keytel = HealthInsights.keytelSum(todayHr, userProfile.weightKg, userProfile.age, userProfile.heightCm).toDouble()
+                    val calories = when {
+                        todayHr.isEmpty() -> userProfile.calcCalories(today.totalSteps)
+                        todayMinutes.isEmpty() -> keytel
+                        else -> minOf(keytel, todayCaps)
+                    }
                     dao.upsertDaily(DailySteps(
                         date = today.date,
                         totalSteps = today.totalSteps,
@@ -407,6 +425,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     .filter { it.source == "watch" && it.distanceM > 0 }
                     .associate { it.minute to it.distanceM }
 
+                val stepsByMinute = minuteData.associate { it.first to it.steps }
                 val cards = walks.map { seg ->
                     val segHr = hr.filter { it.timestamp in seg.startMinute..seg.endMinute + 60_000L }
                     val hrAvg = if (segHr.isEmpty()) 0 else segHr.map { it.bpm }.average().toInt()
@@ -415,6 +434,25 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         watchDistByMinute[m] ?: 0
                     }
                     val distanceM = if (watchDist > 0) watchDist else (seg.steps * profile.stepLengthM).toInt()
+                    // Per-minute kcal: Keytel at that minute's HR, capped by the MET budget
+                    // of the cadence actually walked that minute (standing minutes → 0).
+                    fun hrForMinute(m: Long): Int {
+                        var best = 0
+                        var bestDiff = Long.MAX_VALUE
+                        for (r in segHr) {
+                            val d = kotlin.math.abs(r.timestamp - m)
+                            if (d < bestDiff) { bestDiff = d; best = r.bpm }
+                        }
+                        return best
+                    }
+                    val kcal = (seg.startMinute..seg.endMinute step 60_000L).sumOf { m ->
+                        val hrM = hrForMinute(m)
+                        if (hrM <= 0) 0.0
+                        else HealthInsights.walkKcalPerMinute(
+                            hrM, stepsByMinute[m] ?: 0,
+                            profile.weightKg, profile.age, profile.stepLengthM, profile.heightCm,
+                        )
+                    }
                     WalkCard(
                         startMinute = seg.startMinute,
                         endMinute = seg.endMinute,
@@ -425,7 +463,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         stepsPerMin = seg.steps / seg.activeMinutes.coerceAtLeast(1),
                         hrAvg = hrAvg,
                         hrMax = segHr.maxOfOrNull { it.bpm } ?: 0,
-                        kcal = HealthInsights.keytelKcal(hrAvg, profile.weightKg, profile.age, durationMin, profile.heightCm),
+                        kcal = kcal.toInt().coerceAtLeast(0),
                         trimp = HealthInsights.trimp(hrAvg, durationMin, maxHr, restingHr),
                         paceMinPerKm = if (distanceM > 0) durationMin / (distanceM / 1000f) else 0f,
                     )

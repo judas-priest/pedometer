@@ -317,6 +317,9 @@ fun DayDetailScreen(
                         }
                         val parts = buildList {
                             if (w.paceMinPerKm > 0) add("%.1f мин/км".format(w.paceMinPerKm))
+                            if (w.distanceM > 0 && w.durationMin > 0) {
+                                add("%.1f км/ч".format(w.distanceM / 1000.0 / (w.durationMin / 60.0)))
+                            }
                             if (w.kcal > 0) add("${w.kcal} ккал")
                             if (w.trimp > 0) add("нагрузка ${w.trimp}")
                         }
@@ -325,6 +328,13 @@ fun DayDetailScreen(
                                 parts.joinToString(" · "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (w.hrAvg >= 145 && w.durationMin >= 60) {
+                            Text(
+                                "Интенсивная нагрузка",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
                             )
                         }
                     }
@@ -465,6 +475,13 @@ fun DayDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
                                 if (w.distanceM > 0) Text("%.1f км".format(w.distanceM / 1000.0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (w.distanceM > 0 && w.durationSec > 0) {
+                                    Text(
+                                        "%.1f км/ч".format(w.distanceM / 1000.0 / (w.durationSec / 3600.0)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                                 if (w.calories > 0) Text("${w.calories} ккал", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (w.hrAvg > 0) Text("${w.hrAvg} уд/мин", style = MaterialTheme.typography.bodySmall, color = HeartRed)
                             }

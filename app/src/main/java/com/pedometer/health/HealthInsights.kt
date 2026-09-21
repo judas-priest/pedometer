@@ -28,6 +28,45 @@ object HealthInsights {
         return bpms.sumOf { keytelPerMinute(it, weightKg, age, heightCm) }.toInt().coerceAtLeast(0)
     }
 
+    /**
+     * Gross MET for walking at the given speed — Compendium of Physical Activities,
+     * piecewise-linear between the anchor points (running territory from ~9.7 km/h).
+     * Clamped to 1.0 (resting) .. 8.0: HR-only estimates for walking must not exceed
+     * what the legs can physically spend at this speed.
+     */
+    fun metFromSpeed(speedKmh: Double): Double {
+        val table = listOf(
+            0.0 to 1.0, 4.0 to 3.0, 4.8 to 3.5, 5.6 to 4.3, 7.2 to 5.0, 9.7 to 8.0,
+        )
+        if (speedKmh <= table.first().first) return table.first().second
+        if (speedKmh >= table.last().first) return table.last().second
+        for ((lo, hi) in table.zipWithNext()) {
+            if (speedKmh <= hi.first) {
+                return lo.second + (speedKmh - lo.first) * (hi.second - lo.second) / (hi.first - lo.first)
+            }
+        }
+        return table.last().second
+    }
+
+    /**
+     * Net kcal for ONE minute of walking, capped by what moving at this cadence can
+     * physically burn: Keytel (HR-driven) tends to overestimate for high-HR responders,
+     * so the result is min(Keytel, MET-from-speed net budget).
+     */
+    fun walkKcalPerMinute(
+        hr: Int,
+        cadenceStepsPerMin: Int,
+        weightKg: Int,
+        age: Int,
+        stepLenM: Double,
+        heightCm: Int = 179,
+    ): Double {
+        val keytel = keytelPerMinute(hr, weightKg, age, heightCm)
+        val speedKmh = cadenceStepsPerMin * stepLenM * 60.0 / 1000.0
+        val cap = (metFromSpeed(speedKmh) - 1.0) * 3.5 * weightKg / 200.0
+        return minOf(keytel, cap)
+    }
+
     /** Net (above-resting) kcal burned during steady aerobic activity. 0 when no HR. */
     fun keytelKcal(hrAvg: Int, weightKg: Int, age: Int, durationMin: Int, heightCm: Int = 179): Int {
         if (hrAvg <= 0 || durationMin <= 0) return 0
