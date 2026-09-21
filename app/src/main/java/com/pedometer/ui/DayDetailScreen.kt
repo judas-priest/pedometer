@@ -21,6 +21,7 @@ import com.pedometer.data.DailyHealth
 import com.pedometer.data.HourlySteps
 import com.pedometer.data.WorkoutRecord
 import com.pedometer.health.DayStepData
+import com.pedometer.health.IntensityMinutes
 import com.pedometer.health.UserProfile
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
@@ -201,23 +202,22 @@ fun DayDetailScreen(
             }
             Spacer(Modifier.height(16.dp))
 
-            // HR zones
+            // HR zones — Karvonen thresholds shared with the intensity/load calc
             if (dayHr.size > 2) {
-                val zones = intArrayOf(0, 0, 0, 0, 0)
+                val maxHr = state.profile.effectiveMaxHr()
+                val resting = health?.hrResting?.takeIf { it in 30..120 } ?: 60
+                val zones = intArrayOf(0, 0, 0)
                 for ((_, bpm) in dayHr) {
-                    when {
-                        bpm < 60 -> zones[0]++
-                        bpm < 100 -> zones[1]++
-                        bpm < 140 -> zones[2]++
-                        bpm < 170 -> zones[3]++
-                        else -> zones[4]++
+                    when (IntensityMinutes.zoneOf(bpm, maxHr, resting)) {
+                        IntensityMinutes.HrZone.MODERATE -> zones[1]++
+                        IntensityMinutes.HrZone.INTENSE -> zones[2]++
+                        else -> zones[0]++
                     }
                 }
                 val total = zones.sum().toFloat().coerceAtLeast(1f)
-                val zoneNames = listOf("Покой", "Лёгкая", "Жиросж.", "Кардио", "Пиковая")
+                val zoneNames = listOf("Лёгкая", "Умеренная", "Интенсивная")
                 val zoneColors = listOf(
-                    Color(0xFF90CAF9), Color(0xFF4CAF50), Color(0xFFFF9800),
-                    Color(0xFFE53935), Color(0xFF9C27B0),
+                    Color(0xFF4CAF50), Color(0xFFFF9800), Color(0xFFE53935),
                 )
 
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {

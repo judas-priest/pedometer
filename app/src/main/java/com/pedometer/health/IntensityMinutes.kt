@@ -17,25 +17,48 @@ object IntensityMinutes {
         val earnedMinutes: Int,
     )
 
+    /** Karvonen zone thresholds in bpm: moderate [moderateLo, intenseLo), intense >= intenseLo. */
+    data class Zones(val moderateLo: Int, val intenseLo: Int)
+
+    enum class HrZone { LIGHT, MODERATE, INTENSE }
+
+    /**
+     * Karvonen thresholds: percentages of heart-rate reserve (max HR minus resting HR) —
+     * moderate floor at 50% HRR, intense floor at 70% HRR. Single source of truth for the
+     * intensity-minute classifier and the day-detail HR-zone widget.
+     */
+    fun zones(maxHr: Int, restingHr: Int = 60): Zones {
+        val hrr = (maxHr - restingHr).coerceAtLeast(1)
+        return Zones(restingHr + hrr * 50 / 100, restingHr + hrr * 70 / 100)
+    }
+
+    /** Classify one bpm sample into the three display zones. */
+    fun zoneOf(bpm: Int, maxHr: Int, restingHr: Int = 60): HrZone {
+        val z = zones(maxHr, restingHr)
+        return when {
+            bpm >= z.intenseLo -> HrZone.INTENSE
+            bpm >= z.moderateLo -> HrZone.MODERATE
+            else -> HrZone.LIGHT
+        }
+    }
+
     /**
      * WHO-style intensity minutes from heart-rate samples, Karvonen zones.
-     * Zone thresholds are percentages of heart-rate reserve (Tanaka max HR minus resting HR):
+     * Zone thresholds are percentages of heart-rate reserve (max HR minus resting HR):
      * moderate 50-69% HRR, intense >=70% HRR (open top). Intense minutes count double.
      *
      * Pure: the caller reads the database and owns the clock.
      */
     fun compute(samples: List<Pair<Long, Int>>, maxHr: Int, restingHr: Int = 60): Result {
-        val hrr = (maxHr - restingHr).coerceAtLeast(1)
-        val moderateLo = restingHr + hrr * 50 / 100
-        val intenseLo = restingHr + hrr * 70 / 100
+        val z = zones(maxHr, restingHr)
         val byMinute = samples.groupBy { it.first / 60_000L }
         var moderate = 0
         var intense = 0
         for ((_, minuteSamples) in byMinute) {
             val best = minuteSamples.maxOf { it.second }
             when {
-                best >= intenseLo -> intense++
-                best >= moderateLo -> moderate++
+                best >= z.intenseLo -> intense++
+                best >= z.moderateLo -> moderate++
             }
         }
         return Result(moderate, intense, moderate + intense * 2)

@@ -11,6 +11,7 @@ data class UserProfile(
     val age: Int = 30,
     val weatherCity: String = "",  // empty = auto GPS
     val stepLengthCm: Double = 0.0, // 0 = auto from height
+    val maxHrOverride: Int = 0,   // 0 = auto (Tanaka 208 − 0.7×age)
 ) {
     val stepLengthM: Double
         get() = if (stepLengthCm > 0) stepLengthCm / 100.0
@@ -19,6 +20,10 @@ data class UserProfile(
     fun calcDistance(steps: Int): Double = steps * stepLengthM / 1000.0 // km
 
     fun calcCalories(steps: Int): Double = steps * 0.04 * weightKg / 1000.0 // kcal
+
+    /** Max HR for Karvonen zones: manual override when set, else the Tanaka estimate. */
+    fun effectiveMaxHr(): Int =
+        if (maxHrOverride > 0) maxHrOverride else IntensityMinutes.maxHrFor(age)
 
     companion object {
         private const val PREFS = "user_profile"
@@ -33,6 +38,7 @@ data class UserProfile(
                 age = p.getInt("age", 30),
                 weatherCity = p.getString("weather_city", "") ?: "",
                 stepLengthCm = p.getFloat("step_length_cm", 0f).toDouble(),
+                maxHrOverride = p.getInt("max_hr_override", 0),
             )
         }
 
@@ -45,6 +51,7 @@ data class UserProfile(
                 .putInt("age", profile.age)
                 .putString("weather_city", profile.weatherCity)
                 .putFloat("step_length_cm", profile.stepLengthCm.toFloat())
+                .putInt("max_hr_override", profile.maxHrOverride)
                 .apply()
         }
     }

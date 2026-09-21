@@ -346,7 +346,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
                 // ── Weekly aggregates + today's intensity ──
                 // Week = calendar week starting Monday (user expectation), not a rolling 7-day window.
-                val maxHr = IntensityMinutes.maxHrFor(_state.value.profile.age)
+                val maxHr = _state.value.profile.effectiveMaxHr()
                 val restingHr = currentRestingHr(dao)
                 val dayStart = java.time.LocalDate.parse(todayStr).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val dayEnd = dayStart + 86_400_000L
@@ -401,7 +401,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val profile = _state.value.profile
-                val maxHr = IntensityMinutes.maxHrFor(profile.age)
+                val maxHr = profile.effectiveMaxHr()
                 val day = java.time.LocalDate.parse(dateStr)
                 val dayStart = day.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val dayEnd = dayStart + 86_400_000L

@@ -205,6 +205,21 @@ fun SettingsTab(
                 )
                 Text("Пусто = авто", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
+                var maxHrText by remember { mutableStateOf(profile.maxHrOverride.let { if (it > 0) it.toString() else "" }) }
+                OutlinedTextField(
+                    value = maxHrText,
+                    onValueChange = { v ->
+                        maxHrText = v
+                        val hr = v.toIntOrNull() ?: 0
+                        if (hr == 0 || hr in 100..250) onProfileChange(profile.copy(maxHrOverride = hr))
+                    },
+                    label = { Text("Макс. пульс") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Text("Пусто = авто (208 − 0,7×возраст)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Пол:", modifier = Modifier.width(50.dp))
                     FilterChip(selected = profile.isMale, onClick = { onProfileChange(profile.copy(isMale = true)) }, label = { Text("М") })
