@@ -31,6 +31,7 @@ fun ActivityScreen(
     val history = state.stepHistory
     val profile = state.profile
     val today = LocalDate.now()
+    val trimpWoW = if (state.prevWeekTrimp > 0) (state.weekTrimp - state.prevWeekTrimp) * 100 / state.prevWeekTrimp else 0
 
     // Weekly data
     val weekDays = history.filter {
@@ -136,6 +137,12 @@ fun ActivityScreen(
                     StatItem("Среднее", "%,d".format(periodAvg))
                     StatItem("Цель", "$periodGoalDays/${periodDays.size} дн")
                     StatItem("Интенсив.", "${state.intensityWeek}/150")
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    StatItem("Нагрузка", "${state.weekTrimp}")
+                    StatItem("Прошлая нед.", "${state.prevWeekTrimp}")
+                    StatItem("Изменение", if (trimpWoW > 0) "+$trimpWoW%" else "$trimpWoW%")
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

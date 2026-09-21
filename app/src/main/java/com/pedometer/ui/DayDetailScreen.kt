@@ -266,6 +266,22 @@ fun DayDetailScreen(
         }
 
         // 6. Intensity + walks for this day
+        if (state.walksDay == selectedDate.toString() && state.restingInsight.today > 0) {
+            val ri = state.restingInsight
+            if (ri.elevated) {
+                Text(
+                    "Пульс покоя: ${ri.today} — выше нормы на +${ri.delta}. Возможно, недосып, болезнь или перегрузка.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                Text(
+                    "Пульс покоя: ${ri.today}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         if (state.walksDay == selectedDate.toString()) {
             Text(
                 "Интенсивность: ${state.intensityDay.earnedMinutes} мин (${state.intensityDay.moderateMinutes} средней + ${state.intensityDay.intenseMinutes} высокой)",
@@ -276,6 +292,13 @@ fun DayDetailScreen(
         }
         if (state.walksForDay.isNotEmpty() && state.walksDay == selectedDate.toString()) {
             Text("Прогулки", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.recentPaces.size >= 2) {
+                Text(
+                    "Темп последних прогулок: " + state.recentPaces.joinToString(" → ") { "%.1f".format(it) } + " мин/км",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             state.walksForDay.forEach { w ->
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -295,6 +318,18 @@ fun DayDetailScreen(
                         if (w.hrAvg > 0) {
                             Text(
                                 "❤ ${w.hrAvg} ср · ${w.hrMax} макс",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        val pace = if (w.paceMinPerKm > 0) "%.1f мин/км · ".format(w.paceMinPerKm) else ""
+                        val extras = buildList {
+                            if (w.kcal > 0) add("${w.kcal} ккал")
+                            if (w.trimp > 0) add("нагрузка ${w.trimp}")
+                        }
+                        if (extras.isNotEmpty() || pace.isNotEmpty()) {
+                            Text(
+                                pace + extras.joinToString(" · "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
