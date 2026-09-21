@@ -322,14 +322,14 @@ fun DayDetailScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        val pace = if (w.paceMinPerKm > 0) "%.1f мин/км · ".format(w.paceMinPerKm) else ""
-                        val extras = buildList {
+                        val parts = buildList {
+                            if (w.paceMinPerKm > 0) add("%.1f мин/км".format(w.paceMinPerKm))
                             if (w.kcal > 0) add("${w.kcal} ккал")
                             if (w.trimp > 0) add("нагрузка ${w.trimp}")
                         }
-                        if (extras.isNotEmpty() || pace.isNotEmpty()) {
+                        if (parts.isNotEmpty()) {
                             Text(
-                                pace + extras.joinToString(" · "),
+                                parts.joinToString(" · "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
