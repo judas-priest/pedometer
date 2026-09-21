@@ -1,9 +1,10 @@
 package com.pedometer.health
 
 /**
- * WHO-style intensity minutes from heart-rate samples.
- * Zones are percentages of the user's estimated max HR (220 - age):
- * moderate 50-69% of max HR, intense 70% and above. Intense minutes count double toward the weekly goal.
+ * WHO-style intensity minutes from heart-rate samples, Karvonen zones.
+ * Max HR comes from the Tanaka equation (208 - 0.7 * age); zone thresholds are
+ * percentages of heart-rate reserve (max HR minus resting HR): moderate 50-69% HRR,
+ * intense >=70% HRR. Intense minutes count double toward the weekly goal.
  *
  * Pure: the caller reads the database and owns the clock.
  */
@@ -16,9 +17,17 @@ object IntensityMinutes {
         val earnedMinutes: Int,
     )
 
-    fun compute(samples: List<Pair<Long, Int>>, maxHr: Int): Result {
-        val moderateLo = maxHr * 50 / 100
-        val intenseLo = maxHr * 70 / 100
+    /**
+     * WHO-style intensity minutes from heart-rate samples, Karvonen zones.
+     * Zone thresholds are percentages of heart-rate reserve (Tanaka max HR minus resting HR):
+     * moderate 50-69% HRR, intense >=70% HRR (open top). Intense minutes count double.
+     *
+     * Pure: the caller reads the database and owns the clock.
+     */
+    fun compute(samples: List<Pair<Long, Int>>, maxHr: Int, restingHr: Int = 60): Result {
+        val hrr = (maxHr - restingHr).coerceAtLeast(1)
+        val moderateLo = restingHr + hrr * 50 / 100
+        val intenseLo = restingHr + hrr * 70 / 100
         val byMinute = samples.groupBy { it.first / 60_000L }
         var moderate = 0
         var intense = 0
@@ -32,5 +41,6 @@ object IntensityMinutes {
         return Result(moderate, intense, moderate + intense * 2)
     }
 
-    fun maxHrFor(age: Int): Int = (220 - age).coerceIn(120, 220)
+    /** Tanaka equation — more accurate than the classic 220-age, especially over 40. */
+    fun maxHrFor(age: Int): Int = Math.round(208 - 0.7 * age).toInt().coerceIn(120, 220)
 }

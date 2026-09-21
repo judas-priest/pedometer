@@ -314,19 +314,20 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 // ── Weekly aggregates + today's intensity ──
                 // Week = calendar week starting Monday (user expectation), not a rolling 7-day window.
                 val maxHr = IntensityMinutes.maxHrFor(_state.value.profile.age)
+                val restingHr = currentRestingHr(dao)
                 val dayStart = java.time.LocalDate.parse(todayStr).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val dayEnd = dayStart + 86_400_000L
                 val monday = java.time.LocalDate.parse(todayStr).with(java.time.DayOfWeek.MONDAY)
                     .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val weekHr = dao.getHeartRateBetween(monday, dayEnd)
-                val intensityWeek = IntensityMinutes.compute(weekHr.map { it.timestamp to it.bpm }, maxHr).earnedMinutes
+                val intensityWeek = IntensityMinutes.compute(weekHr.map { it.timestamp to it.bpm }, maxHr, restingHr).earnedMinutes
                 val weekSteps = dao.getRecentDays(7)
                     .filter { it.date >= java.time.LocalDate.parse(todayStr).with(java.time.DayOfWeek.MONDAY).toString() }
                     .sumOf { it.totalSteps }
 
                 _state.value = _state.value.copy(
                     intensityToday = IntensityMinutes.compute(
-                        dao.getHeartRateBetween(dayStart, dayEnd).map { it.timestamp to it.bpm }, maxHr,
+                        dao.getHeartRateBetween(dayStart, dayEnd).map { it.timestamp to it.bpm }, maxHr, restingHr,
                     ),
                     intensityWeek = intensityWeek,
                     weekSteps = weekSteps,
@@ -351,6 +352,12 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Recent resting HR from the watch's daily summaries; fallback 60 when no data. */
+    private suspend fun currentRestingHr(dao: com.pedometer.data.StepDao): Int {
+        val recent = dao.getRecentHealth(7).map { it.hrResting }.filter { it in 30..120 }
+        return if (recent.isEmpty()) 60 else recent.sum() / recent.size
+    }
+
     /**
      * Computes walks + intensity for one date and stores them under walksDay.
      * Intensity merges two estimators (Google Fit practice): HR-sample zones and walking
@@ -365,9 +372,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val dayStart = day.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val dayEnd = dayStart + 86_400_000L
                 val dao = StepDatabase.get(getApplication()).stepDao()
+                val restingHr = currentRestingHr(dao)
 
                 val hr = dao.getHeartRateBetween(dayStart, dayEnd)
-                val hrResult = IntensityMinutes.compute(hr.map { it.timestamp to it.bpm }, maxHr)
+                val hrResult = IntensityMinutes.compute(hr.map { it.timestamp to it.bpm }, maxHr, restingHr)
 
                 val minuteData = dao.getMinuteStepsBetween(dayStart, dayEnd)
                     .filter { it.source == "phone" }
