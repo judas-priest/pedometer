@@ -350,6 +350,16 @@ class ActivitySync(
         if (bb.remaining() < headerSize) return
         bb.position(bb.position() + headerSize)
 
+        // TEMP DEBUG: hex dump of the workout body so the HR-field offset can be
+        // verified against a real payload (hrMax/hrMin read 0 in every workout —
+        // the skipToHr table is off). Remove once the layout is confirmed.
+        run {
+            val dup = bb.duplicate().apply { position(bb.position()) }
+            val hex = StringBuilder()
+            while (dup.hasRemaining()) hex.append("%02x ".format(dup.get()))
+            Log.w(TAG, "WorkoutBody subtype=0x%02x v=%d: %s".format(info.subtype, info.version, hex))
+        }
+
         try {
             // V2 types start with workout type short
             val isV2 = info.subtype in listOf(0x16, 0x17, 0x06)
