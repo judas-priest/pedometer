@@ -431,7 +431,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             val loggedByDate = intakes.groupBy { it.date }
                 .mapValues { (_, v) -> v.map { it.slot }.toSet() }
             val slots = pills.keys
-                .map { SupplementSlot.byKey(it) }
+                .mapNotNull { runCatching { SupplementSlot.byKey(it) }.getOrNull() }
                 .sortedBy { it.ordinal }
                 .map { slot ->
                     val intake = intakes.filter { it.date == todayStr && it.slot == slot.key }.maxByOrNull { it.takenAt }

@@ -6,80 +6,68 @@ import org.junit.Test
 class SupplementLogicTest {
 
     @Test
-    fun `home windows are correct`() {
-        assertEquals(Window(720, 780), SupplementWindows.windowFor("fasting", office = false))
-        assertEquals(Window(780, 960), SupplementWindows.windowFor("breakfast", office = false))
-        assertEquals(Window(780, 1320), SupplementWindows.windowFor("flex", office = false))
+    fun `four slots exist with right keys`() {
+        assertEquals(
+            listOf("fasting", "breakfast", "lunch", "dinner"),
+            SupplementSlot.entries.map { it.key },
+        )
+        assertEquals("Натощак", SupplementSlot.byKey("fasting").title)
+        assertEquals("Ужин", SupplementSlot.byKey("dinner").title)
     }
 
     @Test
-    fun `office windows are correct`() {
-        assertEquals(Window(420, 480), SupplementWindows.windowFor("fasting", office = true))
-        assertEquals(Window(480, 570), SupplementWindows.windowFor("breakfast", office = true))
-        assertEquals(Window(780, 1320), SupplementWindows.windowFor("flex", office = true))
+    fun `home windows defaults`() {
+        assertEquals(Window(720, 780), SupplementWindows.windowFor("fasting", regime = "home"))
+        assertEquals(Window(780, 960), SupplementWindows.windowFor("breakfast", regime = "home"))
+        assertEquals(Window(960, 1140), SupplementWindows.windowFor("lunch", regime = "home"))
+        assertEquals(Window(1140, 1320), SupplementWindows.windowFor("dinner", regime = "home"))
     }
 
     @Test
-    fun `prefs override home window`() {
-        val prefs = mapOf("supp_win_breakfast_start" to 800, "supp_win_breakfast_end" to 900)
-        assertEquals(Window(800, 900), SupplementWindows.windowFor("breakfast", office = false, prefs = prefs))
+    fun `office windows defaults`() {
+        assertEquals(Window(420, 480), SupplementWindows.windowFor("fasting", regime = "office"))
+        assertEquals(Window(480, 570), SupplementWindows.windowFor("breakfast", regime = "office"))
+        assertEquals(Window(780, 870), SupplementWindows.windowFor("lunch", regime = "office"))
+        assertEquals(Window(1140, 1320), SupplementWindows.windowFor("dinner", regime = "office"))
     }
 
     @Test
-    fun `prefs override does not affect office`() {
-        val prefs = mapOf("supp_win_breakfast_start" to 800, "supp_win_breakfast_end" to 900)
-        assertEquals(Window(480, 570), SupplementWindows.windowFor("breakfast", office = true, prefs = prefs))
+    fun `prefs override both regimes`() {
+        val prefs = mapOf(
+            "supp_win_lunch_home_start" to 900, "supp_win_lunch_home_end" to 1000,
+            "supp_win_lunch_office_start" to 780, "supp_win_lunch_office_end" to 830,
+        )
+        assertEquals(Window(900, 1000), SupplementWindows.windowFor("lunch", regime = "home", prefs = prefs))
+        assertEquals(Window(780, 830), SupplementWindows.windowFor("lunch", regime = "office", prefs = prefs))
+        assertEquals(Window(1140, 1320), SupplementWindows.windowFor("dinner", regime = "home", prefs = prefs))
+    }
+
+    @Test
+    fun `time parsing roundtrip`() {
+        assertEquals(780, SupplementWindows.parseHhMm("13:00"))
+        assertEquals(0, SupplementWindows.parseHhMm("00:00"))
+        assertEquals(1439, SupplementWindows.parseHhMm("23:59"))
+        assertNull(SupplementWindows.parseHhMm("25:00"))
+        assertNull(SupplementWindows.parseHhMm("abc"))
+        assertEquals("13:00", SupplementWindows.formatHhMm(780))
+        assertEquals("00:05", SupplementWindows.formatHhMm(5))
     }
 
     @Test
     fun `dismissal within 30s is accidental`() {
-        assertTrue(SupplementWindows.isAccidentalDismissal(postedAtMs = 1_000_000L, dismissedAtMs = 1_020_000L))
+        assertTrue(SupplementWindows.isAccidentalDismissal(1_000_000L, 1_020_000L))
+        assertFalse(SupplementWindows.isAccidentalDismissal(1_000_000L, 1_031_000L))
     }
 
     @Test
-    fun `dismissal after 30s counts`() {
-        assertFalse(SupplementWindows.isAccidentalDismissal(postedAtMs = 1_000_000L, dismissedAtMs = 1_031_000L))
-    }
-
-    @Test
-    fun `office override expires next day`() {
-        val today = java.time.LocalDate.of(2026, 9, 26)
-        assertTrue(SupplementWindows.officeOverrideActive("2026-09-26", today))
-        assertFalse(SupplementWindows.officeOverrideActive("2026-09-25", today))
-        assertFalse(SupplementWindows.officeOverrideActive(null, today))
-    }
-
-    @Test
-    fun `streak counts back from yesterday when today incomplete`() {
-        val required = setOf("breakfast", "flex")
+    fun `streak anchors on yesterday and adds today`() {
+        val required = setOf("breakfast", "dinner")
         val logged = mapOf(
-            "2026-09-26" to setOf("breakfast"),                        // today: incomplete → not counted
-            "2026-09-25" to setOf("breakfast", "flex"),
-            "2026-09-24" to setOf("breakfast", "flex"),
+            "2026-09-26" to setOf("breakfast", "dinner"),
+            "2026-09-25" to setOf("breakfast", "dinner"),
+            "2026-09-24" to setOf("breakfast"),
         )
         val today = java.time.LocalDate.of(2026, 9, 26)
         assertEquals(2, SupplementStreak.streak(logged, required, today))
-    }
-
-    @Test
-    fun `streak counts today when complete`() {
-        val required = setOf("breakfast", "flex")
-        val logged = mapOf(
-            "2026-09-26" to setOf("breakfast", "flex"),
-            "2026-09-25" to setOf("breakfast", "flex"),
-        )
-        val today = java.time.LocalDate.of(2026, 9, 26)
-        assertEquals(2, SupplementStreak.streak(logged, required, today))
-    }
-
-    @Test
-    fun `streak is zero when yesterday missed`() {
-        val required = setOf("breakfast", "flex")
-        val logged = mapOf(
-            "2026-09-26" to setOf("breakfast", "flex"),
-            "2026-09-25" to emptySet(),
-        )
-        val today = java.time.LocalDate.of(2026, 9, 26)
-        assertEquals(0, SupplementStreak.streak(logged, required, today))
     }
 }

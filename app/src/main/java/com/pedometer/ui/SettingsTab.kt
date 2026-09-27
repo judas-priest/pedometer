@@ -366,14 +366,6 @@ fun SettingsTab(
         Text("БАДы", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         var supplementsEnabled by remember { mutableStateOf(prefs.getBoolean("supplements_enabled", false)) }
-        var officeOverride by remember {
-            mutableStateOf(
-                com.pedometer.health.SupplementWindows.officeOverrideActive(
-                    prefs.getString("supp_office_date", null),
-                    java.time.LocalDate.now(),
-                )
-            )
-        }
 
         ElevatedCard {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -393,26 +385,6 @@ fun SettingsTab(
                     Switch(checked = supplementsEnabled, onCheckedChange = { on ->
                         supplementsEnabled = on
                         prefs.edit().putBoolean("supplements_enabled", on).apply()
-                    })
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Сегодня в офисе", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Офисные окна вместо домашних (сбросится завтра)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(checked = officeOverride, onCheckedChange = { on ->
-                        officeOverride = on
-                        prefs.edit()
-                            .putString("supp_office_date", if (on) java.time.LocalDate.now().toString() else "")
-                            .apply()
                     })
                 }
                 Spacer(Modifier.height(4.dp))

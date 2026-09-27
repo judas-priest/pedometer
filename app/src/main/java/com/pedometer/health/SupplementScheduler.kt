@@ -2,7 +2,6 @@ package com.pedometer.health
 
 import android.content.Context
 import android.util.Log
-import com.pedometer.PedometerApp
 import com.pedometer.data.StepDatabase
 import com.pedometer.data.SupplementIntake
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +23,6 @@ import java.time.LocalTime
 object SupplementScheduler {
     private const val TAG = "SupplementScheduler"
     private const val KEY_ENABLED = "supplements_enabled"
-    private const val KEY_OFFICE_DATE = "supp_office_date"
     private const val END_NUDGE_SUFFIX = ":end"
 
     private var job: Job? = null
@@ -98,26 +96,24 @@ object SupplementScheduler {
 
         val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
         val prefsMap = prefs.all.filterValues { it is Int }.mapValues { it.value as Int }
-        val office = SupplementWindows.officeOverrideActive(prefs.getString(KEY_OFFICE_DATE, null), today) ||
-            !(PedometerApp.repository.isAtHome())
+        val regime = SupplementWindows.regimeOf(prefs.all.filterValues { it is String }.mapValues { it.value as String })
 
         for ((slotKey, items) in pills) {
+            val slot = runCatching { SupplementSlot.byKey(slotKey) }.getOrNull() ?: continue
             val alreadyLogged = dao.countIntakes(today.toString(), slotKey) > 0
             if (alreadyLogged) continue
-            val w = SupplementWindows.windowFor(slotKey, office, prefsMap)
+            val w = SupplementWindows.windowFor(slotKey, regime, prefsMap)
             val startKey = "$today|$slotKey"
             val endKey = "$today|$slotKey$END_NUDGE_SUFFIX"
 
             if (w.contains(nowMin) && startKey !in firedKeys && !postedAt.containsKey(slotKey)) {
                 firedKeys.add(startKey)
                 postedAt[slotKey] = System.currentTimeMillis()
-                val slot = SupplementSlot.byKey(slotKey)
                 SupplementNotifier.post(context, slot, items.sortedBy { it.sort }.map { it.name })
                 Log.i(TAG, "Window opened: $slotKey (${items.size} items)")
             }
             if (nowMin >= w.endMin && nowMin < w.endMin + 3 && endKey !in firedKeys) {
                 firedKeys.add(endKey)
-                val slot = SupplementSlot.byKey(slotKey)
                 SupplementNotifier.post(context, slot, items.sortedBy { it.sort }.map { it.name })
                 Log.i(TAG, "End-of-window nudge: $slotKey")
             }

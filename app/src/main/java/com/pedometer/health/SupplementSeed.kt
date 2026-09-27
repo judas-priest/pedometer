@@ -24,8 +24,8 @@ object SupplementSeed {
             Supplement(name = "Хонда №1", slot = "breakfast", sort = 4),
             Supplement(name = "Уридин", slot = "breakfast", sort = 5),
             Supplement(name = "Бенфотиамин №1", slot = "breakfast", sort = 6),
-            Supplement(name = "Хонда №2", slot = "flex", sort = 7),
-            Supplement(name = "Бенфотиамин №2", slot = "flex", sort = 8),
+            Supplement(name = "Хонда №2", slot = "dinner", sort = 7),
+            Supplement(name = "Бенфотиамин №2", slot = "dinner", sort = 8),
         )
         items.forEach { dao.insertSupplement(it) }
         prefs.edit().putBoolean(KEY_SEEDED, true).apply()
