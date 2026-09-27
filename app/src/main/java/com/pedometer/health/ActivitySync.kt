@@ -354,9 +354,12 @@ class ActivitySync(
         bb.position(bb.position() + headerSize)
 
         // TEMP DEBUG: hex dump of the workout body so the HR-field offset can be
-        // verified against a real payload (hrMax/hrMin read 0 in every workout —
-        // the skipToHr table is off). Full dump goes to <filesDir>/workout_dumps/
-        // (logcat rotates in minutes). Remove once the layout is confirmed.
+        // verified against a real payload. Layout for 0x16 v5 is now confirmed
+        // against Gadgetbridge WorkoutSummaryParser.getOutdoorWalkingV2Parser +
+        // the 2026-09-27 capture (HR at body offset 56: 103/119/92, matches the
+        // workout). Keep dumping until ONE more real workout also shows correct
+        // HR in the UI, then remove. Full dump goes to <filesDir>/workout_dumps/
+        // (logcat rotates in minutes).
         run {
             try {
                 val dup = bb.duplicate().apply { position(bb.position()) }
@@ -430,30 +433,41 @@ class ActivitySync(
 
             // Skip pace/speed fields to reach HR
             // Most types: some pace/speed fields, then HR avg(1), max(1), min(1)
-            // Count skip bytes based on subtype
+            // Offsets cross-checked against Gadgetbridge WorkoutSummaryParser
+            // (service/devices/xiaomi/activity/impl/) and the 2026-09-27 walking
+            // v5 payload capture (0x16 v5 verified byte-for-byte).
             val skipToHr = when (info.subtype) {
                 0x16 -> { // outdoor walking v2: pace_avg(4)+pace_max(4)+pace_min(4)+speed_avg(4)+speed_max(4)+steps(4)+stepLen(2)+stepRate(2)+stepRateMax(2)
                     if (info.version >= 5) 30 else 18
                 }
-                0x01, 0x02 -> 16 // v1: pace_max(4)+pace_min(4)+unk(4)+steps(4)+unk(2)
-                0x03 -> { // treadmill
+                // walking v1 (GB getOutdoorWalkingV1Parser): pace_max(4)+pace_min(4)
+                // +unk(4)+steps(4)+unk(2) = 18 (was 16 — off by 2)
+                0x02 -> 18
+                0x01 -> 16 // running v1: no GB reference parser, keep legacy value
+                0x03 -> { // treadmill (GB getTreadmillParser)
                     if (info.version >= 10) 22 else 14
                 }
-                0x08, 0x10 -> 0 // freestyle/HIIT: HR right after calories
-                0x07 -> 8 // indoor cycling: unk(4)+unk(4)
-                0x0B -> { // elliptical: steps(4)+cadence
+                0x08, 0x10 -> 0 // freestyle/HIIT: HR right after calories (matches GB)
+                0x07 -> 8 // indoor cycling: unk(4)+unk(4) (GB covers only v8/9 — unverified)
+                0x0B -> { // elliptical (GB getEllipticalParser): steps(4)+[cadAvg(2)]+cadMax(2)
                     if (info.version >= 6) 8 else 6
                 }
                 else -> 0
             }
-            if (bb.remaining() > skipToHr + 3) {
-                bb.position(bb.position() + skipToHr)
+            // Skip at most remaining-3 so a truncated payload still yields HR bytes
+            if (bb.remaining() >= 3) {
+                bb.position(bb.position() + minOf(skipToHr, bb.remaining() - 3))
             }
 
             // HR: avg(1), max(1), min(1)
-            val hrAvg = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
-            val hrMax = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
-            val hrMin = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
+            var hrAvg = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
+            var hrMax = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
+            var hrMin = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
+            if (hrAvg == 0 || hrAvg > 220) {
+                Log.w(TAG, "Implausible workout HR avg=$hrAvg max=$hrMax min=$hrMin — zeroing (layout mismatch for 0x%02x v%d?)"
+                    .format(info.subtype, info.version))
+                hrAvg = 0; hrMax = 0; hrMin = 0
+            }
 
             if (startTime > 0 && endTime > 0) {
                 val workout = WorkoutSummary(
