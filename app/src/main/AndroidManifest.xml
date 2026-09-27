@@ -94,6 +94,9 @@
                 <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".service.SupplementDismissReceiver"
+            android:exported="false" />
         <service
             android:name=".music.MediaListenerService"
             android:exported="true"
