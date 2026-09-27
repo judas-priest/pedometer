@@ -550,6 +550,7 @@ class WatchRepository(private val context: Context) {
                     }
                 }
             },
+            context = context,
         )
         activitySync = sync
 

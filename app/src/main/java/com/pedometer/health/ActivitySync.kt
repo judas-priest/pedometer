@@ -1,8 +1,10 @@
 package com.pedometer.health
 
+import android.content.Context
 import android.util.Log
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.proto.XiaomiProto
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.CRC32
@@ -26,6 +28,7 @@ class ActivitySync(
     private val onWorkout: (WorkoutSummary) -> Unit = {},
     private val onHourlySteps: (String, List<Pair<Int, Int>>, List<Triple<Long, Int, Int>>) -> Unit = { _, _, _ -> }, // date, (hour, steps), per-minute rows (tsMs, steps, distanceCm)
     private val onGpsTrack: ((Long, List<GpsPoint>) -> Unit)? = null, // workoutStartMs, points
+    private val context: Context? = null, // for debug dumps into filesDir
 ) {
     companion object {
         private const val TAG = "ActivitySync"
@@ -352,12 +355,38 @@ class ActivitySync(
 
         // TEMP DEBUG: hex dump of the workout body so the HR-field offset can be
         // verified against a real payload (hrMax/hrMin read 0 in every workout —
-        // the skipToHr table is off). Remove once the layout is confirmed.
+        // the skipToHr table is off). Full dump goes to <filesDir>/workout_dumps/
+        // (logcat rotates in minutes). Remove once the layout is confirmed.
         run {
-            val dup = bb.duplicate().apply { position(bb.position()) }
-            val hex = StringBuilder()
-            while (dup.hasRemaining()) hex.append("%02x ".format(dup.get()))
-            Log.w(TAG, "WorkoutBody subtype=0x%02x v=%d: %s".format(info.subtype, info.version, hex))
+            try {
+                val dup = bb.duplicate().apply { position(bb.position()) }
+                val len = dup.remaining()
+                val hex = StringBuilder()
+                while (dup.hasRemaining()) hex.append("%02x ".format(dup.get()))
+
+                // Mirror the parser below: V2 types have a leading workout-type short
+                val start = run {
+                    val b = bb.duplicate().apply { position(bb.position()) }
+                    if (info.subtype in listOf(0x16, 0x17, 0x06) && b.remaining() >= 2) b.short
+                    if (b.remaining() >= 4) b.int.toLong() and 0xFFFFFFFFL else 0L
+                }
+
+                context?.let { ctx ->
+                    val dir = File(ctx.filesDir, "workout_dumps")
+                    dir.mkdirs()
+                    File(dir, "dump_$start.txt").writeText(
+                        "subtype=0x%02x v=%d len=%d\n%s".format(info.subtype, info.version, len, hex)
+                    )
+                    dir.listFiles()
+                        ?.sortedByDescending { it.lastModified() }
+                        ?.drop(5)
+                        ?.forEach { it.delete() }
+                }
+                Log.w(TAG, "WorkoutBody subtype=0x%02x v=%d len=%d: %s"
+                    .format(info.subtype, info.version, len, hex.take(48 * 3).toString().trim()))
+            } catch (e: Exception) {
+                Log.w(TAG, "WorkoutBody dump failed", e)
+            }
         }
 
         try {
