@@ -22,6 +22,7 @@ import com.pedometer.data.HourlySteps
 import com.pedometer.data.WorkoutRecord
 import com.pedometer.health.DayStepData
 import com.pedometer.health.IntensityMinutes
+import com.pedometer.health.SupplementSlot
 import com.pedometer.health.UserProfile
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
@@ -504,6 +505,38 @@ fun DayDetailScreen(
                 }
                 Spacer(Modifier.height(12.dp))
             }
+        }
+
+        // 11. Supplements history
+        if (state.supplementsForDay.isNotEmpty()) {
+            Text("БАДы", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.supplementsForDay
+                        .sortedBy { it.takenAt }
+                        .forEach { intake ->
+                            val time = java.time.Instant.ofEpochMilli(intake.takenAt)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    runCatching { SupplementSlot.byKey(intake.slot).title }.getOrDefault(intake.slot),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    "✓ $time",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
 
         Spacer(Modifier.height(24.dp))
