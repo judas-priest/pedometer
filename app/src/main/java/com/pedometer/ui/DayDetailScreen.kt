@@ -301,7 +301,7 @@ fun DayDetailScreen(
                         val end = java.time.Instant.ofEpochMilli(w.endMinute)
                             .atZone(java.time.ZoneId.systemDefault())
                         Text(
-                            "Прогулка  %02d:%02d – %02d:%02d".format(start.hour, start.minute, end.hour, end.minute),
+                            "%02d:%02d – %02d:%02d".format(start.hour, start.minute, end.hour, end.minute),
                             style = MaterialTheme.typography.titleSmall,
                         )
                         Text(
@@ -458,6 +458,8 @@ fun DayDetailScreen(
         // 10. Workouts with GPS map
         val dayWorkouts = filterWorkoutsForDay(state.recentWorkouts, selectedDate)
         if (dayWorkouts.isNotEmpty()) {
+            Text("Тренировки", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
             dayWorkouts.forEach { w ->
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
