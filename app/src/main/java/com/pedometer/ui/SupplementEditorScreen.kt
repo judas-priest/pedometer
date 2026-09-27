@@ -18,13 +18,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Drill-down screen: supplements grouped by slot, delete per item, add at the bottom. */
+/** Drill-down screen: one slot at a time, switched by the tab row. */
 @Composable
 fun SupplementEditorScreen(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var items by remember { mutableStateOf<List<Supplement>>(emptyList()) }
     var newName by remember { mutableStateOf("") }
-    var selectedSlot by remember { mutableStateOf("breakfast") }
+    var selectedSlot by remember { mutableStateOf(SupplementSlot.BREAKFAST) }
 
     suspend fun reload() = withContext(Dispatchers.IO) {
         StepDatabase.get(context).stepDao().getAllSupplements()
@@ -47,93 +47,88 @@ fun SupplementEditorScreen(onBack: () -> Unit) {
             Text("БАДы", style = MaterialTheme.typography.titleLarge)
         }
         Spacer(Modifier.height(8.dp))
-        Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            SupplementSlot.entries.forEach { slot ->
-                val slotItems = items.filter { it.slot == slot.key }.sortedBy { it.sort }
-                Text(
-                    slot.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                listOf("home" to "Дома", "office" to "Офис").forEach { (regime, label) ->
-                    val w = SupplementWindows.windowFor(slot.key, regime, winPrefs)
-                    var startText by remember(slot.key, regime) { mutableStateOf(SupplementWindows.formatHhMm(w.startMin)) }
-                    var endText by remember(slot.key, regime) { mutableStateOf(SupplementWindows.formatHhMm(w.endMin)) }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(0.4f))
-                        OutlinedTextField(
-                            value = startText,
-                            onValueChange = { v ->
-                                startText = v
-                                SupplementWindows.parseHhMm(v)?.let { min ->
-                                    prefs.edit().putInt("supp_win_${slot.key}_${regime}_start", min).apply()
-                                    winPrefs = winPrefs + ("supp_win_${slot.key}_${regime}_start" to min)
-                                }
-                            },
-                            label = { Text("С") },
-                            modifier = Modifier.weight(0.3f),
-                            singleLine = true,
-                        )
-                        OutlinedTextField(
-                            value = endText,
-                            onValueChange = { v ->
-                                endText = v
-                                SupplementWindows.parseHhMm(v)?.let { min ->
-                                    prefs.edit().putInt("supp_win_${slot.key}_${regime}_end", min).apply()
-                                    winPrefs = winPrefs + ("supp_win_${slot.key}_${regime}_end" to min)
-                                }
-                            },
-                            label = { Text("До") },
-                            modifier = Modifier.weight(0.3f),
-                            singleLine = true,
-                        )
-                    }
-                }
-                if (slotItems.isEmpty()) {
-                    Text(
-                        "Пока пусто",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                slotItems.forEach { item ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(item.name, style = MaterialTheme.typography.bodyMedium)
-                        TextButton(onClick = {
-                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                                StepDatabase.get(context).stepDao().deleteSupplement(item)
-                                items = reload()
-                            }
-                        }) { Text("✕", color = MaterialTheme.colorScheme.error) }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-        Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             SupplementSlot.entries.forEach { slot ->
                 FilterChip(
-                    selected = selectedSlot == slot.key,
-                    onClick = { selectedSlot = slot.key },
+                    selected = selectedSlot == slot,
+                    onClick = { selectedSlot = slot },
                     label = { Text(slot.title) },
                 )
             }
         }
+        Spacer(Modifier.height(8.dp))
+
+        val slot = selectedSlot
+        val slotItems = items.filter { it.slot == slot.key }.sortedBy { it.sort }
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf("home" to "Дома", "office" to "Офис").forEach { (regime, label) ->
+                val w = SupplementWindows.windowFor(slot.key, regime, winPrefs)
+                var startText by remember(slot.key, regime) { mutableStateOf(SupplementWindows.formatHhMm(w.startMin)) }
+                var endText by remember(slot.key, regime) { mutableStateOf(SupplementWindows.formatHhMm(w.endMin)) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.5f))
+                    OutlinedTextField(
+                        value = startText,
+                        onValueChange = { v ->
+                            startText = v
+                            SupplementWindows.parseHhMm(v)?.let { min ->
+                                prefs.edit().putInt("supp_win_${slot.key}_${regime}_start", min).apply()
+                                winPrefs = winPrefs + ("supp_win_${slot.key}_${regime}_start" to min)
+                            }
+                        },
+                        label = { Text("С") },
+                        modifier = Modifier.weight(0.25f),
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = endText,
+                        onValueChange = { v ->
+                            endText = v
+                            SupplementWindows.parseHhMm(v)?.let { min ->
+                                prefs.edit().putInt("supp_win_${slot.key}_${regime}_end", min).apply()
+                                winPrefs = winPrefs + ("supp_win_${slot.key}_${regime}_end" to min)
+                            }
+                        },
+                        label = { Text("До") },
+                        modifier = Modifier.weight(0.25f),
+                        singleLine = true,
+                    )
+                }
+            }
+            if (slotItems.isEmpty()) {
+                Text(
+                    "Пока пусто",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            slotItems.forEach { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(item.name, style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = {
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            StepDatabase.get(context).stepDao().deleteSupplement(item)
+                            items = reload()
+                        }
+                    }) { Text("✕", color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -153,7 +148,7 @@ fun SupplementEditorScreen(onBack: () -> Unit) {
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                         val dao = StepDatabase.get(context).stepDao()
                         val sort = dao.getAllSupplements().maxOfOrNull { it.sort }?.plus(1) ?: 0
-                        dao.insertSupplement(Supplement(name = name, slot = selectedSlot, sort = sort))
+                        dao.insertSupplement(Supplement(name = name, slot = selectedSlot.key, sort = sort))
                         items = reload()
                     }
                     newName = ""
