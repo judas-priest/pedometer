@@ -387,6 +387,39 @@ fun SettingsTab(
                         prefs.edit().putBoolean("supplements_enabled", on).apply()
                     })
                 }
+                var regime by remember { mutableStateOf(prefs.getString("supp_regime", "home") ?: "home") }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Режим дня", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Определяет окна приёмов",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(
+                            selected = regime == "home",
+                            onClick = {
+                                regime = "home"
+                                prefs.edit().putString("supp_regime", "home").apply()
+                            },
+                            label = { Text("Дома") },
+                        )
+                        FilterChip(
+                            selected = regime == "office",
+                            onClick = {
+                                regime = "office"
+                                prefs.edit().putString("supp_regime", "office").apply()
+                            },
+                            label = { Text("Офис") },
+                        )
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier
