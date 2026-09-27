@@ -12,6 +12,7 @@ import com.pedometer.data.SleepRecord
 import com.pedometer.data.DailySteps
 import com.pedometer.data.HourlySteps
 import com.pedometer.data.WorkoutRecord
+import com.pedometer.data.SupplementIntake
 import com.pedometer.data.StepDatabase
 import com.pedometer.PedometerApp
 import com.pedometer.health.DayStepData
@@ -21,6 +22,8 @@ import com.pedometer.health.HealthConnectReader
 import com.pedometer.health.HealthInsights
 import com.pedometer.health.StepProviderReader
 import com.pedometer.health.UserProfile
+import com.pedometer.health.SupplementSlot
+import com.pedometer.health.SupplementStreak
 import com.pedometer.health.WalkDetector
 import com.pedometer.health.WalkMinute
 import com.pedometer.repo.withWatchData
@@ -87,6 +90,16 @@ data class WatchState(
     val weekTrimp: Int = 0,
     val prevWeekTrimp: Int = 0,
     val recentPaces: List<Float> = emptyList(), // min/km, last 5 walks, oldest first
+    val supplementSlots: List<SupplementSlotUi> = emptyList(),
+    val supplementStreak: Int = 0,
+    val supplementsForDay: List<SupplementIntake> = emptyList(),
+)
+
+data class SupplementSlotUi(
+    val slot: String,
+    val title: String,
+    val taken: Boolean,
+    val takenAtText: String,
 )
 
 data class WalkCard(
@@ -397,6 +410,47 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
 
             // 4. Watch data — battery, activity files, weather
             if (alsoFetchFromWatch) repo.refreshFromWatch()
+
+            loadSupplementsToday()
+        }
+    }
+
+    private fun loadSupplementsToday() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("supplements_enabled", false)) {
+                _state.update { it.copy(supplementSlots = emptyList(), supplementStreak = 0) }
+                return@launch
+            }
+            val dao = StepDatabase.get(app).stepDao()
+            val today = java.time.LocalDate.now()
+            val todayStr = today.toString()
+            val pills = dao.getEnabledSupplements().groupBy { it.slot }
+            val intakes = dao.getIntakesSince(today.minusDays(30).toString())
+            val loggedByDate = intakes.groupBy { it.date }
+                .mapValues { (_, v) -> v.map { it.slot }.toSet() }
+            val slots = pills.keys
+                .map { SupplementSlot.byKey(it) }
+                .sortedBy { it.ordinal }
+                .map { slot ->
+                    val intake = intakes.filter { it.date == todayStr && it.slot == slot.key }.maxByOrNull { it.takenAt }
+                    SupplementSlotUi(
+                        slot = slot.key,
+                        title = slot.title,
+                        taken = intake != null,
+                        takenAtText = intake?.let {
+                            java.time.Instant.ofEpochMilli(it.takenAt).atZone(java.time.ZoneId.systemDefault())
+                                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                        } ?: "",
+                    )
+                }
+            val streak = SupplementStreak.streak(
+                loggedByDate,
+                pills.keys,
+                java.time.LocalDate.now(),
+            )
+            _state.update { it.copy(supplementSlots = slots, supplementStreak = streak) }
         }
     }
 
@@ -536,6 +590,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         recentPaces = paces,
                     )
                 }
+
+                viewModelScope.launch(Dispatchers.IO) {
+                    val intakes = dao.getIntakesForDate(day.toString())
+                    _state.update { it.copy(supplementsForDay = intakes) }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "loadDayInsights($dateStr) failed", e)
             }
@@ -570,6 +629,19 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             CalendarService.deleteFromSystemCalendar(app, eventId)
             refreshCalendarEvents()
             repo.syncCalendar()
+        }
+    }
+
+    fun onSupplementSlotTap(slotKey: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val dao = StepDatabase.get(app).stepDao()
+            val today = java.time.LocalDate.now().toString()
+            if (dao.countIntakes(today, slotKey) > 0) return@launch
+            dao.insertSupplementIntake(
+                SupplementIntake(date = today, slot = slotKey, takenAt = System.currentTimeMillis())
+            )
+            loadSupplementsToday()
         }
     }
 
