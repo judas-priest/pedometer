@@ -110,6 +110,12 @@ interface StepDao {
     @Insert
     suspend fun insertSupplement(s: Supplement)
 
+    @Delete
+    suspend fun deleteSupplement(s: Supplement)
+
+    @Query("SELECT * FROM supplements ORDER BY sort")
+    suspend fun getAllSupplements(): List<Supplement>
+
     @Query("SELECT * FROM supplements WHERE enabled = 1 ORDER BY sort")
     suspend fun getEnabledSupplements(): List<Supplement>
 
