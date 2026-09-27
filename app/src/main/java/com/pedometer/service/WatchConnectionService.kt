@@ -25,6 +25,7 @@ import com.pedometer.PedometerApp
 import com.pedometer.bt.ConnectionStatus
 import com.pedometer.bt.WatchPresenceMonitor
 import com.pedometer.health.StepCollector
+import com.pedometer.health.SupplementScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,6 +78,7 @@ class WatchConnectionService : Service() {
             }
         }
         stepCollector.start()
+        SupplementScheduler.start(this, scope)
         // Poll for the watch over BLE and drive connect/disconnect from its presence:
         // no watch in range → no reconnect attempts, no wasted battery.
         repo.configuredMac?.let { mac ->
@@ -257,6 +259,7 @@ class WatchConnectionService : Service() {
         Log.i(TAG, "Foreground service destroyed")
         presenceMonitor?.stop()
         presenceMonitor = null
+        SupplementScheduler.stop()
         stepCollector.stop()
         scope.cancel()
         wifiCallback?.let {
