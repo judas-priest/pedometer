@@ -413,6 +413,8 @@ fun SettingsTab(
                             .apply()
                     })
                 }
+                Spacer(Modifier.height(4.dp))
+                SupplementsEditor()
             }
         }
 
@@ -442,5 +444,85 @@ fun SettingsTab(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SupplementsEditor() {
+    val context = LocalContext.current
+    var items by remember { mutableStateOf<List<com.pedometer.data.Supplement>>(emptyList()) }
+    var newName by remember { mutableStateOf("") }
+    var selectedSlot by remember { mutableStateOf("breakfast") }
+
+    suspend fun reload() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        com.pedometer.data.StepDatabase.get(context).stepDao().getAllSupplements()
+    }
+
+    LaunchedEffect(Unit) { items = reload() }
+
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        com.pedometer.health.SupplementSlot.entries.forEach { slot ->
+            val slotItems = items.filter { it.slot == slot.key }.sortedBy { it.sort }
+            Text(
+                slot.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            slotItems.forEach { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(item.name, style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = {
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            com.pedometer.data.StepDatabase.get(context).stepDao().deleteSupplement(item)
+                            items = reload()
+                        }
+                    }) { Text("✕", color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            com.pedometer.health.SupplementSlot.entries.forEach { slot ->
+                FilterChip(
+                    selected = selectedSlot == slot.key,
+                    onClick = { selectedSlot = slot.key },
+                    label = { Text(slot.title) },
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("Название") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            Button(
+                enabled = newName.isNotBlank(),
+                onClick = {
+                    val name = newName.trim()
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        val dao = com.pedometer.data.StepDatabase.get(context).stepDao()
+                        val sort = dao.getAllSupplements().maxOfOrNull { it.sort }?.plus(1) ?: 0
+                        dao.insertSupplement(com.pedometer.data.Supplement(name = name, slot = selectedSlot, sort = sort))
+                        items = reload()
+                    }
+                    newName = ""
+                },
+            ) { Text("Добавить") }
+        }
     }
 }
