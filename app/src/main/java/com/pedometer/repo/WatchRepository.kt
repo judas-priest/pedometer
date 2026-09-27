@@ -125,6 +125,9 @@ class WatchRepository(private val context: Context) {
 
     /** Read-only accessor for the service, which hands it to WatchPresenceMonitor. */
     fun currentQuietHours(): QuietHours = quietHours
+
+    /** True when the phone sits on the home Wi-Fi — regime detector for supplement slots. */
+    fun isAtHome(): Boolean = homeWifiConnected
     private var weatherJob: Job? = null
     private var initJob: Job? = null
     @Volatile private var lastHrSaveTime = 0L
