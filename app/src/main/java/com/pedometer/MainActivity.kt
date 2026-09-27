@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
                 var showReminders by remember { mutableStateOf(false) }
                 var showWatchfaces by remember { mutableStateOf(false) }
                 var showWatchSettings by remember { mutableStateOf(false) }
+                var showSuppEditor by remember { mutableStateOf(false) }
 
                 val prefs = remember { getSharedPreferences("app_prefs", MODE_PRIVATE) }
                 var showOnboarding by remember { mutableStateOf(!prefs.getBoolean("onboarding_done", false)) }
@@ -164,6 +165,11 @@ class MainActivity : ComponentActivity() {
                             onBack = { showWatchSettings = false },
                         )
                         }
+                    } else if (showSuppEditor) {
+                        androidx.activity.compose.BackHandler { showSuppEditor = false }
+                        Box(Modifier.fillMaxSize().padding(padding)) {
+                            SupplementEditorScreen(onBack = { showSuppEditor = false })
+                        }
                     } else {
                     HorizontalPager(
                         state = pagerState,
@@ -213,6 +219,7 @@ class MainActivity : ComponentActivity() {
                                 onProfileChange = vm::updateProfile,
                                 onOpenDebug = { showDebug = true },
                                 onOpenNotificationApps = { showNotificationApps = true },
+                                onOpenSupplements = { showSuppEditor = true },
                             )
                         }
                     }
