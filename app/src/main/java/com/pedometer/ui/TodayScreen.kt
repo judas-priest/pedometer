@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import com.pedometer.data.DailyHealth
 import com.pedometer.ui.components.*
+import com.pedometer.vm.SupplementSlotUi
 import com.pedometer.vm.WatchState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,6 +38,7 @@ fun TodayScreen(
     state: WatchState,
     onRefresh: () -> Unit = {},
     onTodayTap: () -> Unit = {},
+    onSupplementSlotTap: (String) -> Unit = {},
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -262,6 +264,14 @@ fun TodayScreen(
                     }
                 }
             }
+
+            // 8. Supplements
+            Spacer(Modifier.height(12.dp))
+            SupplementsCard(
+                slots = state.supplementSlots,
+                streak = state.supplementStreak,
+                onSlotTap = { onSupplementSlotTap(it) },
+            )
         }
     }
     } // else (not showing metric detail)
@@ -367,6 +377,43 @@ private fun MetricDetailScreen(
                 }
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SupplementsCard(
+    slots: List<SupplementSlotUi>,
+    streak: Int,
+    onSlotTap: (String) -> Unit,
+) {
+    if (slots.isEmpty()) return
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("БАДы", style = MaterialTheme.typography.titleSmall)
+            slots.forEach { s ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !s.taken) { onSlotTap(s.slot) },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(s.title, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (s.taken) "✓ ${s.takenAtText}" else "✗",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (s.taken) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (streak > 0) {
+                Text(
+                    "$streak дн. подряд",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

@@ -185,6 +185,7 @@ class MainActivity : ComponentActivity() {
                                     state = state,
                                     onRefresh = { vm.refreshData() },
                                     onTodayTap = { showDayDetail = java.time.LocalDate.now() },
+                                    onSupplementSlotTap = { vm.onSupplementSlotTap(it) },
                                 )
                             }
                             1 -> ActivityScreen(
