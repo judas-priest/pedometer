@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class, Supplement::class, SupplementIntake::class],
-    version = 11, // keep in sync with VERSION below
+    version = 12, // keep in sync with VERSION below
     exportSchema = true,
 )
 abstract class StepDatabase : RoomDatabase() {
@@ -17,7 +17,7 @@ abstract class StepDatabase : RoomDatabase() {
 
     companion object {
         /** Mirror of the @Database version. Room needs a literal in the annotation. */
-        const val VERSION = 11
+        const val VERSION = 12
 
         /** Oldest schema version any installed build can still be sitting on. */
         const val OLDEST_SUPPORTED = 7
@@ -67,6 +67,12 @@ abstract class StepDatabase : RoomDatabase() {
                             "`takenAt` INTEGER NOT NULL)"
                     )
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_supplement_intakes_date_slot` ON `supplement_intakes` (`date`, `slot`)")
+                }
+            },
+            object : Migration(11, 12) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("UPDATE `supplements` SET `slot` = 'dinner' WHERE `slot` = 'flex'")
+                    db.execSQL("UPDATE `supplement_intakes` SET `slot` = 'dinner' WHERE `slot` = 'flex'")
                 }
             },
         )
