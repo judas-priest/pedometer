@@ -108,3 +108,20 @@ data class StepSnapshot(
     val stepsSinceReboot: Long,              // raw TYPE_STEP_COUNTER value
     val source: String,                      // "phone_sensor", "oplus_provider"
 )
+
+@Entity(tableName = "supplements")
+data class Supplement(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,                // "ALA 600"
+    val slot: String,                // SupplementSlot.key: "fasting" | "breakfast" | "flex"
+    val enabled: Boolean = true,
+    val sort: Int = 0,
+)
+
+@Entity(tableName = "supplement_intakes", indices = [Index(value = ["date", "slot"])])
+data class SupplementIntake(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val date: String,                // "2026-09-26" local
+    val slot: String,
+    val takenAt: Long,               // epoch millis of the swipe
+)

@@ -105,4 +105,23 @@ interface StepDao {
 
     @Query("DELETE FROM heart_rate WHERE timestamp < :before")
     suspend fun cleanOldHeartRate(before: Long)
+
+    // Supplements
+    @Insert
+    suspend fun insertSupplement(s: Supplement)
+
+    @Query("SELECT * FROM supplements WHERE enabled = 1 ORDER BY sort")
+    suspend fun getEnabledSupplements(): List<Supplement>
+
+    @Query("SELECT * FROM supplement_intakes WHERE date = :date")
+    suspend fun getIntakesForDate(date: String): List<SupplementIntake>
+
+    @Query("SELECT * FROM supplement_intakes WHERE date >= :fromDate")
+    suspend fun getIntakesSince(fromDate: String): List<SupplementIntake>
+
+    @Query("SELECT COUNT(*) FROM supplement_intakes WHERE date = :date AND slot = :slot")
+    suspend fun countIntakes(date: String, slot: String): Int
+
+    @Insert
+    suspend fun insertSupplementIntake(intake: SupplementIntake)
 }

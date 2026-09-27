@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class],
-    version = 10, // keep in sync with VERSION below
+    entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class, Supplement::class, SupplementIntake::class],
+    version = 11, // keep in sync with VERSION below
     exportSchema = true,
 )
 abstract class StepDatabase : RoomDatabase() {
@@ -17,7 +17,7 @@ abstract class StepDatabase : RoomDatabase() {
 
     companion object {
         /** Mirror of the @Database version. Room needs a literal in the annotation. */
-        const val VERSION = 10
+        const val VERSION = 11
 
         /** Oldest schema version any installed build can still be sitting on. */
         const val OLDEST_SUPPORTED = 7
@@ -47,6 +47,26 @@ abstract class StepDatabase : RoomDatabase() {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_heart_rate_timestamp` ON `heart_rate` (`timestamp`)")
                     db.execSQL("CREATE INDEX IF NOT EXISTS `index_step_snapshots_timestamp` ON `step_snapshots` (`timestamp`)")
+                }
+            },
+            object : Migration(10, 11) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `supplements` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`name` TEXT NOT NULL, " +
+                            "`slot` TEXT NOT NULL, " +
+                            "`enabled` INTEGER NOT NULL, " +
+                            "`sort` INTEGER NOT NULL)"
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `supplement_intakes` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`date` TEXT NOT NULL, " +
+                            "`slot` TEXT NOT NULL, " +
+                            "`takenAt` INTEGER NOT NULL)"
+                    )
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_supplement_intakes_date_slot` ON `supplement_intakes` (`date`, `slot`)")
                 }
             },
         )
