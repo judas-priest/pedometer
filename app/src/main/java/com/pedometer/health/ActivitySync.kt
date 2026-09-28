@@ -393,96 +393,30 @@ class ActivitySync(
         }
 
         try {
-            // V2 types start with workout type short
-            val isV2 = info.subtype in listOf(0x16, 0x17, 0x06)
-            if (isV2 && bb.remaining() >= 2) bb.short
+            val fields = parseWorkoutBody(info.subtype, info.version, bb)
+            if (fields != null) {
+                var hrAvg = fields.hrAvg
+                var hrMax = fields.hrMax
+                var hrMin = fields.hrMin
+                if (hrAvg == 0 || hrAvg > 220) {
+                    Log.w(TAG, "Implausible workout HR avg=$hrAvg max=$hrMax min=$hrMin — zeroing (layout mismatch for 0x%02x v%d?)"
+                        .format(info.subtype, info.version))
+                    hrAvg = 0; hrMax = 0; hrMin = 0
+                }
 
-            val startTime = if (bb.remaining() >= 4) bb.int.toLong() and 0xFFFFFFFFL else 0L
-            val endTime = if (bb.remaining() >= 4) bb.int.toLong() and 0xFFFFFFFFL else 0L
-            val duration = if (bb.remaining() >= 4) bb.int else 0
-
-            // Distance/unknown4 depends on sport type
-            var distance = 0
-            val hasDistance = info.subtype in listOf(0x01, 0x02, 0x03, 0x06, 0x09, 0x16, 0x17)
-            if (hasDistance && bb.remaining() >= 4) {
-                if (info.subtype in listOf(0x16, 0x17)) {
-                    bb.int // unknown4
-                    distance = if (bb.remaining() >= 4) bb.int else 0
-                } else {
-                    distance = bb.int
-                }
-            }
-
-            // Calories — short for v2 types, int for v1
-            val calories = when (info.subtype) {
-                0x16, 0x17, 0x06 -> {
-                    // v2: totalCal(short) + activeCal(short)
-                    if (bb.remaining() >= 4) {
-                        bb.short.toInt() and 0xFFFF // total
-                        // bb.short // active — skip
-                    } else 0
-                }
-                0x01, 0x02 -> {
-                    // v1: calories as int
-                    if (bb.remaining() >= 4) bb.int else 0
-                }
-                else -> {
-                    if (bb.remaining() >= 2) bb.short.toInt() and 0xFFFF else 0
-                }
-            }
-
-            // Skip pace/speed fields to reach HR
-            // Most types: some pace/speed fields, then HR avg(1), max(1), min(1)
-            // Offsets cross-checked against Gadgetbridge WorkoutSummaryParser
-            // (service/devices/xiaomi/activity/impl/) and the 2026-09-27 walking
-            // v5 payload capture (0x16 v5 verified byte-for-byte).
-            val skipToHr = when (info.subtype) {
-                0x16 -> { // outdoor walking v2: pace_avg(4)+pace_max(4)+pace_min(4)+speed_avg(4)+speed_max(4)+steps(4)+stepLen(2)+stepRate(2)+stepRateMax(2)
-                    if (info.version >= 5) 30 else 18
-                }
-                // walking v1 (GB getOutdoorWalkingV1Parser): pace_max(4)+pace_min(4)
-                // +unk(4)+steps(4)+unk(2) = 18 (was 16 — off by 2)
-                0x02 -> 18
-                0x01 -> 16 // running v1: no GB reference parser, keep legacy value
-                0x03 -> { // treadmill (GB getTreadmillParser)
-                    if (info.version >= 10) 22 else 14
-                }
-                0x08, 0x10 -> 0 // freestyle/HIIT: HR right after calories (matches GB)
-                0x07 -> 8 // indoor cycling: unk(4)+unk(4) (GB covers only v8/9 — unverified)
-                0x0B -> { // elliptical (GB getEllipticalParser): steps(4)+[cadAvg(2)]+cadMax(2)
-                    if (info.version >= 6) 8 else 6
-                }
-                else -> 0
-            }
-            // Skip at most remaining-3 so a truncated payload still yields HR bytes
-            if (bb.remaining() >= 3) {
-                bb.position(bb.position() + minOf(skipToHr, bb.remaining() - 3))
-            }
-
-            // HR: avg(1), max(1), min(1)
-            var hrAvg = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
-            var hrMax = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
-            var hrMin = if (bb.remaining() >= 1) bb.get().toInt() and 0xFF else 0
-            if (hrAvg == 0 || hrAvg > 220) {
-                Log.w(TAG, "Implausible workout HR avg=$hrAvg max=$hrMax min=$hrMin — zeroing (layout mismatch for 0x%02x v%d?)"
-                    .format(info.subtype, info.version))
-                hrAvg = 0; hrMax = 0; hrMin = 0
-            }
-
-            if (startTime > 0 && endTime > 0) {
                 val workout = WorkoutSummary(
-                    startTime = startTime * 1000,
-                    endTime = endTime * 1000,
+                    startTime = fields.startTime * 1000,
+                    endTime = fields.endTime * 1000,
                     sportType = info.subtype,
                     sportName = sportName(info.subtype),
-                    durationSec = duration,
-                    distanceM = distance,
-                    calories = calories,
+                    durationSec = fields.durationSec,
+                    distanceM = fields.distanceM,
+                    calories = fields.calories,
                     hrAvg = hrAvg,
                     hrMax = hrMax,
                     hrMin = hrMin,
                 )
-                Log.i(TAG, "Workout: ${workout.sportName} ${duration / 60}min dist=${distance}m cal=$calories HR=$hrAvg/$hrMin-$hrMax")
+                Log.i(TAG, "Workout: ${workout.sportName} ${fields.durationSec / 60}min dist=${fields.distanceM}m cal=${fields.calories} HR=$hrAvg/$hrMin-$hrMax")
                 onWorkout(workout)
             }
         } catch (e: Exception) {
@@ -595,4 +529,128 @@ class ActivitySync(
     }
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+}
+
+/** Raw fields as laid out in a workout-summary payload (the body after the
+ *  8-byte file header + per-type headerSize). Pure java.nio — unit-testable. */
+internal data class ParsedWorkoutBody(
+    val startTime: Long,
+    val endTime: Long,
+    val durationSec: Int,
+    val distanceM: Int,
+    val calories: Int,
+    val steps: Int,
+    val hrAvg: Int,
+    val hrMax: Int,
+    val hrMin: Int,
+)
+
+/**
+ * Byte-layout of the workout-summary body. Reads from [body]'s current position
+ * (i.e. after fileId+padding and the per-type headerSize already consumed by
+ * [ActivitySync.parseWorkoutSummary]). Returns null when start/end timestamps
+ * are missing. No android.* dependencies so it can be pinned by unit tests
+ * against real captured payloads (WorkoutParseOffsetTest).
+ */
+internal fun parseWorkoutBody(subtype: Int, version: Int, body: ByteBuffer): ParsedWorkoutBody? {
+    // V2 types start with workout type short
+    val isV2 = subtype in listOf(0x16, 0x17, 0x06)
+    if (isV2 && body.remaining() >= 2) body.short
+
+    val startTime = if (body.remaining() >= 4) body.int.toLong() and 0xFFFFFFFFL else 0L
+    val endTime = if (body.remaining() >= 4) body.int.toLong() and 0xFFFFFFFFL else 0L
+    val duration = if (body.remaining() >= 4) body.int else 0
+
+    // Distance/unknown4 depends on sport type
+    var distance = 0
+    val hasDistance = subtype in listOf(0x01, 0x02, 0x03, 0x06, 0x09, 0x16, 0x17)
+    if (hasDistance && body.remaining() >= 4) {
+        if (subtype in listOf(0x16, 0x17)) {
+            body.int // unknown4
+            distance = if (body.remaining() >= 4) body.int else 0
+        } else {
+            distance = body.int
+        }
+    }
+
+    // Calories — short for v2 types, int for v1
+    val calories = when (subtype) {
+        0x16, 0x17, 0x06 -> {
+            // v2: totalCal(short) + activeCal(short)
+            if (body.remaining() >= 4) {
+                body.short.toInt() and 0xFFFF // total
+                // body.short // active — skip
+            } else 0
+        }
+        0x01, 0x02 -> {
+            // v1: calories as int
+            if (body.remaining() >= 4) body.int else 0
+        }
+        else -> {
+            if (body.remaining() >= 2) body.short.toInt() and 0xFFFF else 0
+        }
+    }
+
+    // Skip pace/speed fields to reach HR
+    // Most types: some pace/speed fields, then HR avg(1), max(1), min(1)
+    // Offsets cross-checked against Gadgetbridge WorkoutSummaryParser
+    // (service/devices/xiaomi/activity/impl/) and real 0x16 v5 captures
+    // (byte-for-byte pinned in WorkoutParseOffsetTest).
+    val skipToHr = when (subtype) {
+        0x16 -> { // outdoor walking v2, verified on real v5 payloads (2026-09-27/28).
+            // The calories block above consumes only totalCal (2 bytes); activeCal
+            // (2 bytes, 434/20 kcal in the captures) stays unconsumed, so it is
+            // part of this skip: activeCal(2) + pace_avg s/km i16 (739) + reserved
+            // i16 (0) + pace_max i32 (537) + pace_min i32 (2800) + speed_avg km/h
+            // f32 (4.93) + speed_max f32 (6.73) + steps u32 (10097) + step_len cm
+            // u16 (76) + step_rate_avg u16 (101) + step_rate_max u16 (137) = 32
+            // bytes, then HR avg/max/min (114/145/85). Pinned by
+            // WorkoutParseOffsetTest on real dumps — do NOT change without one.
+            if (version >= 5) 32 else 18
+        }
+        // walking v1 (GB getOutdoorWalkingV1Parser): pace_max(4)+pace_min(4)
+        // +unk(4)+steps(4)+unk(2) = 18 (was 16 — off by 2)
+        0x02 -> 18
+        0x01 -> 16 // running v1: no GB reference parser, keep legacy value
+        0x03 -> { // treadmill (GB getTreadmillParser)
+            if (version >= 10) 22 else 14
+        }
+        0x08, 0x10 -> 0 // freestyle/HIIT: HR right after calories (matches GB)
+        0x07 -> 8 // indoor cycling: unk(4)+unk(4) (GB covers only v8/9 — unverified)
+        0x0B -> { // elliptical (GB getEllipticalParser): steps(4)+[cadAvg(2)]+cadMax(2)
+            if (version >= 6) 8 else 6
+        }
+        else -> 0
+    }
+    // Skip at most remaining-3 so a truncated payload still yields HR bytes
+    if (body.remaining() >= 3) {
+        body.position(body.position() + minOf(skipToHr, body.remaining() - 3))
+    }
+
+    // HR: avg(1), max(1), min(1)
+    val hrStart = body.position()
+    val hrAvg = if (body.remaining() >= 1) body.get().toInt() and 0xFF else 0
+    val hrMax = if (body.remaining() >= 1) body.get().toInt() and 0xFF else 0
+    val hrMin = if (body.remaining() >= 1) body.get().toInt() and 0xFF else 0
+
+    // steps: read at the verified offset for 0x16 v5+ only (other subtypes
+    // unverified — leave 0 rather than store garbage). steps u32 sits 10 bytes
+    // before HR (step_len(2)+step_rate_avg(2)+step_rate_max(2) in between).
+    val steps = if (subtype == 0x16 && version >= 5 && hrStart >= 10) {
+        val b = body.duplicate().apply { position(hrStart - 10) }
+        if (b.remaining() >= 4) b.int else 0
+    } else 0
+
+    if (startTime <= 0 || endTime <= 0) return null
+    return ParsedWorkoutBody(
+        startTime = startTime,
+        endTime = endTime,
+        durationSec = duration,
+        distanceM = distance,
+        calories = calories,
+        steps = steps,
+        hrAvg = hrAvg,
+        hrMax = hrMax,
+        hrMin = hrMin,
+    )
 }
