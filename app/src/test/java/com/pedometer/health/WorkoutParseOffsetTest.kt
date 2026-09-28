@@ -81,7 +81,7 @@ class WorkoutParseOffsetTest {
         val bb = ByteBuffer.wrap(walkingV5Body).order(ByteOrder.LITTLE_ENDIAN)
         val f = parseWorkoutBody(0x16, 5, bb)
         println("DBG steps=" + f!!.steps + " hrAvg=" + f.hrAvg + " pos=" + bb.position() +
-            " bytes44=" + walkingV5Body.copyOfRange(44, 52).joinToString(" ") { "%02x".format(it) } +
+            " bytes40=" + walkingV5Body.copyOfRange(40, 60).joinToString(" ") { "%02x".format(it) } +
             " dur=" + f.durationSec + " dist=" + f.distanceM + " cal=" + f.calories)
 
         assertNotNull(f)

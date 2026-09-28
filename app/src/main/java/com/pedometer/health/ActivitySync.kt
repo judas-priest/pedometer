@@ -638,7 +638,14 @@ internal fun parseWorkoutBody(subtype: Int, version: Int, body: ByteBuffer): Par
     // before HR (step_len(2)+step_rate_avg(2)+step_rate_max(2) in between).
     val steps = if (subtype == 0x16 && version >= 5 && hrStart >= 10) {
         val b = body.duplicate().apply { position(hrStart - 10) }
-        if (b.remaining() >= 4) b.int else 0
+        // Explicit LE byte-wise read — b.int is endian-dependent and the buffer's
+        // order differs between the test (LE) and the transport path.
+        if (b.remaining() >= 4) {
+            (b.get().toInt() and 0xFF) or
+                ((b.get().toInt() and 0xFF) shl 8) or
+                ((b.get().toInt() and 0xFF) shl 16) or
+                ((b.get().toInt() and 0xFF) shl 24)
+        } else 0
     } else 0
 
     if (startTime <= 0 || endTime <= 0) return null
