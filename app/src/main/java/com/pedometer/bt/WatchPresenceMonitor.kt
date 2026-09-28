@@ -39,6 +39,7 @@ class WatchPresenceMonitor(
     private val quietHours: () -> QuietHours = { QuietHours.DISABLED },
     private val onQuietChanged: () -> Unit = {},
     private val onPresenceChanged: (present: Boolean) -> Unit,
+    private val connected: () -> Boolean = { false },
 ) {
     companion object {
         private const val TAG = "WatchPresenceMonitor"
@@ -74,6 +75,11 @@ class WatchPresenceMonitor(
                     // connect that slipped past the gate (or raced the last evaluation)
                     // is torn down within a minute.
                     onQuietChanged()
+                    delay(BASE_INTERVAL_MS)
+                    continue
+                }
+                if (connected()) {
+                    // Watch already linked — scanning is pure radio waste.
                     delay(BASE_INTERVAL_MS)
                     continue
                 }

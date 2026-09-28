@@ -87,6 +87,7 @@ class WatchConnectionService : Service() {
                 quietHours = repo::currentQuietHours,
                 onQuietChanged = repo::onQuietHoursChanged,
                 onPresenceChanged = repo::onWatchPresence,
+                connected = { repo.data.value.connectionStatus == com.pedometer.vm.ConnectionStatus.Connected },
             )
             presenceMonitor?.start()
         }
