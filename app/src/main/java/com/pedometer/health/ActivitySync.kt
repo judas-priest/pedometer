@@ -360,7 +360,7 @@ class ActivitySync(
         // workout). Keep dumping until ONE more real workout also shows correct
         // HR in the UI, then remove. Full dump goes to <filesDir>/workout_dumps/
         // (logcat rotates in minutes).
-        run {
+        if (com.pedometer.BuildConfig.DEBUG) run {
             try {
                 val dup = bb.duplicate().apply { position(bb.position()) }
                 val len = dup.remaining()
