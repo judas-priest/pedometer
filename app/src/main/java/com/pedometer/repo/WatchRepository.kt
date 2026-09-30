@@ -2,6 +2,7 @@ package com.pedometer.repo
 
 import android.content.Context
 import android.util.Log
+import androidx.room.withTransaction
 import com.pedometer.bt.ConnectionStatus
 import com.pedometer.bt.ProtocolHandler
 import com.pedometer.bt.QuietHours
@@ -475,20 +476,24 @@ class WatchRepository(private val context: Context) {
                     }
                 }
             },
-            onWorkout = { w ->
+            onWorkoutPersist = { w ->
                 Log.i(TAG, "Workout: ${w.sportName} ${w.durationSec/60}min")
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        dao.upsertWorkout(WorkoutRecord(
-                            startTime = w.startTime, endTime = w.endTime,
-                            sportType = w.sportType, sportName = w.sportName,
-                            durationSec = w.durationSec, distanceM = w.distanceM,
-                            calories = w.calories, hrAvg = w.hrAvg, hrMax = w.hrMax, hrMin = w.hrMin,
-                        ))
-                        bumpRoom()
-                        calibrateStepLength(w)
-                    } catch (e: Exception) { Log.e(TAG, "Save workout failed", e) }
+                // The watch gets the file ACK only after this returns — the upsert
+                // must be committed before ActivitySync sends CMD_FETCH_ACK (type=8,
+                // sub=5). On any throw here the file is dropped and ACKed anyway
+                // (fail-open in ActivitySync.persistAndAck).
+                // gps_points are NOT part of this file/transaction: they arrive as a
+                // separate GPS file and are written by the async onGpsTrack callback.
+                StepDatabase.get(context).withTransaction {
+                    dao.upsertWorkout(WorkoutRecord(
+                        startTime = w.startTime, endTime = w.endTime,
+                        sportType = w.sportType, sportName = w.sportName,
+                        durationSec = w.durationSec, distanceM = w.distanceM,
+                        calories = w.calories, hrAvg = w.hrAvg, hrMax = w.hrMax, hrMin = w.hrMin,
+                    ))
                 }
+                bumpRoom()
+                calibrateStepLength(w) // reads DB + EMA profile write, best effort — outside the transaction
             },
             onSleepData = { sleep ->
                 Log.i(TAG, "Sleep: ${sleep.totalMinutes}min deep=${sleep.deepMinutes} light=${sleep.lightMinutes} REM=${sleep.remMinutes}")

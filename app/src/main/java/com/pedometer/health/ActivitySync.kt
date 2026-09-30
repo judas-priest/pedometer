@@ -8,6 +8,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.CRC32
+import kotlinx.coroutines.runBlocking
 
 /**
  * Activity file sync — fetches historical health data from watch.
@@ -25,7 +26,9 @@ class ActivitySync(
     private val onDailySummary: (DailySummary) -> Unit = {},
     private val onHeartRateSamples: (List<HeartRateSample>) -> Unit = {},
     private val onSleepData: (SleepData) -> Unit = {},
-    private val onWorkout: (WorkoutSummary) -> Unit = {},
+    // Suspend: the workout file is ACKed only after this returns (Room commit inside),
+    // closing the parse/ACK race (process death between save and ACK → wasteful re-parse).
+    private val onWorkoutPersist: (suspend (WorkoutSummary) -> Unit)? = null,
     private val onHourlySteps: (String, List<Pair<Int, Int>>, List<Triple<Long, Int, Int>>) -> Unit = { _, _, _ -> }, // date, (hour, steps), per-minute rows (tsMs, steps, distanceCm)
     private val onGpsTrack: ((Long, List<GpsPoint>) -> Unit)? = null, // workoutStartMs, points
     private val context: Context? = null, // for debug dumps into filesDir
@@ -139,6 +142,29 @@ class ActivitySync(
         Log.i(TAG, "ACK file: ${fileId.toHex()}")
     }
 
+    /**
+     * ACK a workout-summary file only after [onWorkoutPersist] has committed the
+     * workout row to Room (parse → withTransaction → ACK). Upsert is idempotent,
+     * so a re-parse after a crash before ACK is harmless — but ACKing before the
+     * commit would risk silently losing the workout.
+     *
+     * Runs on the BLE read thread; runBlocking over a millisecond-scale Room
+     * transaction is fine and keeps the fetch-next-file step below sequential.
+     *
+     * Fail-open: on ANY parse/persist failure the file is logged and ACKed anyway —
+     * otherwise a new firmware layout would make the watch resend the file forever.
+     */
+    private fun persistAndAck(workout: WorkoutSummary, fileId: ByteArray) {
+        try {
+            runBlocking { onWorkoutPersist?.invoke(workout) }
+            ackFile(fileId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Workout parse failed, dropping file ${fileId.toHex()} " +
+                "(subtype/version preserved in workout_dumps/)", e)
+            ackFile(fileId)
+        }
+    }
+
     fun handleCommand(cmd: XiaomiProto.Command) {
         when (cmd.subtype) {
             CMD_FETCH_TODAY, CMD_FETCH_PAST -> {
@@ -199,12 +225,14 @@ class ActivitySync(
                 val fileId = fullData.copyOfRange(0, 7)
                 val info = decodeFileId(fileId)
                 Log.i(TAG, "File ID from data: ${fileId.toHex()} → $info")
-                processFile(fileId, fullData)
-                // Don't ACK manual samples (subtype=6) so they come again on next fetch
-                if (info.type == 0 && info.subtype == 6) {
-                    Log.i(TAG, "Skipping ACK for manual sample — will re-fetch next time")
-                } else {
-                    ackFile(fileId)
+                val workout = processFile(fileId, fullData)
+                when {
+                    // Don't ACK manual samples (subtype=6) so they come again on next fetch
+                    info.type == 0 && info.subtype == 6 ->
+                        Log.i(TAG, "Skipping ACK for manual sample — will re-fetch next time")
+                    workout != null && onWorkoutPersist != null ->
+                        persistAndAck(workout, fileId)
+                    else -> ackFile(fileId)
                 }
             }
 
@@ -234,10 +262,12 @@ class ActivitySync(
         }
     }
 
-    private fun processFile(fileId: ByteArray, data: ByteArray) {
+    /** Returns the parsed workout for workout-summary files (null otherwise) —
+     *  the caller needs it to gate the ACK on the Room commit. */
+    private fun processFile(fileId: ByteArray, data: ByteArray): WorkoutSummary? {
         if (data.size < 12) {
             Log.w(TAG, "File too small: ${data.size}")
-            return
+            return null
         }
 
         val info = com.pedometer.health.parsers.ParserUtils.decodeFileId(fileId)
@@ -280,7 +310,7 @@ class ActivitySync(
                 info.type == 0 && info.subtype == 6 ->
                     parseManualSamples(fileId, data)
                 info.type == 1 && info.detailType == 1 ->
-                    parseWorkoutSummary(fileId, data)
+                    return parseWorkoutSummary(fileId, data)
                 info.type == 1 && info.detailType == 2 ->
                     parseGpsTrack(fileId, data)
                 else -> Log.d(TAG, "Skipping file type=${info.type} sub=${info.subtype} detail=${info.detailType}")
@@ -288,6 +318,7 @@ class ActivitySync(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse file: ${fileId.toHex()}", e)
         }
+        return null
     }
 
 
@@ -306,8 +337,10 @@ class ActivitySync(
         else -> "Тренировка #$subtype"
     }
 
-    private fun parseWorkoutSummary(fileId: ByteArray, data: ByteArray) {
-        if (data.size < 30) return
+    /** Returns the parsed workout, or null when the payload is too small or fails
+     *  to parse (caller ACKs the file anyway — fail-open). */
+    private fun parseWorkoutSummary(fileId: ByteArray, data: ByteArray): WorkoutSummary? {
+        if (data.size < 30) return null
 
         val info = decodeFileId(fileId)
         val bb = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
@@ -350,7 +383,7 @@ class ActivitySync(
             }
             else -> 4
         }
-        if (bb.remaining() < headerSize) return
+        if (bb.remaining() < headerSize) return null
         bb.position(bb.position() + headerSize)
 
         // TEMP DEBUG: hex dump of the workout body so the HR-field offset can be
@@ -417,11 +450,12 @@ class ActivitySync(
                     hrMin = hrMin,
                 )
                 Log.i(TAG, "Workout: ${workout.sportName} ${fields.durationSec / 60}min dist=${fields.distanceM}m cal=${fields.calories} HR=$hrAvg/$hrMin-$hrMax")
-                onWorkout(workout)
+                return workout
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse workout: ${e.message}")
         }
+        return null
     }
 
     private fun parseManualSamples(fileId: ByteArray, data: ByteArray) {
