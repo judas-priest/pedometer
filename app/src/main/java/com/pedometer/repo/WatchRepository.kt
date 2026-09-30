@@ -144,6 +144,24 @@ class WatchRepository(private val context: Context) {
         healthService?.sendGpsLocation(lat, lon, alt, speed, bearing)
     }
 
+    /** One-shot GPS "knock": a workout started before this connection lost its
+     *  GPS request — send a single fix so the watch re-arms its request loop. */
+    fun sendGpsKnock() {
+        if (gpsRelayActive) return  // real relay already running — knock would double-stream
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (quietHours.isQuiet(java.time.LocalTime.now().hour)) return
+        if (homeWifiConnected && prefs.getBoolean(KEY_WIFI_GATE, true)) return
+        healthService?.openKnockWindow()
+        onGpsRelayNeeded?.invoke(true)  // same callback the relay uses — ViewModel
+        // grabs fixes and HealthService sends them as WorkoutLocations for 15 s;
+        // then this timer stops it — unless a real workout-open took over.
+        scope.launch {
+            delay(15_000)
+            healthService?.closeKnockWindow()
+            if (!gpsRelayActive && !watchWorkoutActive) stopGpsRelayIfActive()
+        }
+    }
+
     init {
         link.onAuthenticated = { onAuthenticated() }
         link.onCommand = { cmd -> handleCommand(cmd) }
@@ -336,6 +354,7 @@ class WatchRepository(private val context: Context) {
         buildServices(handler)
         startPostAuthInit()
         startWeatherLoop()
+        sendGpsKnock()
     }
 
     private fun buildServices(handler: ProtocolHandler) {

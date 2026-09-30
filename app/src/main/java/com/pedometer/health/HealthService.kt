@@ -26,6 +26,14 @@ class HealthService(
     private var gpsStarted = false
     private var gpsFixSent = false
 
+    /** One-shot connect-knock window: while open, [sendGpsLocation] emits WorkoutLocation
+     *  packets even though no WorkoutOpen arrived (workout started while disconnected). */
+    @Volatile var knockWindow = false
+        private set
+
+    fun openKnockWindow() { knockWindow = true }
+    fun closeKnockWindow() { knockWindow = false }
+
     fun sendGpsLocation(lat: Double, lon: Double, alt: Double, speed: Float, bearing: Float) {
         if (!gpsFixSent) {
             gpsFixSent = true
@@ -41,7 +49,7 @@ class HealthService(
             Log.i(TAG, "Sent GPS fix notification to watch")
         }
 
-        if (workoutStarted) {
+        if (workoutStarted || knockWindow) {
             val loc = XiaomiProto.WorkoutLocation.newBuilder()
                 .setUnknown1(2)
                 .setTimestamp((System.currentTimeMillis() / 1000).toInt())

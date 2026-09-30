@@ -729,6 +729,17 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     @android.annotation.SuppressLint("MissingPermission")
     private fun startGpsRelay() {
         Log.i(TAG, "Starting GPS relay for workout")
+        // Idempotent: a re-arm (e.g. the one-shot connect knock superseded by a real
+        // workout-open) must not leak the previous callback — stop would only remove
+        // the newest one and the stale callback would stream forever.
+        gpsCallback?.let {
+            try {
+                com.google.android.gms.location.LocationServices
+                    .getFusedLocationProviderClient(getApplication<Application>())
+                    .removeLocationUpdates(it)
+            } catch (_: Exception) {}
+        }
+        gpsCallback = null
         try {
             val client = com.google.android.gms.location.LocationServices
                 .getFusedLocationProviderClient(getApplication<Application>())
