@@ -205,8 +205,59 @@ fun WeightChart(data: List<Pair<Long, Double>>, alcoholDays: Set<String>, modifi
     }
 }
 
-// ── HourlyStepChart ────────────────────────────────────────────────────────────
+// ── ElevationChart — smoothed DEM altitude + HR overlay for a workout ─────────
 
+@Composable
+fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationProfile, modifier: Modifier = Modifier) {
+    val altColor = Color.Gray
+    val gridColor = Color.Gray.copy(alpha = 0.2f)
+
+    Canvas(modifier = modifier) {
+        val pts = profile.points
+        if (pts.size < 2) return@Canvas
+
+        val minTime = pts.first().timestamp
+        val timeRange = (pts.last().timestamp - minTime).coerceAtLeast(1)
+        val minAlt = pts.minOf { it.altitudeM }
+        val altRange = (pts.maxOf { it.altitudeM } - minAlt).coerceAtLeast(0.1)
+        val w = size.width
+        val h = size.height
+
+        fun xOf(t: Long): Float = ((t - minTime).toFloat() / timeRange) * w
+
+        for (frac in listOf(0.25f, 0.5f, 0.75f)) {
+            drawLine(gridColor, Offset(0f, h * frac), Offset(w, h * frac), strokeWidth = 1f)
+        }
+
+        // Altitude: filled grey line over 80% of the height (HR rides in the top band)
+        fun yAlt(a: Double): Float = h - ((a - minAlt) / altRange * h * 0.8f).toFloat()
+
+        val altPoints = pts.map { Offset(xOf(it.timestamp), yAlt(it.altitudeM)) }
+        val fill = Path().apply {
+            moveTo(altPoints.first().x, h)
+            altPoints.forEach { lineTo(it.x, it.y) }
+            lineTo(altPoints.last().x, h)
+            close()
+        }
+        drawPath(fill, altColor.copy(alpha = 0.12f))
+        for (i in 0 until altPoints.size - 1) {
+            drawLine(altColor, altPoints[i], altPoints[i + 1], strokeWidth = 2f, cap = StrokeCap.Round)
+        }
+
+        // HR overlay: own domain 0..max normalized to the full height; gaps (bpm == 0) break the line
+        val hrMax = pts.maxOf { it.bpm }
+        if (hrMax > 0) {
+            val hrPoints = pts.map { Offset(xOf(it.timestamp), h - (it.bpm.toFloat() / hrMax) * h) }
+            for (i in 0 until pts.size - 1) {
+                if (pts[i].bpm > 0 && pts[i + 1].bpm > 0) {
+                    drawLine(HeartRed, hrPoints[i], hrPoints[i + 1], strokeWidth = 2f, cap = StrokeCap.Round)
+                }
+            }
+        }
+    }
+}
+
+// ── HourlyStepChart ────────────────────────────────────────────────────────────
 @Composable
 fun HourlyStepChart(hourlySteps: List<HourlySteps>) {
     val hourMap = hourlySteps.associate { it.hour to it.steps }

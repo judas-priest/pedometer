@@ -17,6 +17,7 @@ import com.pedometer.data.WeightLog
 import com.pedometer.data.StepDatabase
 import com.pedometer.PedometerApp
 import com.pedometer.health.DayStepData
+import com.pedometer.health.ElevationAnalytics
 import com.pedometer.health.IntensityMinutes
 import com.pedometer.health.PhoneStepCounter
 import com.pedometer.health.HealthConnectReader
@@ -97,6 +98,8 @@ data class WatchState(
     val supplementsForDay: List<SupplementIntake> = emptyList(),
     val weightHistory: List<WeightLog> = emptyList(),
     val alcoholDays: Set<String> = emptySet(),
+    // workoutStart → DEM elevation profile; null value = fetch failed («нет данных»)
+    val elevationProfiles: Map<Long, ElevationAnalytics.ElevationProfile?> = emptyMap(),
 )
 
 data class SupplementSlotUi(
@@ -502,6 +505,30 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             )
             updateProfile(userProfile.copy(weightKg = kg.roundToInt()))
             loadWeight()
+        }
+    }
+
+    /**
+     * DEM elevation profile + GAP for one workout. Results are cached in state:
+     * absent key = not loaded yet, null = fetch failed (no internet → «нет данных»).
+     */
+    fun loadElevationProfile(workoutStart: Long) {
+        if (_state.value.elevationProfiles.containsKey(workoutStart)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val profile = try {
+                val dao = StepDatabase.get(getApplication()).stepDao()
+                val points = dao.getGpsPoints(workoutStart)
+                val end = dao.getRecentWorkouts(20).firstOrNull { it.startTime == workoutStart }?.endTime
+                    ?: points.maxOfOrNull { it.timestamp } ?: workoutStart
+                val hr = dao.getHeartRateBetween(workoutStart - 60_000L, end + 60_000L)
+                ElevationAnalytics.fetchElevations(points)?.let {
+                    ElevationAnalytics.buildProfile(points, it, hr)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Elevation profile load failed: ${e.message}")
+                null
+            }
+            _state.update { it.copy(elevationProfiles = it.elevationProfiles + (workoutStart to profile)) }
         }
     }
 

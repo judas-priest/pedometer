@@ -38,6 +38,7 @@ fun DayDetailScreen(
     initialDate: LocalDate = LocalDate.now(),
     onBack: () -> Unit = {},
     onLoadDayInsights: (String) -> Unit = {},
+    onLoadElevation: (Long) -> Unit = {},
 ) {
     var selectedDate by remember { mutableStateOf(initialDate) }
     val context = LocalContext.current
@@ -487,6 +488,9 @@ fun DayDetailScreen(
                                 }
                                 if (w.calories > 0) Text("${w.calories} ккал", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (w.hrAvg > 0) Text("${w.hrAvg} уд/мин", style = MaterialTheme.typography.bodySmall, color = HeartRed)
+                                state.elevationProfiles[w.startTime]?.avgGapKmh?.let { gap ->
+                                    Text("GAP %.1f км/ч".format(gap), style = MaterialTheme.typography.bodySmall, color = StepGreen)
+                                }
                             }
                         }
 
@@ -500,6 +504,40 @@ fun DayDetailScreen(
                         if (gpsPoints.size >= 2) {
                             Spacer(Modifier.height(8.dp))
                             WorkoutMap(gpsPoints = gpsPoints, modifier = Modifier.fillMaxWidth())
+
+                            // Elevation profile (DEM by lat/lon) + GAP — loaded once per workout
+                            LaunchedEffect(w.startTime) { onLoadElevation(w.startTime) }
+                            val elevation = state.elevationProfiles[w.startTime]
+                            Spacer(Modifier.height(8.dp))
+                            Text("Профиль высоты", style = MaterialTheme.typography.titleSmall)
+                            Spacer(Modifier.height(4.dp))
+                            if (elevation != null) {
+                                ElevationChart(
+                                    profile = elevation,
+                                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("↑ ${elevation.ascentM.toInt()} м", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (state.elevationProfiles[w.startTime]?.avgGapKmh != null) {
+                                        Text(
+                                            "GAP %.1f км/ч".format(elevation.avgGapKmh),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = StepGreen,
+                                        )
+                                    }
+                                }
+                            } else if (state.elevationProfiles.containsKey(w.startTime)) {
+                                Text(
+                                    "нет данных",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }

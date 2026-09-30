@@ -185,6 +185,7 @@ class MainActivity : ComponentActivity() {
                                     initialDate = showDayDetail!!,
                                     onBack = { showDayDetail = null },
                                     onLoadDayInsights = { vm.loadDayInsights(it) },
+                                    onLoadElevation = { vm.loadElevationProfile(it) },
                                 )
                             } else {
                                 TodayScreen(
