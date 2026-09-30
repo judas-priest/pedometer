@@ -132,7 +132,7 @@ interface StepDao {
     suspend fun insertSupplementIntake(intake: SupplementIntake)
 
     // Weight log
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWeightLog(w: WeightLog)
 
     @Query("SELECT * FROM weight_log ORDER BY date")

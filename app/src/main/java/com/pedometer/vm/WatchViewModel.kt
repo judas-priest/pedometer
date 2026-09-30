@@ -13,6 +13,7 @@ import com.pedometer.data.DailySteps
 import com.pedometer.data.HourlySteps
 import com.pedometer.data.WorkoutRecord
 import com.pedometer.data.SupplementIntake
+import com.pedometer.data.WeightLog
 import com.pedometer.data.StepDatabase
 import com.pedometer.PedometerApp
 import com.pedometer.health.DayStepData
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 data class WatchState(
     val connectionStatus: ConnectionStatus = ConnectionStatus.Disconnected,
@@ -93,6 +95,8 @@ data class WatchState(
     val supplementSlots: List<SupplementSlotUi> = emptyList(),
     val supplementStreak: Int = 0,
     val supplementsForDay: List<SupplementIntake> = emptyList(),
+    val weightHistory: List<WeightLog> = emptyList(),
+    val alcoholDays: Set<String> = emptySet(),
 )
 
 data class SupplementSlotUi(
@@ -412,6 +416,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             if (alsoFetchFromWatch) repo.refreshFromWatch()
 
             loadSupplementsToday()
+            loadWeight()
         }
     }
 
@@ -451,6 +456,52 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 java.time.LocalDate.now(),
             )
             _state.update { it.copy(supplementSlots = slots, supplementStreak = streak) }
+        }
+    }
+
+    /** Weight journal + alcohol-day markers (evening-HR heuristic). */
+    private fun loadWeight() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val dao = StepDatabase.get(app).stepDao()
+            val history = dao.getWeightLog()
+
+            // Alcohol days: per-local-date averages of evening HR samples (hour >= 20)
+            // over the last 60 days; a day is tagged when its average exceeds the
+            // resting-HR baseline by 15 bpm.
+            val zone = java.time.ZoneId.systemDefault()
+            val since = java.time.LocalDate.now().minusDays(60)
+                .atStartOfDay(zone).toInstant().toEpochMilli()
+            val resting = dao.getRecentHealth(7)
+                .firstOrNull()?.hrResting?.takeIf { it in 35..120 } ?: 60
+            val alcoholDays = dao.getHeartRateBetween(since, Long.MAX_VALUE)
+                .filter {
+                    java.time.Instant.ofEpochMilli(it.timestamp).atZone(zone).hour >= 20
+                }
+                .groupBy {
+                    java.time.Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDate().toString()
+                }
+                .mapValues { (_, samples) -> samples.map { it.bpm }.average().toInt() }
+                .filter { (_, avg) -> HealthInsights.isAlcoholDay(avg, resting) }
+                .keys
+
+            _state.update { it.copy(weightHistory = history, alcoholDays = alcoholDays) }
+        }
+    }
+
+    /** Log today's weight (journal keeps the Double, profile stores rounded Int). */
+    fun saveWeight(kg: Double) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dao = StepDatabase.get(getApplication()).stepDao()
+            dao.insertWeightLog(
+                WeightLog(
+                    date = java.time.LocalDate.now().toString(),
+                    kg = kg,
+                    takenAt = System.currentTimeMillis(),
+                )
+            )
+            updateProfile(userProfile.copy(weightKg = kg.roundToInt()))
+            loadWeight()
         }
     }
 
