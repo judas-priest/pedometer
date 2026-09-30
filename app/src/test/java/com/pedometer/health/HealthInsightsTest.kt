@@ -143,4 +143,26 @@ class HealthInsightsTest {
         assertFalse(r.elevated)
         assertEquals(0, r.today)
     }
+
+    // ── Alcohol-day detector ──
+
+    @Test
+    fun `evening HR well above resting baseline is an alcohol day`() {
+        assertTrue(HealthInsights.isAlcoholDay(eveningHrAvg = 100, restingHr = 58))
+    }
+
+    @Test
+    fun `evening HR below baseline + 15 is not an alcohol day`() {
+        assertFalse(HealthInsights.isAlcoholDay(eveningHrAvg = 90, restingHr = 58))
+    }
+
+    @Test
+    fun `missing resting baseline never tags alcohol`() {
+        assertFalse(HealthInsights.isAlcoholDay(eveningHrAvg = 100, restingHr = 0))
+    }
+
+    @Test
+    fun `no evening HR samples never tags alcohol`() {
+        assertFalse(HealthInsights.isAlcoholDay(eveningHrAvg = 0, restingHr = 58))
+    }
 }

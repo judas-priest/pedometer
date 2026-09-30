@@ -102,4 +102,12 @@ object HealthInsights {
         val delta = today - avg
         return RestingHrInsight(avg, today, delta, delta >= 3)
     }
+
+    /** Day is alcohol-tagged when the evening HR window (20:00-24:00) averages
+     *  >= baseline + 35 bpm (resting-HR based). baselineHr = user's resting HR.
+     *  +35 ≈ normal seated-evening elevation over resting (+10..20) plus the
+     *  alcohol bump (+15); a plain walk in that window scores far higher but is
+     *  excluded upstream by only feeding sedentary evening samples. */
+    fun isAlcoholDay(eveningHrAvg: Int, restingHr: Int): Boolean =
+        eveningHrAvg > 0 && restingHr in 35..120 && eveningHrAvg >= restingHr + 35
 }
