@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class, Supplement::class, SupplementIntake::class],
-    version = 12, // keep in sync with VERSION below
+    entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class, Supplement::class, SupplementIntake::class, WeightLog::class],
+    version = 13, // keep in sync with VERSION below
     exportSchema = true,
 )
 abstract class StepDatabase : RoomDatabase() {
@@ -17,7 +17,7 @@ abstract class StepDatabase : RoomDatabase() {
 
     companion object {
         /** Mirror of the @Database version. Room needs a literal in the annotation. */
-        const val VERSION = 12
+        const val VERSION = 13
 
         /** Oldest schema version any installed build can still be sitting on. */
         const val OLDEST_SUPPORTED = 7
@@ -73,6 +73,17 @@ abstract class StepDatabase : RoomDatabase() {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("UPDATE `supplements` SET `slot` = 'dinner' WHERE `slot` = 'flex'")
                     db.execSQL("UPDATE `supplement_intakes` SET `slot` = 'dinner' WHERE `slot` = 'flex'")
+                }
+            },
+            object : Migration(12, 13) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `weight_log` (" +
+                            "`date` TEXT NOT NULL, " +
+                            "`kg` REAL NOT NULL, " +
+                            "`takenAt` INTEGER NOT NULL, " +
+                            "PRIMARY KEY(`date`))"
+                    )
                 }
             },
         )

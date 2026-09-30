@@ -125,3 +125,10 @@ data class SupplementIntake(
     val slot: String,
     val takenAt: Long,               // epoch millis of the swipe
 )
+
+@Entity(tableName = "weight_log")
+data class WeightLog(
+    @PrimaryKey val date: String,   // "2026-09-30" local
+    val kg: Double,
+    val takenAt: Long,
+)

@@ -130,4 +130,11 @@ interface StepDao {
 
     @Insert
     suspend fun insertSupplementIntake(intake: SupplementIntake)
+
+    // Weight log
+    @Insert
+    suspend fun insertWeightLog(w: WeightLog)
+
+    @Query("SELECT * FROM weight_log ORDER BY date")
+    suspend fun getWeightLog(): List<WeightLog>
 }
