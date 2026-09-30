@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import kotlin.math.ceil
+import kotlin.math.floor
 import androidx.compose.ui.unit.dp
 import com.pedometer.data.HourlySteps
 import com.pedometer.health.DayStepData
@@ -144,6 +146,62 @@ fun HrChart(data: List<Pair<Long, Int>>, modifier: Modifier = Modifier, onSelect
             }
         }
 
+    }
+}
+
+// ── WeightChart ────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeightChart(data: List<Pair<Long, Double>>, alcoholDays: Set<String>, modifier: Modifier = Modifier) {
+    val lineColor = MaterialTheme.colorScheme.primary
+    val fillColor = lineColor.copy(alpha = 0.15f)
+    val gridColor = Color.Gray.copy(alpha = 0.2f)
+
+    Canvas(modifier = modifier) {
+        if (data.size < 2) return@Canvas
+
+        val minTime = data.minOf { it.first }
+        val maxTime = data.maxOf { it.first }
+        val minW = data.minOf { it.second } - 0.5
+        val maxW = data.maxOf { it.second } + 0.5
+        val timeRange = (maxTime - minTime).coerceAtLeast(1)
+        val wRange = (maxW - minW).coerceAtLeast(0.1).toFloat()
+
+        val w = size.width
+        val h = size.height
+
+        // Grid at whole kilograms inside the domain
+        for (kg in ceil(minW).toInt()..floor(maxW).toInt()) {
+            val y = h - ((kg - minW).toFloat() / wRange) * h
+            drawLine(gridColor, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
+        }
+
+        val points = data.map { (t, kg) ->
+            val x = ((t - minTime).toFloat() / timeRange) * w
+            val y = h - ((kg - minW).toFloat() / wRange) * h
+            Offset(x, y)
+        }
+
+        val path = Path().apply {
+            moveTo(points.first().x, h)
+            points.forEach { lineTo(it.x, it.y) }
+            lineTo(points.last().x, h)
+            close()
+        }
+        drawPath(path, fillColor)
+
+        for (i in 0 until points.size - 1) {
+            drawLine(lineColor, points[i], points[i + 1], strokeWidth = 2f, cap = StrokeCap.Round)
+        }
+
+        // Alcohol-day markers: red dots where the point's local date is tagged
+        val zone = java.time.ZoneId.systemDefault()
+        data.forEachIndexed { i, (t, _) ->
+            val day = java.time.Instant.ofEpochMilli(t).atZone(zone).toLocalDate().toString()
+            if (day in alcoholDays) {
+                drawCircle(HeartRed, 6f, points[i])
+            }
+        }
     }
 }
 

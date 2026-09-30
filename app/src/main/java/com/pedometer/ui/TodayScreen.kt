@@ -88,6 +88,8 @@ fun TodayScreen(
             hrData = todayHr,
             hrFull = todayHrFull,
             healthHistory = state.healthHistory,
+            weightData = state.weightHistory.map { it.takenAt to it.kg },
+            alcoholDays = state.alcoholDays,
             onBack = { showMetric = "" },
         )
     } else {
@@ -272,6 +274,51 @@ fun TodayScreen(
                 streak = state.supplementStreak,
                 onSlotTap = { onSupplementSlotTap(it) },
             )
+
+            // 9. Weight
+            val prevWeight = state.weightHistory.dropLast(1).lastOrNull()
+            val lastWeight = state.weightHistory.lastOrNull()
+            val weightDelta = if (lastWeight != null && prevWeight != null) lastWeight.kg - prevWeight.kg else null
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showMetric = "weight" },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            "Вес",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (weightDelta != null) {
+                            Text(
+                                "%+.1f кг".format(weightDelta),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            "${state.profile.weightKg}",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StepGreen,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "кг",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
     }
     } // else (not showing metric detail)
@@ -283,6 +330,8 @@ private fun MetricDetailScreen(
     hrData: List<Pair<Long, Int>>,
     hrFull: List<Pair<Long, Int>>,
     healthHistory: List<DailyHealth>,
+    weightData: List<Pair<Long, Double>>,
+    alcoholDays: Set<String>,
     onBack: () -> Unit,
 ) {
     Column(
@@ -304,6 +353,7 @@ private fun MetricDetailScreen(
                     "spo2" -> "SpO2"
                     "stress" -> "Стресс"
                     "resting" -> "Пульс покоя"
+                    "weight" -> "Вес"
                     else -> ""
                 },
                 style = MaterialTheme.typography.titleLarge,
@@ -371,6 +421,32 @@ private fun MetricDetailScreen(
                     Spacer(Modifier.height(16.dp))
                     if (restData.isNotEmpty()) {
                         HealthBarChart("", restData, { it.hrResting }, HeartRed, "уд/мин")
+                    } else {
+                        Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                "weight" -> {
+                    Spacer(Modifier.height(16.dp))
+                    if (weightData.size >= 2) {
+                        Text("Журнал", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                WeightChart(
+                                    data = weightData,
+                                    alcoholDays = alcoholDays,
+                                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                                )
+                                if (alcoholDays.isNotEmpty()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "• вечер с повышенным пульсом",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = HeartRed,
+                                    )
+                                }
+                            }
+                        }
                     } else {
                         Text("Нет данных", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
