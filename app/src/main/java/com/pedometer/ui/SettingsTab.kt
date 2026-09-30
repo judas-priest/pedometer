@@ -38,6 +38,7 @@ fun SettingsTab(
     onOpenDebug: () -> Unit = {},
     onOpenNotificationApps: () -> Unit = {},
     onOpenSupplements: () -> Unit = {},
+    onWeightSave: (Double) -> Unit = {},
 ) {
     val context = LocalContext.current
     val profile = state.profile
@@ -176,12 +177,22 @@ fun SettingsTab(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = weightText,
-                    onValueChange = { weightText = it; it.toIntOrNull()?.let { w -> onProfileChange(profile.copy(weightKg = w)) } },
-                    label = { Text("Вес (кг)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = weightText,
+                        onValueChange = { weightText = it; it.toIntOrNull()?.let { w -> onProfileChange(profile.copy(weightKg = w)) } },
+                        label = { Text("Вес (кг)") }, modifier = Modifier.weight(1f), singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    Button(
+                        onClick = { weightText.toDoubleOrNull()?.let(onWeightSave) },
+                        enabled = weightText.toDoubleOrNull()?.let { it in 40.0..250.0 } == true,
+                    ) { Text("Занести") }
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = profile.age.let { if (it > 0) it.toString() else "" },

@@ -220,6 +220,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenDebug = { showDebug = true },
                                 onOpenNotificationApps = { showNotificationApps = true },
                                 onOpenSupplements = { showSuppEditor = true },
+                                onWeightSave = { vm.saveWeight(it) },
                             )
                         }
                     }
