@@ -1,0 +1,175 @@
+package com.pedometer.health
+
+import android.util.Log
+import com.pedometer.data.GpsPointRecord
+import com.pedometer.data.HeartRateRecord
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.pow
+
+/**
+ * Post-hoc elevation profile + Minetti GAP for GPS workouts (Strava DEM-correction
+ * method for watch models without a barometer).
+ *
+ * Altitudes come from the Open-Meteo Elevation API (SRTM 90 m grid) by lat/lon —
+ * `gps_points` has no altitude column. GAP = gradient-adjusted pace: the flat speed
+ * that would cost the same energy per second (Minetti 2002 energy-cost polynomial).
+ */
+object ElevationAnalytics {
+    private const val TAG = "ElevationAnalytics"
+    private const val BATCH = 100 // Open-Meteo accepts up to 100 coordinates per request
+
+    /** Minetti validity range for the cost polynomial (|gradient| <= 45%). */
+    private const val MAX_SLOPE = 0.45
+
+    /** Flat-walking energy cost, J/(kg·m) — C(0) of the Minetti polynomial. */
+    const val FLAT_COST = 3.6
+
+    // Minetti 2002: energy cost J/kg/m at slope i (rise/run):
+    // 155.4·i⁵ − 30.4·i⁴ − 43.3·i³ + 46.3·i² + 19.5·i + 3.6
+    fun minettiCost(slopeRaw: Double): Double {
+        val slope = slopeRaw.coerceIn(-MAX_SLOPE, MAX_SLOPE)
+        return 155.4 * slope.pow(5) - 30.4 * slope.pow(4) - 43.3 * slope.pow(3) +
+            46.3 * slope.pow(2) + 19.5 * slope + FLAT_COST
+    }
+
+    /** GAP: flat-equivalent speed — uphill costs more per km, so the SAME effort
+     *  maps to a FASTER flat speed. v_gap = v * C(slope)/C(0). (Strava convention:
+     *  uphill GAP pace is faster than actual.) */
+    fun gapKmh(speedKmh: Double, slope: Double): Double =
+        if (slope == 0.0) speedKmh else speedKmh * minettiCost(slope) / FLAT_COST
+
+    /** Moving-average smoothing of noisy DEM/GPS altitude, window ~5 points (~1 min).
+     *  Centered window, clipped at the series ends; short series pass through. */
+    fun smooth(altitudes: List<Double>, window: Int = 5): List<Double> {
+        if (altitudes.size < 2 || window <= 1) return altitudes
+        val half = window / 2
+        return altitudes.indices.map { i ->
+            val from = (i - half).coerceAtLeast(0)
+            val to = (i + half).coerceAtMost(altitudes.size - 1)
+            var sum = 0.0
+            for (j in from..to) sum += altitudes[j]
+            sum / (to - from + 1)
+        }
+    }
+
+    /**
+     * DEM altitudes for the points, batched 100 coordinates per request.
+     * Returns null on any failure (no internet, bad response) — UI shows «нет данных».
+     */
+    suspend fun fetchElevations(points: List<GpsPointRecord>): List<Double>? {
+        if (points.isEmpty()) return null
+        val altitudes = ArrayList<Double>(points.size)
+        return try {
+            for (chunk in points.chunked(BATCH)) {
+                val lats = chunk.joinToString(",") { "%.6f".format(it.lat) }
+                val lons = chunk.joinToString(",") { "%.6f".format(it.lon) }
+                val url = URL("https://api.open-meteo.com/v1/elevation?latitude=$lats&longitude=$lons")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                    .getJSONArray("elevation")
+                conn.disconnect()
+                if (json.length() != chunk.size) {
+                    Log.w(TAG, "Elevation API returned ${json.length()} of ${chunk.size}")
+                    return null
+                }
+                for (i in 0 until json.length()) altitudes.add(json.getDouble(i))
+            }
+            altitudes
+        } catch (e: Exception) {
+            Log.w(TAG, "Elevation fetch failed: ${e.message}")
+            null
+        }
+    }
+
+    // ── Pure profile assembly (network injected for testability) ─────────────────
+
+    data class ProfilePoint(
+        val timestamp: Long,
+        val altitudeM: Double,   // smoothed
+        val slope: Double,
+        val gapKmh: Double,      // from the recorded speed
+        val bpm: Int,            // 0 = no HR sample within ±60 s
+    )
+
+    data class ElevationProfile(
+        val points: List<ProfilePoint>,
+        val ascentM: Double,      // sum of positive smoothed deltas
+        val avgGapKmh: Double?,   // mean GAP over moving points; null if no usable speeds
+    )
+
+    /**
+     * Builds the per-point profile from raw gps_points + DEM altitudes + HR samples.
+     * HR is aligned by nearest sample within ±60 s (watch samples are ~1 min apart).
+     */
+    fun buildProfile(
+        points: List<GpsPointRecord>,
+        altitudes: List<Double>,
+        hrSamples: List<HeartRateRecord>,
+    ): ElevationProfile? {
+        if (points.size < 2 || points.size != altitudes.size) return null
+        val sorted = points.sortedBy { it.timestamp }
+        val smoothed = smooth(altitudes)
+
+        val hrSorted = hrSamples.sortedBy { it.timestamp }
+        val out = ArrayList<ProfilePoint>(sorted.size)
+        var ascent = 0.0
+        var gapSum = 0.0
+        var gapCount = 0
+        for (i in sorted.indices) {
+            val slope = if (i == 0) 0.0 else slopeBetween(sorted[i - 1], sorted[i], smoothed[i - 1], smoothed[i])
+            if (i > 0) {
+                val rise = smoothed[i] - smoothed[i - 1]
+                if (rise > 0) ascent += rise
+            }
+            val speedKmh = sorted[i].speed * 3.6
+            if (speedKmh > 1.0) {
+                gapSum += gapKmh(speedKmh, slope)
+                gapCount++
+            }
+            out.add(
+                ProfilePoint(
+                    timestamp = sorted[i].timestamp,
+                    altitudeM = smoothed[i],
+                    slope = slope,
+                    gapKmh = if (speedKmh > 1.0) gapKmh(speedKmh, slope) else 0.0,
+                    bpm = nearestBpm(sorted[i].timestamp, hrSorted),
+                ),
+            )
+        }
+        return ElevationProfile(
+            points = out,
+            ascentM = ascent,
+            avgGapKmh = if (gapCount == 0) null else gapSum / gapCount,
+        )
+    }
+
+    /** rise/run between two consecutive points; ~0 when points overlap (<1 m apart). */
+    private fun slopeBetween(a: GpsPointRecord, b: GpsPointRecord, altA: Double, altB: Double): Double {
+        val dLat = (b.lat - a.lat) * 111_320.0
+        val dLon = (b.lon - a.lon) * 111_320.0 * cos(Math.toRadians((a.lat + b.lat) / 2))
+        val run = Math.hypot(dLat, dLon)
+        if (run < 1.0) return 0.0
+        return (altB - altA) / run
+    }
+
+    private fun nearestBpm(ts: Long, hrSorted: List<HeartRateRecord>): Int {
+        if (hrSorted.isEmpty()) return 0
+        var best: HeartRateRecord? = null
+        var bestDiff = Long.MAX_VALUE
+        for (r in hrSorted) {
+            val d = abs(r.timestamp - ts)
+            if (d < bestDiff) {
+                bestDiff = d
+                best = r
+                if (d == 0L) break
+            }
+        }
+        return if (bestDiff <= 60_000L) best!!.bpm else 0
+    }
+}
