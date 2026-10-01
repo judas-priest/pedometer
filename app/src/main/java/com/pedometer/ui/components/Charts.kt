@@ -264,8 +264,9 @@ fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationPro
             drawLine(gridColor, Offset(0f, h * frac), Offset(w, h * frac), strokeWidth = 1f)
         }
 
-        // Altitude: filled grey line over 80% of the height (HR rides in the top band)
-        fun yAlt(a: Double): Float = h - ((a - minAlt) / altRange * h * 0.8f).toFloat()
+        // Two lanes: HR in the top 35%, altitude in the bottom 55% — 10% gap,
+        // so red spikes never climb over the altitude line and vice versa
+        fun yAlt(a: Double): Float = h - ((a - minAlt) / altRange * h * 0.55f).toFloat()
 
         val altPoints = pts.map { Offset(xOf(it.timestamp), yAlt(it.altitudeM)) }
         val fill = Path().apply {
@@ -282,7 +283,7 @@ fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationPro
         // HR overlay: own domain 0..max normalized to the full height; gaps (bpm == 0) break the line
         val hrMax = pts.maxOf { it.bpm }
         if (hrMax > 0) {
-            val hrPoints = pts.map { Offset(xOf(it.timestamp), h - (it.bpm.toFloat() / hrMax) * h) }
+            val hrPoints = pts.map { Offset(xOf(it.timestamp), h - (it.bpm.toFloat() / hrMax) * h * 0.35f) }
             for (i in 0 until pts.size - 1) {
                 if (pts[i].bpm > 0 && pts[i + 1].bpm > 0) {
                     drawLine(HeartRed, hrPoints[i], hrPoints[i + 1], strokeWidth = 2f, cap = StrokeCap.Round)
@@ -296,7 +297,7 @@ fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationPro
             val xSel = xOf(sel.timestamp)
             drawLine(Color.Gray.copy(alpha = 0.6f), Offset(xSel, 0f), Offset(xSel, h), strokeWidth = 2f)
             drawCircle(Color.Gray, 5f, Offset(xSel, yAlt(sel.altitudeM)))
-            if (sel.bpm > 0) drawCircle(HeartRed, 5f, Offset(xSel, h - (sel.bpm.toFloat() / hrMax) * h))
+            if (sel.bpm > 0) drawCircle(HeartRed, 5f, Offset(xSel, h - (sel.bpm.toFloat() / hrMax) * h * 0.35f))
         }
         }
     }
@@ -375,7 +376,7 @@ fun ElevationDetailDialog(
                     RouteScrubMap(
                         geoPoints = remember(gpsPoints) { gpsPoints.map { GeoPoint(it.lat, it.lon) } },
                         markerPoint = selGps?.let { GeoPoint(it.lat, it.lon) },
-                        modifier = Modifier.fillMaxWidth().weight(1.15f),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
                     )
                     Spacer(Modifier.height(8.dp))
                     ElevationChart(
