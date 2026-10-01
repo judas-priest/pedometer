@@ -19,6 +19,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 
 @Composable
@@ -142,6 +143,46 @@ private fun OsmMapView(
                 mapView.zoomToBoundingBox(box.increaseByScale(1.3f), false)
             }
             mapView.invalidate()
+        },
+    )
+}
+
+/**
+ * Route polyline with a single position-tracking marker for chart scrubbing.
+ * Unlike OsmMapView the viewport is set ONCE in factory — update() only moves
+ * the marker, so dragging the chart never re-zooms the map.
+ */
+@Composable
+fun RouteScrubMap(geoPoints: List<GeoPoint>, markerPoint: GeoPoint?, modifier: Modifier = Modifier) {
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            MapView(ctx).apply {
+                setTileSource(TileSourceFactory.MAPNIK)
+                setMultiTouchControls(true)
+                zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
+                overlays.add(Polyline().apply {
+                    setPoints(geoPoints)
+                    outlinePaint.color = android.graphics.Color.parseColor("#E53935")
+                    outlinePaint.strokeWidth = 8f
+                    outlinePaint.isAntiAlias = true
+                })
+                overlays.add(Marker(this).apply {
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    isEnabled = false   // hidden until the first scrub
+                })
+                if (geoPoints.size >= 2) {
+                    post { zoomToBoundingBox(BoundingBox.fromGeoPoints(geoPoints).increaseByScale(1.3f), false) }
+                }
+            }
+        },
+        update = { mv ->
+            val marker = mv.overlays.filterIsInstance<Marker>().firstOrNull() ?: return@AndroidView
+            if (markerPoint != null) {
+                marker.isEnabled = true
+                marker.position = markerPoint
+            }
+            mv.invalidate()
         },
     )
 }
