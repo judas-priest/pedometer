@@ -22,7 +22,7 @@ import kotlin.math.pow
 object ElevationAnalytics {
     private const val TAG = "ElevationAnalytics"
     private const val BATCH = 100
-    private const val OPEN_ELEVATION_KEY = "807015d7-998d-4522-9b7e-7acb97daf883" // Open-Meteo accepts up to 100 coordinates per request
+    private const val METEO_BATCH = 25
 
     /** Minetti validity range for the cost polynomial (|gradient| <= 45%). */
     private const val MAX_SLOPE = 0.45
@@ -60,8 +60,11 @@ object ElevationAnalytics {
 
     /**
      * DEM altitudes for the points. Providers in fallback order:
-     * 1) Open-Elevation POST (fast, but rate-limited free demo),
-     * 2) OpenTopoData GET (stable, 1 req/sec — chunk fetch is throttled).
+     * 1) OpenTopoData GET — reachable from RU, no coord quota; dataset is a PATH
+     *    segment (/v1/srtm90m), NOT a query param; 1 req/sec.
+     * 2) Open-Elevation POST — body MUST be `{"locations":[...]}`; a bare array
+     *    (the old format) now gets 400 invalid_locations even for valid points.
+     * 3) Open-Meteo GET in sub-batches of 25 (blocked from some RU networks).
      * Returns null on any failure (no internet, bad response) — UI shows «нет данных».
      */
     suspend fun fetchElevations(points: List<GpsPointRecord>): List<Double>? {
@@ -71,16 +74,29 @@ object ElevationAnalytics {
             it.lat.isFinite() && it.lon.isFinite() && abs(it.lat) <= 90 && abs(it.lon) <= 180
         }.distinctBy { "%.6f|%.6f".format(java.util.Locale.US, it.lat, it.lon) }
         if (clean.isEmpty()) return null
-        val altitudes = ArrayList<Double>(points.size)
-        val chunks = clean.chunked(BATCH)
-        for (provider in listOf("open-elevation-keyed", "opentopodata", "open-meteo")) {
-            altitudes.clear()
+        for (provider in listOf("opentopodata", "open-elevation", "open-meteo")) {
+            val altitudes = ArrayList<Double>(clean.size)
             try {
                 var failed = false
+                val batch = if (provider == "open-meteo") METEO_BATCH else BATCH
+                val chunks = clean.chunked(batch)
                 for ((index, chunk) in chunks.withIndex()) {
                     val json = when (provider) {
-                        "open-elevation-keyed", "open-elevation" -> {
-                            if (provider == "open-elevation-keyed" && index > 0) delay(1500) // per-burst limit
+                        "opentopodata" -> {
+                            if (index > 0) delay(1100) // 1 req/sec limit
+                            val locs = chunk.joinToString("%7C") {
+                                String.format(java.util.Locale.US, "%.6f,%.6f", it.lat, it.lon)
+                            }
+                            val conn = URL("https://api.opentopodata.org/v1/srtm90m?locations=$locs")
+                                .openConnection() as HttpURLConnection
+                            conn.connectTimeout = 10_000
+                            conn.readTimeout = 15_000
+                            val text = conn.inputStream.bufferedReader().readText()
+                            conn.disconnect()
+                            JSONObject(text).getJSONArray("results")
+                        }
+                        "open-elevation" -> {
+                            if (index > 0) delay(1500) // per-burst limit
                             val body = chunk.joinToString(",") {
                                 String.format(java.util.Locale.US, "{\"latitude\":%.6f,\"longitude\":%.6f}", it.lat, it.lon)
                             }
@@ -90,10 +106,9 @@ object ElevationAnalytics {
                             conn.readTimeout = 15_000
                             conn.doOutput = true
                             conn.setRequestProperty("Content-Type", "application/json")
-                            conn.setRequestProperty("X-API-Key", OPEN_ELEVATION_KEY)
                             Log.w(TAG, "REQ body head: ${body.take(120)}")
-                            conn.outputStream.use { it.write("[$body]".toByteArray()) }
-                            val code = (conn as? HttpURLConnection)?.responseCode ?: 200
+                            conn.outputStream.use { it.write("{\"locations\":[$body]}".toByteArray()) }
+                            val code = conn.responseCode
                             if (code !in 200..299) {
                                 val err = conn.errorStream?.bufferedReader()?.readText()?.take(200)
                                 throw java.io.IOException("HTTP $code: $err")
@@ -102,7 +117,8 @@ object ElevationAnalytics {
                             conn.disconnect()
                             JSONObject(text).getJSONArray("results")
                         }
-                        "open-elevation" -> {
+                        else -> {
+                            if (index > 0) delay(300)
                             val lats = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lat) }
                             val lons = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lon) }
                             val conn = URL("https://api.open-meteo.com/v1/elevation?latitude=$lats&longitude=$lons")
@@ -112,41 +128,6 @@ object ElevationAnalytics {
                             val text = conn.inputStream.bufferedReader().readText()
                             conn.disconnect()
                             JSONObject(text).getJSONArray("elevation")
-                        }
-                        "opentopodata" -> {
-                            if (index > 0) delay(1100) // 1 req/sec limit
-                            val locs = chunk.joinToString("%7C") {
-                                String.format(java.util.Locale.US, "%.6f,%.6f", it.lat, it.lon)
-                            }
-                            val conn = URL("https://api.opentopodata.org/v1/elevation?locations=$locs&datasets=srtm90m")
-                                .openConnection() as HttpURLConnection
-                            conn.connectTimeout = 10_000
-                            conn.readTimeout = 15_000
-                            val text = conn.inputStream.bufferedReader().readText()
-                            conn.disconnect()
-                            JSONObject(text).getJSONArray("results")
-                        }
-                        else -> {
-                            val body = chunk.joinToString(",") {
-                                String.format(java.util.Locale.US, "{\"latitude\":%.6f,\"longitude\":%.6f}", it.lat, it.lon)
-                            }
-                            val conn = URL("https://api.open-elevation.com/api/v1/lookup").openConnection() as HttpURLConnection
-                            conn.requestMethod = "POST"
-                            conn.connectTimeout = 10_000
-                            conn.readTimeout = 15_000
-                            conn.doOutput = true
-                            conn.setRequestProperty("Content-Type", "application/json")
-                            conn.setRequestProperty("X-API-Key", OPEN_ELEVATION_KEY)
-                            Log.w(TAG, "REQ body head: ${body.take(120)}")
-                            conn.outputStream.use { it.write("[$body]".toByteArray()) }
-                            val code = (conn as? HttpURLConnection)?.responseCode ?: 200
-                            if (code !in 200..299) {
-                                val err = conn.errorStream?.bufferedReader()?.readText()?.take(200)
-                                throw java.io.IOException("HTTP $code: $err")
-                            }
-                            val text = conn.inputStream.bufferedReader().readText()
-                            conn.disconnect()
-                            JSONObject(text).getJSONArray("results")
                         }
                     }
                     if (json.length() != chunk.size) {

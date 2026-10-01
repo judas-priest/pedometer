@@ -525,7 +525,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                     it.lat.isFinite() && it.lon.isFinite() && kotlin.math.abs(it.lat) <= 90 && kotlin.math.abs(it.lon) <= 180
                 }.distinctBy { "%.6f|%.6f".format(java.util.Locale.US, it.lat, it.lon) }
                 ElevationAnalytics.fetchElevations(cleanPts)?.let {
-                    ElevationAnalytics.buildProfile(points, it, hr)
+                    // altitudes belong to cleanPts (deduped); buildProfile needs equal sizes
+                    ElevationAnalytics.buildProfile(cleanPts, it, hr)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Elevation profile load failed: ${e.message}")
