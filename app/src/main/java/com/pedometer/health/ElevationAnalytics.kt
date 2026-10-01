@@ -65,9 +65,14 @@ object ElevationAnalytics {
      * Returns null on any failure (no internet, bad response) — UI shows «нет данных».
      */
     suspend fun fetchElevations(points: List<GpsPointRecord>): List<Double>? {
-        if (points.isEmpty()) return null
+        // GPS relay can emit NaN/garbage coords — one invalid pair makes the whole
+        // batch 400 (invalid_locations). Sanitize before batching.
+        val clean = points.filter {
+            it.lat.isFinite() && it.lon.isFinite() && abs(it.lat) <= 90 && abs(it.lon) <= 180
+        }
+        if (clean.isEmpty()) return null
         val altitudes = ArrayList<Double>(points.size)
-        val chunks = points.chunked(BATCH)
+        val chunks = clean.chunked(BATCH)
         for (provider in listOf("open-elevation-keyed", "opentopodata", "open-meteo")) {
             altitudes.clear()
             try {
@@ -86,9 +91,13 @@ object ElevationAnalytics {
                             conn.doOutput = true
                             conn.setRequestProperty("Content-Type", "application/json")
                             conn.setRequestProperty("X-API-Key", OPEN_ELEVATION_KEY)
+                            Log.w(TAG, "REQ body head: ${body.take(120)}")
                             conn.outputStream.use { it.write("[$body]".toByteArray()) }
                             val code = (conn as? HttpURLConnection)?.responseCode ?: 200
-                            if (code !in 200..299) throw java.io.IOException("HTTP $code")
+                            if (code !in 200..299) {
+                                val err = conn.errorStream?.bufferedReader()?.readText()?.take(200)
+                                throw java.io.IOException("HTTP $code: $err")
+                            }
                             val text = conn.inputStream.bufferedReader().readText()
                             conn.disconnect()
                             JSONObject(text).getJSONArray("results")
@@ -128,9 +137,13 @@ object ElevationAnalytics {
                             conn.doOutput = true
                             conn.setRequestProperty("Content-Type", "application/json")
                             conn.setRequestProperty("X-API-Key", OPEN_ELEVATION_KEY)
+                            Log.w(TAG, "REQ body head: ${body.take(120)}")
                             conn.outputStream.use { it.write("[$body]".toByteArray()) }
                             val code = (conn as? HttpURLConnection)?.responseCode ?: 200
-                            if (code !in 200..299) throw java.io.IOException("HTTP $code")
+                            if (code !in 200..299) {
+                                val err = conn.errorStream?.bufferedReader()?.readText()?.take(200)
+                                throw java.io.IOException("HTTP $code: $err")
+                            }
                             val text = conn.inputStream.bufferedReader().readText()
                             conn.disconnect()
                             JSONObject(text).getJSONArray("results")
@@ -148,7 +161,7 @@ object ElevationAnalytics {
                         )
                     }
                 }
-                if (!failed && altitudes.size == points.size) return altitudes
+                if (!failed && altitudes.size == clean.size) return altitudes
                 Log.w(TAG, "Provider $provider failed, falling back")
             } catch (e: Exception) {
                 Log.w(TAG, "Provider $provider error: ${e.javaClass.simpleName}: ${e.message}")

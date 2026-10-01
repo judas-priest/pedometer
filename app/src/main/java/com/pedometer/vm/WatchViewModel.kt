@@ -521,7 +521,10 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val end = dao.getRecentWorkouts(20).firstOrNull { it.startTime == workoutStart }?.endTime
                     ?: points.maxOfOrNull { it.timestamp } ?: workoutStart
                 val hr = dao.getHeartRateBetween(workoutStart - 60_000L, end + 60_000L)
-                ElevationAnalytics.fetchElevations(points)?.let {
+                val cleanPts = points.filter {
+                    it.lat.isFinite() && it.lon.isFinite() && kotlin.math.abs(it.lat) <= 90 && kotlin.math.abs(it.lon) <= 180
+                }
+                ElevationAnalytics.fetchElevations(cleanPts)?.let {
                     ElevationAnalytics.buildProfile(points, it, hr)
                 }
             } catch (e: Exception) {
