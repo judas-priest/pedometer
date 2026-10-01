@@ -1,6 +1,7 @@
 package com.pedometer.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -511,13 +512,14 @@ fun DayDetailScreen(
                             LaunchedEffect(w.startTime) { onLoadElevation(w.startTime) }
                             val elevation = state.elevationProfiles[w.startTime]
                             val isLoading = w.startTime in state.elevationLoading
+                            var showElevDetail by remember(w.startTime) { mutableStateOf(false) }
                             Spacer(Modifier.height(8.dp))
                             Text("Профиль высоты", style = MaterialTheme.typography.titleSmall)
                             Spacer(Modifier.height(4.dp))
                             if (elevation != null) {
                                 ElevationChart(
                                     profile = elevation,
-                                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                                    modifier = Modifier.fillMaxWidth().height(100.dp).clickable { showElevDetail = true },
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Row(
@@ -533,6 +535,9 @@ fun DayDetailScreen(
                                             color = StepGreen,
                                         )
                                     }
+                                }
+                                if (showElevDetail) {
+                                    ElevationDetailDialog(profile = elevation) { showElevDetail = false }
                                 }
                             } else if (isLoading) {
                                 ElevationChartSkeleton(

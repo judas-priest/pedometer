@@ -8,8 +8,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -215,11 +219,29 @@ fun WeightChart(data: List<Pair<Long, Double>>, alcoholDays: Set<String>, modifi
 // ── ElevationChart — smoothed DEM altitude + HR overlay for a workout ─────────
 
 @Composable
-fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationProfile, modifier: Modifier = Modifier) {
+fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationProfile, modifier: Modifier = Modifier, showCrosshair: Boolean = false) {
     val altColor = Color.Gray
     val gridColor = Color.Gray.copy(alpha = 0.2f)
 
-    Canvas(modifier = modifier) {
+    var selectedIdx by remember { mutableStateOf(-1) }
+    Box(modifier) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (showCrosshair) {
+                        Modifier.pointerInput(profile) {
+                            detectTapGestures { offset ->
+                                val pts = profile.points
+                                if (pts.size < 2) return@detectTapGestures
+                                val t = pts.first().timestamp + ((offset.x / size.width) *
+                                    (pts.last().timestamp - pts.first().timestamp)).toLong()
+                                selectedIdx = pts.indices.minBy { kotlin.math.abs(pts[it].timestamp - t) }
+                            }
+                        }
+                    } else Modifier
+                ),
+        ) {
         val pts = profile.points
         if (pts.size < 2) return@Canvas
 
@@ -261,6 +283,36 @@ fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationPro
                 }
             }
         }
+
+        // Crosshair on the selected point
+        if (selectedIdx >= 0 && selectedIdx < pts.size) {
+            val sel = pts[selectedIdx]
+            val xSel = xOf(sel.timestamp)
+            drawLine(Color.Gray.copy(alpha = 0.6f), Offset(xSel, 0f), Offset(xSel, h), strokeWidth = 2f)
+            drawCircle(Color.Gray, 5f, Offset(xSel, yAlt(sel.altitudeM)))
+            if (sel.bpm > 0) drawCircle(HeartRed, 5f, Offset(xSel, h - (sel.bpm.toFloat() / hrMax) * h))
+        }
+        }
+
+        if (showCrosshair && selectedIdx >= 0 && selectedIdx < profile.points.size) {
+            val p = profile.points[selectedIdx]
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+            ) {
+                Text(
+                    "%s  ·  %d м  ·  %d уд/мин  ·  %.1f км/ч".format(
+                        java.time.Instant.ofEpochMilli(p.timestamp)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                        p.altitudeM.toInt(), p.bpm, p.gapKmh,
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                )
+            }
+        }
     }
 }
 
@@ -285,6 +337,44 @@ fun ElevationChartSkeleton(modifier: Modifier = Modifier) {
         path.close()
         drawPath(path, Color.Gray)
         drawLine(Color.Gray, Offset(0f, h), Offset(size.width, h), strokeWidth = 2f)
+    }
+}
+
+/** Fullscreen elevation detail (WorkoutMap's Dialog pattern) with tap crosshair. */
+@Composable
+fun ElevationDetailDialog(profile: com.pedometer.health.ElevationAnalytics.ElevationProfile, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Box(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().padding(16.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("Профиль высоты", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        if (profile.avgGapKmh != null) {
+                            Text(
+                                "↑ ${profile.ascentM.toInt()} м · По равнине %.1f км/ч".format(profile.avgGapKmh),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StepGreen,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    ElevationChart(profile = profile, modifier = Modifier.fillMaxWidth().weight(1f), showCrosshair = true)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Серый — высота, красный — пульс. Нажми на график, чтобы увидеть точку.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                    ),
+                ) { Icon(Icons.Default.Close, "Закрыть") }
+            }
+        }
     }
 }
 
