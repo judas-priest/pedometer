@@ -65,8 +65,10 @@ object ElevationAnalytics {
         val altitudes = ArrayList<Double>(points.size)
         return try {
             for (chunk in points.chunked(BATCH)) {
-                val lats = chunk.joinToString(",") { "%.6f".format(it.lat) }
-                val lons = chunk.joinToString(",") { "%.6f".format(it.lon) }
+                // Locale.US — "%.6f".format() in ru locale emits a COMMA decimal
+                // separator, which destroys the coordinate list in the URL.
+                val lats = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lat) }
+                val lons = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lon) }
                 val url = URL("https://api.open-meteo.com/v1/elevation?latitude=$lats&longitude=$lons")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = 10_000
