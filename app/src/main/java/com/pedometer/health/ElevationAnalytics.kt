@@ -69,7 +69,7 @@ object ElevationAnalytics {
         // batch 400 (invalid_locations). Sanitize before batching.
         val clean = points.filter {
             it.lat.isFinite() && it.lon.isFinite() && abs(it.lat) <= 90 && abs(it.lon) <= 180
-        }
+        }.distinctBy { "%.6f|%.6f".format(java.util.Locale.US, it.lat, it.lon) }
         if (clean.isEmpty()) return null
         val altitudes = ArrayList<Double>(points.size)
         val chunks = clean.chunked(BATCH)

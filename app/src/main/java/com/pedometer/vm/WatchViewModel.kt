@@ -523,7 +523,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val hr = dao.getHeartRateBetween(workoutStart - 60_000L, end + 60_000L)
                 val cleanPts = points.filter {
                     it.lat.isFinite() && it.lon.isFinite() && kotlin.math.abs(it.lat) <= 90 && kotlin.math.abs(it.lon) <= 180
-                }
+                }.distinctBy { "%.6f|%.6f".format(java.util.Locale.US, it.lat, it.lon) }
                 ElevationAnalytics.fetchElevations(cleanPts)?.let {
                     ElevationAnalytics.buildProfile(points, it, hr)
                 }
