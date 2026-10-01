@@ -31,8 +31,10 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.sin
 import androidx.compose.ui.unit.dp
+import com.pedometer.data.GpsPointRecord
 import com.pedometer.data.HourlySteps
 import com.pedometer.health.DayStepData
+import org.osmdroid.util.GeoPoint
 
 // ── Shared Colors ──────────────────────────────────────────────────────────────
 
@@ -324,9 +326,17 @@ fun ElevationChartSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
-/** Fullscreen elevation detail (WorkoutMap's Dialog pattern) with tap crosshair. */
+/** Fullscreen analysis: route map (scrub-follow marker) over elevation+HR chart. */
 @Composable
-fun ElevationDetailDialog(profile: com.pedometer.health.ElevationAnalytics.ElevationProfile, onDismiss: () -> Unit) {
+fun ElevationDetailDialog(
+    profile: com.pedometer.health.ElevationAnalytics.ElevationProfile,
+    gpsPoints: List<com.pedometer.data.GpsPointRecord>,
+    onDismiss: () -> Unit,
+) {
+    var selectedIdx by remember { mutableStateOf(-1) }
+    val sel = profile.points.getOrNull(selectedIdx)
+    val selGps = sel?.let { s -> gpsPoints.minByOrNull { kotlin.math.abs(it.timestamp - s.timestamp) } }
+
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(Modifier.fillMaxSize()) {
@@ -341,11 +351,43 @@ fun ElevationDetailDialog(profile: com.pedometer.health.ElevationAnalytics.Eleva
                             )
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    ElevationChart(profile = profile, modifier = Modifier.fillMaxWidth().weight(1f), showCrosshair = true)
+                    Spacer(Modifier.height(8.dp))
+                    // Instant values for the scrubbed point (visible once the user scrubs)
+                    if (sel != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            shape = MaterialTheme.shapes.small,
+                        ) {
+                            Text(
+                                "%s  ·  %d м  ·  %d уд/мин  ·  %.1f км/ч  ·  %+d%%".format(
+                                    java.time.Instant.ofEpochMilli(sel.timestamp)
+                                        .atZone(java.time.ZoneId.systemDefault())
+                                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                                    sel.altitudeM.toInt(), sel.bpm, sel.speedKmh, (sel.slope * 100).toInt(),
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    RouteScrubMap(
+                        geoPoints = remember(gpsPoints) { gpsPoints.map { GeoPoint(it.lat, it.lon) } },
+                        markerPoint = selGps?.let { GeoPoint(it.lat, it.lon) },
+                        modifier = Modifier.fillMaxWidth().weight(1.15f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ElevationChart(
+                        profile = profile,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        showCrosshair = true,
+                        selectedIdx = selectedIdx,
+                        onSelect = { selectedIdx = it },
+                    )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Серый — высота, красный — пульс. Нажми на график, чтобы увидеть точку.",
+                        "Серый — высота, красный — пульс. Веди пальцем по графику — точка на карте показывает, где ты был.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

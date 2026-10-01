@@ -534,7 +534,7 @@ fun DayDetailScreen(
                                     }
                                 }
                                 if (showElevDetail) {
-                                    ElevationDetailDialog(profile = elevation) { showElevDetail = false }
+                                    ElevationDetailDialog(profile = elevation, gpsPoints = gpsPoints) { showElevDetail = false }
                                 }
                             } else if (isLoading) {
                                 ElevationChartSkeleton(
