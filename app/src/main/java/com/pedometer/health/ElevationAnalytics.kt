@@ -120,7 +120,12 @@ object ElevationAnalytics {
                         failed = true
                         break
                     }
-                    for (i in 0 until json.length()) altitudes.add(json.getJSONObject(i).getDouble("elevation"))
+                    for (i in 0 until json.length()) {
+                        val el = json.get(i)
+                        altitudes.add(
+                            if (el is Double) el else el.let { (it as org.json.JSONObject).getDouble("elevation") }
+                        )
+                    }
                 }
                 if (!failed && altitudes.size == points.size) return altitudes
                 Log.w(TAG, "Provider $provider failed, falling back")
