@@ -491,9 +491,6 @@ fun DayDetailScreen(
                                 }
                                 if (w.calories > 0) Text("${w.calories} ккал", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (w.hrAvg > 0) Text("${w.hrAvg} уд/мин", style = MaterialTheme.typography.bodySmall, color = HeartRed)
-                                state.elevationProfiles[w.startTime]?.avgGapKmh?.let { gap ->
-                                    Text("По равнине %.1f км/ч".format(gap), style = MaterialTheme.typography.bodySmall, color = StepGreen)
-                                }
                             }
                         }
 
