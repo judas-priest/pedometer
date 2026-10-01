@@ -27,6 +27,9 @@ object ElevationAnalytics {
     /** Minetti validity range for the cost polynomial (|gradient| <= 45%). */
     private const val MAX_SLOPE = 0.45
 
+    /** Track distance over which the DEM slope is averaged (Strava smooths before grading). */
+    private const val SLOPE_WINDOW_M = 40.0
+
     /** Flat-walking energy cost, J/(kg·m) — C(0) of the Minetti polynomial. */
     const val FLAT_COST = 3.6
 
@@ -179,6 +182,7 @@ object ElevationAnalytics {
         if (points.size < 2 || points.size != altitudes.size) return null
         val sorted = points.sortedBy { it.timestamp }
         val smoothed = smooth(altitudes)
+        val dist = cumulativeDistance(sorted)
 
         val hrSorted = hrSamples.sortedBy { it.timestamp }
         val out = ArrayList<ProfilePoint>(sorted.size)
@@ -186,7 +190,7 @@ object ElevationAnalytics {
         var gapSum = 0.0
         var gapCount = 0
         for (i in sorted.indices) {
-            val slope = if (i == 0) 0.0 else slopeBetween(sorted[i - 1], sorted[i], smoothed[i - 1], smoothed[i])
+            val slope = windowedSlope(dist, smoothed, i)
             if (i > 0) {
                 val rise = smoothed[i] - smoothed[i - 1]
                 if (rise > 0) ascent += rise
@@ -213,13 +217,38 @@ object ElevationAnalytics {
         )
     }
 
-    /** rise/run between two consecutive points; ~0 when points overlap (<1 m apart). */
-    private fun slopeBetween(a: GpsPointRecord, b: GpsPointRecord, altA: Double, altB: Double): Double {
+    /** Cumulative horizontal track distance (m) for slope windows. */
+    private fun cumulativeDistance(sorted: List<GpsPointRecord>): List<Double> {
+        val d = ArrayList<Double>(sorted.size)
+        var acc = 0.0
+        d.add(0.0)
+        for (i in 1 until sorted.size) {
+            acc += distanceMeters(sorted[i - 1], sorted[i])
+            d.add(acc)
+        }
+        return d
+    }
+
+    private fun distanceMeters(a: GpsPointRecord, b: GpsPointRecord): Double {
         val dLat = (b.lat - a.lat) * 111_320.0
         val dLon = (b.lon - a.lon) * 111_320.0 * cos(Math.toRadians((a.lat + b.lat) / 2))
-        val run = Math.hypot(dLat, dLon)
+        return Math.hypot(dLat, dLon)
+    }
+
+    /** Slope over ±SLOPE_WINDOW_M of track: rise/run across the window. Sparse
+     *  tracks (points farther apart than the window) still get one neighbour
+     *  per side so the slope is never silently 0. */
+    private fun windowedSlope(dist: List<Double>, smoothed: List<Double>, i: Int): Double {
+        var lo = i
+        var hi = i
+        if (lo > 0) lo--
+        if (hi < dist.size - 1) hi++
+        while (lo > 0 && dist[i] - dist[lo - 1] < SLOPE_WINDOW_M) lo--
+        while (hi < dist.size - 1 && dist[hi + 1] - dist[i] < SLOPE_WINDOW_M) hi++
+        val run = dist[hi] - dist[lo]
         if (run < 1.0) return 0.0
-        return (altB - altA) / run
+        val rise = smoothed[hi] - smoothed[lo]
+        return (rise / run).coerceIn(-MAX_SLOPE, MAX_SLOPE)
     }
 
     private fun nearestBpm(ts: Long, hrSorted: List<HeartRateRecord>): Int {

@@ -144,4 +144,29 @@ class ElevationAnalyticsTest {
         assertEquals(0.0, profile.points[0].gapKmh, 1e-9)
         assertEquals(0.0, profile.points[1].gapKmh, 1e-9)
     }
+
+    // ── GAP calibration: slope over a 40 m track window (Strava smooths before grading) ──
+
+    @Test
+    fun `flat route gives GAP equal to actual speed`() {
+        val pts = (0 until 100).map { i ->
+            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0001, 37.60, 1.5f) // 1.5 m/s = 5.4 km/h, ~7.8 m apart
+        }
+        val alts = List(100) { 150.0 }
+        val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
+        assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.6)
+        assertTrue("ascent=${p.ascentM}", p.ascentM < 0.5)
+    }
+
+    @Test
+    fun `steady climb gives GAP faster than actual and correct ascent`() {
+        // ~8% grade: +2 m altitude every ~27.8 m of track
+        val pts = (0 until 200).map { i ->
+            GpsPointRecord(0L, i * 20000L, 55.70 + i * 0.00025, 37.60, 1.2f) // 4.32 km/h actual
+        }
+        val alts = pts.mapIndexed { i, _ -> 100.0 + i * 2.0 }
+        val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
+        assertTrue("ascent=${p.ascentM}", p.ascentM in 380.0..400.0)
+        assertTrue("gap=${p.avgGapKmh}", p.avgGapKmh!! > 4.6)
+    }
 }
