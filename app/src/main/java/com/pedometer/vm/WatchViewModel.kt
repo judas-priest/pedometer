@@ -100,6 +100,7 @@ data class WatchState(
     val alcoholDays: Set<String> = emptySet(),
     // workoutStart → DEM elevation profile; null value = fetch failed («нет данных»)
     val elevationProfiles: Map<Long, ElevationAnalytics.ElevationProfile?> = emptyMap(),
+    val elevationLoading: Set<Long> = emptySet(),
 )
 
 data class SupplementSlotUi(
@@ -511,9 +512,14 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * DEM elevation profile + GAP for one workout. Results are cached in state:
      * absent key = not loaded yet, null = fetch failed (no internet → «нет данных»).
+     * Successful DEM heights are persisted in gps_points.altitude, so the network
+     * is hit at most once per route ever; failure is cached as null in state for
+     * the session but NOT in the DB — next app start retries.
      */
     fun loadElevationProfile(workoutStart: Long) {
         if (_state.value.elevationProfiles.containsKey(workoutStart)) return
+        if (workoutStart in _state.value.elevationLoading) return
+        _state.update { it.copy(elevationLoading = it.elevationLoading + workoutStart) }
         viewModelScope.launch(Dispatchers.IO) {
             val profile = try {
                 val dao = StepDatabase.get(getApplication()).stepDao()
@@ -524,15 +530,36 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                 val cleanPts = points.filter {
                     it.lat.isFinite() && it.lon.isFinite() && kotlin.math.abs(it.lat) <= 90 && kotlin.math.abs(it.lon) <= 180
                 }.distinctBy { "%.6f|%.6f".format(java.util.Locale.US, it.lat, it.lon) }
-                ElevationAnalytics.fetchElevations(cleanPts)?.let {
-                    // altitudes belong to cleanPts (deduped); buildProfile needs equal sizes
-                    ElevationAnalytics.buildProfile(cleanPts, it, hr)
+
+                val altitudes = if (cleanPts.size >= 2 && cleanPts.all { it.altitude != null }) {
+                    cleanPts.map { it.altitude!! }                       // cached — no network, ever again
+                } else {
+                    ElevationAnalytics.fetchElevations(cleanPts)?.also { alts ->
+                        // DEM heights never change — persist once per route.
+                        // Raw records map to altitudes via the same %.6f key used for dedupe.
+                        val byKey = cleanPts.indices.associate { i ->
+                            val p = cleanPts[i]
+                            "%.6f|%.6f".format(java.util.Locale.US, p.lat, p.lon) to alts[i]
+                        }
+                        val updated = points.map { r ->
+                            byKey["%.6f|%.6f".format(java.util.Locale.US, r.lat, r.lon)]
+                                ?.let { a -> if (r.altitude == null) r.copy(altitude = a) else r } ?: r
+                        }
+                        dao.updateGpsPoints(updated)
+                    }
                 }
+                // buildProfile requires points.size == altitudes.size — pass cleanPts, NOT raw points
+                altitudes?.let { ElevationAnalytics.buildProfile(cleanPts, it, hr) }
             } catch (e: Exception) {
                 Log.w(TAG, "Elevation profile load failed: ${e.message}")
                 null
             }
-            _state.update { it.copy(elevationProfiles = it.elevationProfiles + (workoutStart to profile)) }
+            _state.update {
+                it.copy(
+                    elevationProfiles = it.elevationProfiles + (workoutStart to profile),
+                    elevationLoading = it.elevationLoading - workoutStart,
+                )
+            }
         }
     }
 
