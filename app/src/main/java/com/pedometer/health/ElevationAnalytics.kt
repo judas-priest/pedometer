@@ -162,6 +162,7 @@ object ElevationAnalytics {
         val slope: Double,
         val gapKmh: Double,      // from the recorded speed
         val bpm: Int,            // 0 = no HR sample within ±60 s
+        val speedKmh: Double,    // recorded speed, for the analysis chip
     )
 
     data class ElevationProfile(
@@ -207,6 +208,7 @@ object ElevationAnalytics {
                     slope = slope,
                     gapKmh = if (speedKmh > 1.0) gapKmh(speedKmh, slope) else 0.0,
                     bpm = nearestBpm(sorted[i].timestamp, hrSorted),
+                    speedKmh = speedKmh,
                 ),
             )
         }

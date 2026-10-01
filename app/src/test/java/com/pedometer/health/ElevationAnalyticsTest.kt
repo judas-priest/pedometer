@@ -168,5 +168,6 @@ class ElevationAnalyticsTest {
         val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
         assertTrue("ascent=${p.ascentM}", p.ascentM in 380.0..400.0)
         assertTrue("gap=${p.avgGapKmh}", p.avgGapKmh!! > 4.6)
+        assertEquals(4.32, p.points[50].speedKmh, 0.05) // 1.2 m/s carried into the profile
     }
 }
