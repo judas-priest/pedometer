@@ -32,6 +32,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DayDetailScreen(
     state: WatchState,
@@ -474,9 +475,10 @@ fun DayDetailScreen(
                         }
                         if (w.distanceM > 0 || w.calories > 0) {
                             Spacer(Modifier.height(4.dp))
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.Start),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 if (w.distanceM > 0) Text("%.1f км".format(w.distanceM / 1000.0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (w.distanceM > 0 && w.durationSec > 0) {
@@ -489,7 +491,7 @@ fun DayDetailScreen(
                                 if (w.calories > 0) Text("${w.calories} ккал", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (w.hrAvg > 0) Text("${w.hrAvg} уд/мин", style = MaterialTheme.typography.bodySmall, color = HeartRed)
                                 state.elevationProfiles[w.startTime]?.avgGapKmh?.let { gap ->
-                                    Text("GAP %.1f км/ч".format(gap), style = MaterialTheme.typography.bodySmall, color = StepGreen)
+                                    Text("По равнине %.1f км/ч".format(gap), style = MaterialTheme.typography.bodySmall, color = StepGreen)
                                 }
                             }
                         }
@@ -508,6 +510,7 @@ fun DayDetailScreen(
                             // Elevation profile (DEM by lat/lon) + GAP — loaded once per workout
                             LaunchedEffect(w.startTime) { onLoadElevation(w.startTime) }
                             val elevation = state.elevationProfiles[w.startTime]
+                            val isLoading = w.startTime in state.elevationLoading
                             Spacer(Modifier.height(8.dp))
                             Text("Профиль высоты", style = MaterialTheme.typography.titleSmall)
                             Spacer(Modifier.height(4.dp))
@@ -524,13 +527,17 @@ fun DayDetailScreen(
                                     Text("↑ ${elevation.ascentM.toInt()} м", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (state.elevationProfiles[w.startTime]?.avgGapKmh != null) {
                                         Text(
-                                            "GAP %.1f км/ч".format(elevation.avgGapKmh),
+                                            "По равнине %.1f км/ч".format(elevation.avgGapKmh),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = StepGreen,
                                         )
                                     }
                                 }
+                            } else if (isLoading) {
+                                ElevationChartSkeleton(
+                                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                                )
                             } else if (state.elevationProfiles.containsKey(w.startTime)) {
                                 Text(
                                     "нет данных",

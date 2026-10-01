@@ -1,5 +1,10 @@
 package com.pedometer.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -7,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -18,6 +24,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.sin
 import androidx.compose.ui.unit.dp
 import com.pedometer.data.HourlySteps
 import com.pedometer.health.DayStepData
@@ -254,6 +261,30 @@ fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationPro
                 }
             }
         }
+    }
+}
+
+/** Skeleton placeholder shown while DEM heights are loading (~15 s on first open). */
+@Composable
+fun ElevationChartSkeleton(modifier: Modifier = Modifier) {
+    val alpha = rememberInfiniteTransition(label = "skeleton").animateFloat(
+        initialValue = 0.25f, targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(tween(800, easing = LinearEasing)),
+        label = "pulse",
+    )
+    Canvas(modifier = modifier.alpha(alpha.value)) {
+        val h = size.height
+        val path = Path()
+        path.moveTo(0f, h * 0.7f)
+        for (x in 0..100 step 5) {
+            val t = x / 100f
+            path.lineTo(size.width * t, h * (0.55f + 0.25f * sin(t * 6f)))
+        }
+        path.lineTo(size.width, h)
+        path.lineTo(0f, h)
+        path.close()
+        drawPath(path, Color.Gray)
+        drawLine(Color.Gray, Offset(0f, h), Offset(size.width, h), strokeWidth = 2f)
     }
 }
 
