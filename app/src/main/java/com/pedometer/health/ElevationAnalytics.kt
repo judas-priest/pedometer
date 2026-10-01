@@ -65,22 +65,26 @@ object ElevationAnalytics {
         val altitudes = ArrayList<Double>(points.size)
         return try {
             for (chunk in points.chunked(BATCH)) {
-                // Locale.US — "%.6f".format() in ru locale emits a COMMA decimal
-                // separator, which destroys the coordinate list in the URL.
-                val lats = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lat) }
-                val lons = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lon) }
-                val url = URL("https://api.open-meteo.com/v1/elevation?latitude=$lats&longitude=$lons")
-                val conn = url.openConnection() as HttpURLConnection
+                // Open-Elevation (reachable from RU networks; Open-Meteo is blocked).
+                // POST body avoids URL-length limits on long tracks.
+                val body = chunk.joinToString(",") {
+                    String.format(java.util.Locale.US, "{\"latitude\":%.6f,\"longitude\":%.6f}", it.lat, it.lon)
+                }
+                val conn = URL("https://api.open-elevation.com/api/v1/lookup").openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
                 conn.connectTimeout = 10_000
-                conn.readTimeout = 10_000
+                conn.readTimeout = 15_000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.outputStream.use { it.write("[$body]".toByteArray()) }
                 val json = JSONObject(conn.inputStream.bufferedReader().readText())
-                    .getJSONArray("elevation")
+                    .getJSONArray("results")
                 conn.disconnect()
                 if (json.length() != chunk.size) {
                     Log.w(TAG, "Elevation API returned ${json.length()} of ${chunk.size}")
                     return null
                 }
-                for (i in 0 until json.length()) altitudes.add(json.getDouble(i))
+                for (i in 0 until json.length()) altitudes.add(json.getJSONObject(i).getDouble("elevation"))
             }
             altitudes
         } catch (e: Exception) {
