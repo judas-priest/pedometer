@@ -67,12 +67,23 @@ object ElevationAnalytics {
         if (points.isEmpty()) return null
         val altitudes = ArrayList<Double>(points.size)
         val chunks = points.chunked(BATCH)
-        for (provider in listOf("open-elevation", "opentopodata")) {
+        for (provider in listOf("open-elevation", "opentopodata", "open-meteo")) {
             altitudes.clear()
             try {
                 var failed = false
                 for ((index, chunk) in chunks.withIndex()) {
                     val json = when (provider) {
+                        "open-meteo" -> {
+                            val lats = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lat) }
+                            val lons = chunk.joinToString(",") { String.format(java.util.Locale.US, "%.6f", it.lon) }
+                            val conn = URL("https://api.open-meteo.com/v1/elevation?latitude=$lats&longitude=$lons")
+                                .openConnection() as HttpURLConnection
+                            conn.connectTimeout = 10_000
+                            conn.readTimeout = 15_000
+                            val text = conn.inputStream.bufferedReader().readText()
+                            conn.disconnect()
+                            JSONObject(text).getJSONArray("elevation")
+                        }
                         "opentopodata" -> {
                             if (index > 0) delay(1100) // 1 req/sec limit
                             val locs = chunk.joinToString("|") {
