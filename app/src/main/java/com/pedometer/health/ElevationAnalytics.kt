@@ -67,7 +67,7 @@ object ElevationAnalytics {
         if (points.isEmpty()) return null
         val altitudes = ArrayList<Double>(points.size)
         val chunks = points.chunked(BATCH)
-        for (provider in listOf("open-elevation", "opentopodata", "open-meteo")) {
+        for (provider in listOf("opentopodata", "open-elevation", "open-meteo")) {
             altitudes.clear()
             try {
                 var failed = false
@@ -86,7 +86,7 @@ object ElevationAnalytics {
                         }
                         "opentopodata" -> {
                             if (index > 0) delay(1100) // 1 req/sec limit
-                            val locs = chunk.joinToString("|") {
+                            val locs = chunk.joinToString("%7C") {
                                 String.format(java.util.Locale.US, "%.6f,%.6f", it.lat, it.lon)
                             }
                             val conn = URL("https://api.opentopodata.org/v1/elevation?locations=$locs&datasets=srtm90m")
