@@ -96,6 +96,7 @@ data class GpsPointRecord(
     val lat: Double,
     val lon: Double,
     val speed: Float = 0f,
+    val altitude: Double? = null,    // DEM height, filled once by ElevationAnalytics
 )
 
 @Entity(

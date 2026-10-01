@@ -90,6 +90,9 @@ interface StepDao {
     @Query("SELECT * FROM gps_points ORDER BY workoutStart, timestamp")
     suspend fun getAllGpsPoints(): List<GpsPointRecord>
 
+    @Update
+    suspend fun updateGpsPoints(points: List<GpsPointRecord>)
+
     // Heart rate
     @Insert
     suspend fun insertHeartRate(hr: HeartRateRecord)
