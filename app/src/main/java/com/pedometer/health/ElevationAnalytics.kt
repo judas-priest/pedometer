@@ -1,6 +1,7 @@
 package com.pedometer.health
 
 import android.util.Log
+import kotlinx.coroutines.delay
 import com.pedometer.data.GpsPointRecord
 import com.pedometer.data.HeartRateRecord
 import org.json.JSONObject
