@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -219,25 +220,28 @@ fun WeightChart(data: List<Pair<Long, Double>>, alcoholDays: Set<String>, modifi
 // ── ElevationChart — smoothed DEM altitude + HR overlay for a workout ─────────
 
 @Composable
-fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationProfile, modifier: Modifier = Modifier, showCrosshair: Boolean = false) {
+fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationProfile, modifier: Modifier = Modifier, showCrosshair: Boolean = false, selectedIdx: Int = -1, onSelect: ((Int) -> Unit)? = null) {
     val altColor = Color.Gray
     val gridColor = Color.Gray.copy(alpha = 0.2f)
 
-    var selectedIdx by remember { mutableStateOf(-1) }
     Box(modifier) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .then(
-                    if (showCrosshair) {
+                    if (showCrosshair && onSelect != null) {
                         Modifier.pointerInput(profile) {
-                            detectTapGestures { offset ->
+                            fun select(offset: Offset) {
                                 val pts = profile.points
-                                if (pts.size < 2) return@detectTapGestures
+                                if (pts.size < 2) return
                                 val t = pts.first().timestamp + ((offset.x / size.width) *
                                     (pts.last().timestamp - pts.first().timestamp)).toLong()
-                                selectedIdx = pts.indices.minBy { kotlin.math.abs(pts[it].timestamp - t) }
+                                onSelect(pts.indices.minBy { kotlin.math.abs(pts[it].timestamp - t) })
                             }
+                            detectDragGestures(
+                                onDragStart = { offset -> select(offset) },
+                                onDrag = { change, _ -> select(change.position) },
+                            )
                         }
                     } else Modifier
                 ),
@@ -292,26 +296,6 @@ fun ElevationChart(profile: com.pedometer.health.ElevationAnalytics.ElevationPro
             drawCircle(Color.Gray, 5f, Offset(xSel, yAlt(sel.altitudeM)))
             if (sel.bpm > 0) drawCircle(HeartRed, 5f, Offset(xSel, h - (sel.bpm.toFloat() / hrMax) * h))
         }
-        }
-
-        if (showCrosshair && selectedIdx >= 0 && selectedIdx < profile.points.size) {
-            val p = profile.points[selectedIdx]
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
-            ) {
-                Text(
-                    "%s  ·  %d м  ·  %d уд/мин  ·  %.1f км/ч".format(
-                        java.time.Instant.ofEpochMilli(p.timestamp)
-                            .atZone(java.time.ZoneId.systemDefault())
-                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
-                        p.altitudeM.toInt(), p.bpm, p.gapKmh,
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                )
-            }
         }
     }
 }
