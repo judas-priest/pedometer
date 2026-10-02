@@ -389,12 +389,6 @@ fun ElevationDetailDialog(
                         selectedIdx = selectedIdx,
                         onSelect = { selectedIdx = it },
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Серый — высота, красный — пульс. Веди пальцем по графику — точка на карте показывает, где ты был.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
                 IconButton(
                     onClick = onDismiss,
