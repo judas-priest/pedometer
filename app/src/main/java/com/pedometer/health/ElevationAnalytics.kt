@@ -30,6 +30,18 @@ object ElevationAnalytics {
     /** Track distance over which the DEM slope is averaged (Strava smooths before grading). */
     private const val SLOPE_WINDOW_M = 40.0
 
+    /** Elevation profile resampling step along the track. */
+    private const val SAMPLE_STEP_M = 30.0
+
+    /** Altitude smoothing window in track meters (±100 m around each sample). */
+    private const val SMOOTH_WINDOW_M = 200.0
+
+    /** A climb counts only when it rises this much above the last valley. */
+    private const val ASCENT_MIN_DELTA_M = 5.0
+
+    /** …and spans at least this much of track distance. */
+    private const val ASCENT_MIN_RUN_M = 80.0
+
     /** Flat-walking energy cost, J/(kg·m) — C(0) of the Minetti polynomial. */
     const val FLAT_COST = 3.6
 
@@ -46,20 +58,6 @@ object ElevationAnalytics {
      *  uphill GAP pace is faster than actual.) */
     fun gapKmh(speedKmh: Double, slope: Double): Double =
         if (slope == 0.0) speedKmh else speedKmh * minettiCost(slope) / FLAT_COST
-
-    /** Moving-average smoothing of noisy DEM/GPS altitude, window ~5 points (~1 min).
-     *  Centered window, clipped at the series ends; short series pass through. */
-    fun smooth(altitudes: List<Double>, window: Int = 5): List<Double> {
-        if (altitudes.size < 2 || window <= 1) return altitudes
-        val half = window / 2
-        return altitudes.indices.map { i ->
-            val from = (i - half).coerceAtLeast(0)
-            val to = (i + half).coerceAtMost(altitudes.size - 1)
-            var sum = 0.0
-            for (j in from..to) sum += altitudes[j]
-            sum / (to - from + 1)
-        }
-    }
 
     /**
      * DEM altitudes for the points. Providers in fallback order:
@@ -183,12 +181,13 @@ object ElevationAnalytics {
     ): ElevationProfile? {
         if (points.size < 2 || points.size != altitudes.size) return null
         val sorted = points.sortedBy { it.timestamp }
-        val smoothed = smooth(altitudes)
         val dist = cumulativeDistance(sorted)
+        val resampled = resampleByDistance(sorted, altitudes, dist, SAMPLE_STEP_M)
+        val smoothed = distanceSmooth(resampled, SMOOTH_WINDOW_M)
+        val rdist = resampled.map { it.dist }
 
         val hrSorted = hrSamples.sortedBy { it.timestamp }
-        val out = ArrayList<ProfilePoint>(sorted.size)
-        var ascent = 0.0
+        val out = ArrayList<ProfilePoint>(resampled.size)
         var gapSum = 0.0
         var gapCount = 0
         // Self-calibrating glitch cap: GPS relay emits phantom speeds while walking.
@@ -197,28 +196,26 @@ object ElevationAnalytics {
         val median = if (moving.isEmpty()) 0.0
         else (moving[(moving.size - 1) / 2] + moving[moving.size / 2]) / 2.0
         val speedCap = (median * 1.5).coerceIn(7.0, 15.0)
-        for (i in sorted.indices) {
-            val slope = windowedSlope(dist, smoothed, i)
-            if (i > 0) {
-                val rise = smoothed[i] - smoothed[i - 1]
-                if (rise > 0) ascent += rise
-            }
-            val speedKmh = sorted[i].speed * 3.6
+        for (i in resampled.indices) {
+            val slope = windowedSlope(rdist, smoothed, i)
+            val s = resampled[i]
+            val speedKmh = s.speedMs * 3.6
             if (speedKmh in 1.0..speedCap) {
                 gapSum += gapKmh(speedKmh, slope)
                 gapCount++
             }
             out.add(
                 ProfilePoint(
-                    timestamp = sorted[i].timestamp,
+                    timestamp = s.ts,
                     altitudeM = smoothed[i],
                     slope = slope,
                     gapKmh = if (speedKmh > 1.0) gapKmh(speedKmh, slope) else 0.0,
-                    bpm = nearestBpm(sorted[i].timestamp, hrSorted),
+                    bpm = nearestBpm(s.ts, hrSorted),
                     speedKmh = speedKmh,
                 ),
             )
         }
+        val ascent = hysteresisAscent(smoothed, rdist)
         return ElevationProfile(
             points = out,
             ascentM = ascent,
@@ -236,6 +233,72 @@ object ElevationAnalytics {
             d.add(acc)
         }
         return d
+    }
+
+    /** One resampled profile point every SAMPLE_STEP_M of track. */
+    private data class Sample(val ts: Long, val alt: Double, val dist: Double, val speedMs: Double)
+
+    /** Heights/speeds every SAMPLE_STEP_M of track; linear interpolation between points. */
+    private fun resampleByDistance(
+        sorted: List<GpsPointRecord>,
+        altitudes: List<Double>,
+        dist: List<Double>,
+        step: Double,
+    ): List<Sample> {
+        val out = ArrayList<Sample>()
+        var target = 0.0
+        var i = 1
+        out.add(Sample(sorted[0].timestamp, altitudes[0], 0.0, sorted[0].speed.toDouble()))
+        while (target + step <= dist.last()) {
+            target += step
+            while (dist[i] < target) i++
+            val t0 = dist[i - 1]; val t1 = dist[i]
+            val f = if (t1 > t0) (target - t0) / (t1 - t0) else 0.0
+            val alt = altitudes[i - 1] + f * (altitudes[i] - altitudes[i - 1])
+            val ts = sorted[i - 1].timestamp + (f * (sorted[i].timestamp - sorted[i - 1].timestamp)).toLong()
+            val speed = sorted[i - 1].speed + f * (sorted[i].speed - sorted[i - 1].speed)
+            out.add(Sample(ts, alt, target, speed.toDouble()))
+        }
+        return out
+    }
+
+    /** Moving average over ±window/2 of TRACK DISTANCE (not points). */
+    private fun distanceSmooth(resampled: List<Sample>, window: Double): List<Double> {
+        val d = resampled.map { it.dist }
+        val a = resampled.map { it.alt }
+        val half = window / 2
+        return a.indices.map { i ->
+            var lo = i; var hi = i
+            while (lo > 0 && d[i] - d[lo - 1] < half) lo--
+            while (hi < d.size - 1 && d[hi + 1] - d[i] < half) hi++
+            var sum = 0.0
+            for (j in lo..hi) sum += a[j]
+            sum / (hi - lo + 1)
+        }
+    }
+
+    /** Hysteresis ascent: a climb counts when rise from the last valley reaches
+     *  ASCENT_MIN_DELTA_M and spans >= ASCENT_MIN_RUN_M of track. Dips smaller
+     *  than MIN_DELTA neither break the climb nor double-count it. */
+    private fun hysteresisAscent(heights: List<Double>, dist: List<Double>): Double {
+        if (heights.size < 2) return 0.0
+        var ascent = 0.0
+        var valley = heights[0]; var valleyDist = dist[0]
+        var peak = heights[0]; var peakDist = 0.0
+        var inClimb = false
+        for (i in 1 until heights.size) {
+            if (heights[i] > peak) { peak = heights[i]; peakDist = dist[i] - valleyDist }
+            if (peak - heights[i] >= ASCENT_MIN_DELTA_M) {           // descent confirmed — close climb
+                if (inClimb && peak - valley >= ASCENT_MIN_DELTA_M && peakDist >= ASCENT_MIN_RUN_M) {
+                    ascent += peak - valley
+                }
+                valley = heights[i]; valleyDist = dist[i]; peak = heights[i]; inClimb = false
+            }
+            if (heights[i] < valley) { valley = heights[i]; valleyDist = dist[i]; peak = heights[i]; inClimb = false }
+            if (peak - valley >= ASCENT_MIN_DELTA_M) inClimb = true
+        }
+        if (inClimb && peak - valley >= ASCENT_MIN_DELTA_M && peakDist >= ASCENT_MIN_RUN_M) ascent += peak - valley
+        return ascent
     }
 
     private fun distanceMeters(a: GpsPointRecord, b: GpsPointRecord): Double {

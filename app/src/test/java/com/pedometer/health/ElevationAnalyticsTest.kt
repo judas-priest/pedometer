@@ -55,31 +55,6 @@ class ElevationAnalyticsTest {
         assertTrue(ElevationAnalytics.gapKmh(12.0, -0.2) < 12.0)
     }
 
-    // ── Smoothing ─────────────────────────────────────────────────────────────
-
-    @Test
-    fun `smooth leaves constant series unchanged`() {
-        val series = List(20) { 150.0 }
-        assertEquals(series, ElevationAnalytics.smooth(series))
-    }
-
-    @Test
-    fun `smooth centered window averages neighbors`() {
-        val smoothed = ElevationAnalytics.smooth(listOf(1.0, 2.0, 3.0, 4.0, 5.0), window = 5)
-        // idx2 averages the whole window: 3.0
-        assertEquals(3.0, smoothed[2], 1e-9)
-        // idx0 has only indices 0..2 available: (1+2+3)/3
-        assertEquals(2.0, smoothed[0], 1e-9)
-        // idx4 has only indices 2..4: (3+4+5)/3
-        assertEquals(4.0, smoothed[4], 1e-9)
-    }
-
-    @Test
-    fun `smooth passes through tiny lists`() {
-        assertEquals(listOf(7.0), ElevationAnalytics.smooth(listOf(7.0)))
-        assertTrue(ElevationAnalytics.smooth(emptyList()).isEmpty())
-    }
-
     // ── Profile assembly ──────────────────────────────────────────────────────
 
     private fun pt(t: Long, lat: Double, lon: Double, speed: Float) =
@@ -88,7 +63,9 @@ class ElevationAnalyticsTest {
     @Test
     fun `buildProfile computes ascent and uphill GAP`() {
         // 5 points heading north, 100 s apart; altitudes climb linearly 0 -> 40 m.
-        // Smoothing (window 5) turns that into 10..30 — ascent 20 m.
+        // Resampled every 30 m of the ~400 m track -> 14 samples; a linear ramp
+        // survives 200 m distance smoothing, so hysteresis counts the full rise
+        // between the (one-sided-window) first and last smoothed values.
         val points = listOf(
             pt(0L, 55.0, 37.0, 1.5f),          // 5.4 km/h
             pt(100_000L, 55.0009, 37.0, 1.5f), // ~100 m north
@@ -101,9 +78,10 @@ class ElevationAnalyticsTest {
             hrSamples = emptyList(),
         )!!
 
-        assertEquals(5, profile.points.size)
-        assertEquals(20.0, profile.ascentM, 0.5)
-        // ~5 m rise per ~100 m run → slope ≈ 0.05, GAP above the actual 5.4 km/h
+        assertEquals(14, profile.points.size)
+        assertEquals(30.0, profile.ascentM, 1.5)
+        // ~10 m rise per ~100 m run → slope ≈ 0.05 over the 40 m slope window,
+        // GAP above the actual 5.4 km/h
         assertTrue(profile.avgGapKmh!! > 5.4)
         assertEquals(0.05, profile.points[1].slope, 0.01)
     }
@@ -120,9 +98,11 @@ class ElevationAnalyticsTest {
             HeartRateRecord(timestamp = 300_000L, bpm = 150), // too far from all points
         )
         val profile = ElevationAnalytics.buildProfile(points, List(3) { 0.0 }, hr)!!
+        // Resampled every 30 m of the ~200 m track -> 7 samples; the last one sits
+        // at ~108 s, >60 s from the 5 s HR sample and ~192 s from the 300 s one.
         assertEquals(110, profile.points[0].bpm)
         assertEquals(110, profile.points[1].bpm)
-        assertEquals(0, profile.points[2].bpm)
+        assertEquals(0, profile.points[6].bpm)
     }
 
     @Test
@@ -134,15 +114,20 @@ class ElevationAnalyticsTest {
 
     @Test
     fun `buildProfile avgGap ignores non-moving points`() {
-        val points = listOf(
-            pt(0L, 55.0, 37.0, 0.0f),          // standing
-            pt(60_000L, 55.0009, 37.0, 0.2f),  // still standing
-            pt(120_000L, 55.0018, 37.0, 1.5f),
-        )
-        val profile = ElevationAnalytics.buildProfile(points, List(3) { 100.0 }, emptyList())!!
-        assertEquals(5.4, profile.avgGapKmh!!, 0.1) // flat 1.5 m/s
-        assertEquals(0.0, profile.points[0].gapKmh, 1e-9)
-        assertEquals(0.0, profile.points[1].gapKmh, 1e-9)
+        // 20 stationary points (zero track distance) then 20 walking points at
+        // 1.5 m/s. Resampling collapses the standing part into sample 0; the
+        // 30 m samples across the stand→walk transition carry interpolated
+        // sub-walking speeds, the rest are flat 5.4 km/h.
+        val points = ArrayList<GpsPointRecord>()
+        var ts = 0L
+        repeat(20) { points.add(pt(ts, 55.0, 37.0, 0.0f)); ts += 30_000L }
+        repeat(20) {
+            points.add(pt(ts, 55.0 + (it + 1) * 0.0009, 37.0, 1.5f)); ts += 67_000L
+        }
+        val profile = ElevationAnalytics.buildProfile(points, List(40) { 100.0 }, emptyList())!!
+        assertEquals(0.0, profile.points[0].gapKmh, 1e-9)   // standing sample: no GAP
+        assertEquals(5.4, profile.points.last().speedKmh, 0.05)
+        assertTrue("avgGap=${profile.avgGapKmh}", profile.avgGapKmh!! in 5.2..5.5)
     }
 
     // ── GAP calibration: slope over a 40 m track window (Strava smooths before grading) ──
@@ -180,6 +165,24 @@ class ElevationAnalyticsTest {
         val alts = List(100) { 150.0 }
         val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
         assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.6) // glitches excluded
+    }
+
+    @Test
+    fun `sawtooth climb counts once, noise counts zero`() {
+        // 100 points every 30 m; noise ±1 m on a plateau, then one 40 m hill over ~510 m
+        val pts = ArrayList<GpsPointRecord>()
+        val alts = ArrayList<Double>()
+        var ts = 0L
+        fun add(alt: Double) {
+            val i = pts.size
+            pts.add(GpsPointRecord(0L, ts, 55.70 + i * 0.00027, 37.60, 1.4f)) // ~30 m apart
+            alts.add(alt); ts += 20000
+        }
+        repeat(20) { add(150.0 + if (it % 2 == 0) 1.0 else 0.0) }   // noisy plateau: 600 m
+        repeat(17) { add(150.0 + (it + 1) * 2.35) }                  // +40 m over ~510 m
+        repeat(30) { add(190.0 + if (it % 2 == 0) 1.0 else 0.0) }   // noisy top
+        val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
+        assertEquals(40.0, p.ascentM, 6.0)                            // hill counted once, noise not
     }
 
     @Test
