@@ -193,8 +193,9 @@ object ElevationAnalytics {
         // Self-calibrating glitch cap: GPS relay emits phantom speeds while walking.
         // Anything much above the median moving speed is a glitch, not movement.
         val moving = sorted.map { it.speed * 3.6 }.filter { it > 1.0 }.sorted()
-        val speedCap = if (moving.isEmpty()) 15.0
-        else (moving[moving.size / 2] * 1.8).coerceIn(8.0, 15.0)
+        val median = if (moving.isEmpty()) 0.0
+        else (moving[(moving.size - 1) / 2] + moving[moving.size / 2]) / 2.0
+        val speedCap = (median * 1.5).coerceIn(7.0, 15.0)
         for (i in sorted.indices) {
             val slope = windowedSlope(dist, smoothed, i)
             if (i > 0) {

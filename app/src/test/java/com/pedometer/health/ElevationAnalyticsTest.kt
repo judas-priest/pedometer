@@ -181,4 +181,17 @@ class ElevationAnalyticsTest {
         val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
         assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.6) // glitches excluded
     }
+
+    @Test
+    fun `GAP cap is median-based - mildly inflated speeds are cut too`() {
+        // median moving speed 1.4 m/s (5.04 km/h) -> new cap 7.56 km/h;
+        // 10 points at 2.2 m/s (7.92 km/h) are phantom relay speeds: old cap
+        // 9.07 let them in (avg 5.33), new cap 7.56 cuts them (avg 5.04)
+        val pts = (0 until 100).map { i ->
+            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0001, 37.60, if (i >= 90) 2.2f else 1.4f)
+        }
+        val alts = List(100) { 150.0 }
+        val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
+        assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 4.9..5.2)
+    }
 }
