@@ -341,7 +341,9 @@ fun ElevationDetailDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(Modifier.fillMaxSize().systemBarsPadding()) {
-                Column(Modifier.fillMaxSize().padding(16.dp)) {
+                // hard bottom inset — Dialog windows report no navigation-bar insets,
+                // systemBarsPadding alone leaves the legend under the gesture pill
+                Column(Modifier.fillMaxSize().padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 48.dp)) {
                     // keep clear of the floating close button (absolute, top-end)
                     Row(Modifier.fillMaxWidth().padding(end = 48.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Профиль высоты", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
