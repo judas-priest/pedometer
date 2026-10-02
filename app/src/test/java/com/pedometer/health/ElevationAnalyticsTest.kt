@@ -46,6 +46,30 @@ class ElevationAnalyticsTest {
         assertEquals(v, ElevationAnalytics.gapKmh(v, 0.0, vms), 1e-9)
     }
 
+    @Test
+    fun `gapKmh ratio is clamped to sane band`() {
+        // +15% grade gives Pandolf ratio ~2.6 — clamped to 2.0
+        val v = 5.4; val vms = v / 3.6
+        assertEquals(2.0 * v, ElevationAnalytics.gapKmh(v, 15.0, vms), 0.01)
+        // -6% floor gives ratio ~0.35 — below the 0.70 clamp
+        assertEquals(0.70 * v, ElevationAnalytics.gapKmh(v, -15.0, vms), 0.01)
+    }
+
+    @Test
+    fun `gap uses 100m segments - quantization noise does not inflate it`() {
+        // integer-meter DEM staircase: +1 m every 32 points (240 m, ~0.4% true
+        // grade) — per-point slope would swing at each step edge; the 100 m
+        // segment slope stays at the true grade, so GAP stays near actual speed
+        val pts = ArrayList<GpsPointRecord>()
+        val alts = ArrayList<Double>()
+        for (i in 0 until 120) {
+            pts.add(GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0000674, 37.60, 1.5f))
+            alts.add(150.0 + (i / 32) * 1.0)
+        }
+        val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
+        assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.7)
+    }
+
     // ── Profile assembly ──────────────────────────────────────────────────────
 
     private fun pt(t: Long, lat: Double, lon: Double, speed: Float) =

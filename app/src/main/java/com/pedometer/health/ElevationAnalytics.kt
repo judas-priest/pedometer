@@ -27,11 +27,11 @@ object ElevationAnalytics {
     private const val GRADE_MIN_PCT = -6.0
     private const val GRADE_MAX_PCT = 15.0
 
-    /** Same clamp as a rise/run fraction for windowed slope output. */
-    private const val MAX_WALK_GRADE = 0.15
-
-    /** Track distance over which the DEM slope is averaged (Strava smooths before grading). */
-    private const val SLOPE_WINDOW_M = 40.0
+    /** GAP segment length; slope = end-to-end height delta over the segment. */
+    private const val GAP_SEGMENT_M = 100.0
+    /** Pandolf ratio sanity band (Moscow-flat; raise to 2.5-3.0 for real mountains). */
+    private const val RATIO_MIN = 0.70
+    private const val RATIO_MAX = 2.00
 
     /** Elevation profile resampling step along the track. */
     private const val SAMPLE_STEP_M = 30.0
@@ -58,7 +58,8 @@ object ElevationAnalytics {
     /** GAP: flat-equivalent speed for the same metabolic cost. */
     fun gapKmh(speedKmh: Double, gradePct: Double, speedMs: Double): Double {
         if (gradePct == 0.0) return speedKmh
-        return speedKmh * pandolfRatio(speedMs, gradePct)
+        val ratio = pandolfRatio(speedMs, gradePct).coerceIn(RATIO_MIN, RATIO_MAX)
+        return speedKmh * ratio
     }
 
     /**
@@ -191,8 +192,6 @@ object ElevationAnalytics {
 
         val hrSorted = hrSamples.sortedBy { it.timestamp }
         val out = ArrayList<ProfilePoint>(resampled.size)
-        var gapSum = 0.0
-        var gapCount = 0
         // Self-calibrating glitch cap: the watch relay speed field is corrupted
         // (~km/h parsed as m/s). Cap honest GPS-derived speeds instead:
         // anything much above the median moving speed is a glitch, not movement.
@@ -200,14 +199,31 @@ object ElevationAnalytics {
         val median = if (moving.isEmpty()) 0.0
         else (moving[(moving.size - 1) / 2] + moving[moving.size / 2]) / 2.0
         val speedCap = (median * 1.5).coerceIn(7.0, 15.0)
+        // GAP per 100 m segment: slope from end-to-end smoothed heights, speed
+        // = segment mean; average is distance-weighted (tails <50 m dropped)
+        val segSlope = DoubleArray(resampled.size)
+        var gapSum = 0.0
+        var gapDist = 0.0
+        var i0 = 0
+        while (i0 < resampled.size - 1) {
+            var i1 = i0
+            while (i1 < resampled.size - 1 && rdist[i1 + 1] - rdist[i0] < GAP_SEGMENT_M) i1++
+            val segDist = rdist[i1] - rdist[i0]
+            if (segDist < GAP_SEGMENT_M / 2) break
+            val slope = (smoothed[i1] - smoothed[i0]) / segDist
+            for (k in i0..i1) segSlope[k] = slope
+            val vMs = resampled.subList(i0, i1 + 1).map { it.speedMs }.average()
+            val vKmh = vMs * 3.6
+            if (vKmh in 1.0..speedCap) {
+                gapSum += gapKmh(vKmh, slope * 100, vMs) * segDist
+                gapDist += segDist
+            }
+            i0 = i1
+        }
         for (i in resampled.indices) {
-            val slope = windowedSlope(rdist, smoothed, i)
+            val slope = segSlope[i]
             val s = resampled[i]
             val speedKmh = s.speedMs * 3.6
-            if (speedKmh in 1.0..speedCap) {
-                gapSum += gapKmh(speedKmh, slope * 100, s.speedMs)
-                gapCount++
-            }
             out.add(
                 ProfilePoint(
                     timestamp = s.ts,
@@ -223,7 +239,7 @@ object ElevationAnalytics {
         return ElevationProfile(
             points = out,
             ascentM = ascent,
-            avgGapKmh = if (gapCount == 0) null else gapSum / gapCount,
+            avgGapKmh = if (gapDist > 0) gapSum / gapDist else null,
         )
     }
 
@@ -326,22 +342,6 @@ object ElevationAnalytics {
             val w = (i - 3..i + 3).filter { it in raw.indices }
             w.map { raw[it] }.sorted()[w.size / 2]
         }
-    }
-
-    /** Slope over ±SLOPE_WINDOW_M of track: rise/run across the window. Sparse
-     *  tracks (points farther apart than the window) still get one neighbour
-     *  per side so the slope is never silently 0. */
-    private fun windowedSlope(dist: List<Double>, smoothed: List<Double>, i: Int): Double {
-        var lo = i
-        var hi = i
-        if (lo > 0) lo--
-        if (hi < dist.size - 1) hi++
-        while (lo > 0 && dist[i] - dist[lo - 1] < SLOPE_WINDOW_M) lo--
-        while (hi < dist.size - 1 && dist[hi + 1] - dist[i] < SLOPE_WINDOW_M) hi++
-        val run = dist[hi] - dist[lo]
-        if (run < 1.0) return 0.0
-        val rise = smoothed[hi] - smoothed[lo]
-        return (rise / run).coerceIn(-MAX_WALK_GRADE, MAX_WALK_GRADE)
     }
 
     private fun nearestBpm(ts: Long, hrSorted: List<HeartRateRecord>): Int {
