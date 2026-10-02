@@ -10,49 +10,40 @@ import org.junit.Test
 
 class ElevationAnalyticsTest {
 
-    // ── Minetti 2002 energy cost ──────────────────────────────────────────────
+    // ── Pandolf 1977 metabolic grade ratio ────────────────────────────────────
 
     @Test
-    fun `minettiCost at flat is 3_6 J per kg per m`() {
-        assertEquals(3.6, ElevationAnalytics.minettiCost(0.0), 1e-9)
+    fun `pandolf ratio flat is 1`() {
+        assertEquals(1.0, ElevationAnalytics.pandolfRatio(1.472, 0.0), 1e-9)
     }
 
     @Test
-    fun `minettiCost at +10 percent matches the polynomial`() {
-        // 155.4·1e-5 − 30.4·1e-4 − 43.3·1e-3 + 46.3·1e-2 + 19.5·0.1 + 3.6 = 5.9682
-        // (Minetti chart: ~1.7x flat cost at +10%)
-        assertEquals(5.97, ElevationAnalytics.minettiCost(0.1), 0.05)
+    fun `pandolf ratio at +5 percent matches hand calculation`() {
+        // (1.5 + 1.5*1.472^2 + 0.35*1.472*5) / (1.5 + 1.5*1.472^2) = 7.325/4.749
+        assertEquals(1.5424, ElevationAnalytics.pandolfRatio(1.472, 5.0), 1e-3)
     }
 
     @Test
-    fun `minettiCost downhill is cheaper than flat`() {
-        assertTrue(ElevationAnalytics.minettiCost(-0.1) < 3.6)
-        assertTrue(ElevationAnalytics.minettiCost(-0.2) < ElevationAnalytics.minettiCost(-0.1))
+    fun `pandolf downhill floors at -6 percent`() {
+        assertEquals(
+            ElevationAnalytics.pandolfRatio(1.472, -6.0),
+            ElevationAnalytics.pandolfRatio(1.472, -15.0), 1e-9)
+        assertTrue(ElevationAnalytics.pandolfRatio(1.472, -6.0) < 1.0)
     }
 
     @Test
-    fun `minettiCost clamps slope beyond validity range`() {
-        assertEquals(ElevationAnalytics.minettiCost(0.45), ElevationAnalytics.minettiCost(2.0), 1e-9)
-        assertEquals(ElevationAnalytics.minettiCost(-0.45), ElevationAnalytics.minettiCost(-2.0), 1e-9)
-    }
-
-    // ── GAP direction (Strava convention: uphill GAP faster, downhill slower) ──
-
-    @Test
-    fun `gapKmh at zero slope equals actual speed`() {
-        assertEquals(10.0, ElevationAnalytics.gapKmh(10.0, 0.0), 1e-9)
+    fun `pandolf clamps grade at +15 percent`() {
+        assertEquals(
+            ElevationAnalytics.pandolfRatio(1.472, 15.0),
+            ElevationAnalytics.pandolfRatio(1.472, 40.0), 1e-9)
     }
 
     @Test
-    fun `gapKmh uphill is faster than actual`() {
-        val gap = ElevationAnalytics.gapKmh(6.0, 0.1)
-        assertEquals(6.0 * ElevationAnalytics.minettiCost(0.1) / 3.6, gap, 1e-9)
-        assertTrue(gap > 6.0)
-    }
-
-    @Test
-    fun `gapKmh steep downhill is slower than actual`() {
-        assertTrue(ElevationAnalytics.gapKmh(12.0, -0.2) < 12.0)
+    fun `gapKmh uphill is faster, downhill slower (Strava convention)`() {
+        val v = 5.4; val vms = v / 3.6
+        assertTrue(ElevationAnalytics.gapKmh(v, 5.0, vms) > v)   // +5% grade
+        assertTrue(ElevationAnalytics.gapKmh(v, -5.0, vms) < v)  // -5% grade
+        assertEquals(v, ElevationAnalytics.gapKmh(v, 0.0, vms), 1e-9)
     }
 
     // ── Profile assembly ──────────────────────────────────────────────────────

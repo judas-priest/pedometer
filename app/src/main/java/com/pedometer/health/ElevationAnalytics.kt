@@ -9,7 +9,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.pow
 
 /**
  * Post-hoc elevation profile + Minetti GAP for GPS workouts (Strava DEM-correction
@@ -24,8 +23,12 @@ object ElevationAnalytics {
     private const val BATCH = 100
     private const val METEO_BATCH = 25
 
-    /** Minetti validity range for the cost polynomial (|gradient| <= 45%). */
-    private const val MAX_SLOPE = 0.45
+    /** Grade clamp in percent for the Pandolf metabolic model. */
+    private const val GRADE_MIN_PCT = -6.0
+    private const val GRADE_MAX_PCT = 15.0
+
+    /** Same clamp as a rise/run fraction for windowed slope output. */
+    private const val MAX_WALK_GRADE = 0.15
 
     /** Track distance over which the DEM slope is averaged (Strava smooths before grading). */
     private const val SLOPE_WINDOW_M = 40.0
@@ -42,22 +45,21 @@ object ElevationAnalytics {
     /** …and spans at least this much of track distance. */
     private const val ASCENT_MIN_RUN_M = 80.0
 
-    /** Flat-walking energy cost, J/(kg·m) — C(0) of the Minetti polynomial. */
-    const val FLAT_COST = 3.6
-
-    // Minetti 2002: energy cost J/kg/m at slope i (rise/run):
-    // 155.4·i⁵ − 30.4·i⁴ − 43.3·i³ + 46.3·i² + 19.5·i + 3.6
-    fun minettiCost(slopeRaw: Double): Double {
-        val slope = slopeRaw.coerceIn(-MAX_SLOPE, MAX_SLOPE)
-        return 155.4 * slope.pow(5) - 30.4 * slope.pow(4) - 43.3 * slope.pow(3) +
-            46.3 * slope.pow(2) + 19.5 * slope + FLAT_COST
+    /** Pandolf 1977 metabolic-power grade ratio for level walking (L=0, η=1):
+     *  C(i)/C(0) = (1.5 + 1.5v² + 0.35·v·G) / (1.5 + 1.5v²), v in m/s,
+     *  G in percent. Downhill floored at −6% (linear term would give negative
+     *  power below that; Santee et al. 2001). Validated 4.5–5.5 km/h. */
+    fun pandolfRatio(vMs: Double, gradePct: Double): Double {
+        val g = gradePct.coerceIn(GRADE_MIN_PCT, GRADE_MAX_PCT)
+        val base = 1.5 + 1.5 * vMs * vMs
+        return (base + 0.35 * vMs * g) / base
     }
 
-    /** GAP: flat-equivalent speed — uphill costs more per km, so the SAME effort
-     *  maps to a FASTER flat speed. v_gap = v * C(slope)/C(0). (Strava convention:
-     *  uphill GAP pace is faster than actual.) */
-    fun gapKmh(speedKmh: Double, slope: Double): Double =
-        if (slope == 0.0) speedKmh else speedKmh * minettiCost(slope) / FLAT_COST
+    /** GAP: flat-equivalent speed for the same metabolic cost. */
+    fun gapKmh(speedKmh: Double, gradePct: Double, speedMs: Double): Double {
+        if (gradePct == 0.0) return speedKmh
+        return speedKmh * pandolfRatio(speedMs, gradePct)
+    }
 
     /**
      * DEM altitudes for the points. Providers in fallback order:
@@ -201,7 +203,7 @@ object ElevationAnalytics {
             val s = resampled[i]
             val speedKmh = s.speedMs * 3.6
             if (speedKmh in 1.0..speedCap) {
-                gapSum += gapKmh(speedKmh, slope)
+                gapSum += gapKmh(speedKmh, slope * 100, s.speedMs)
                 gapCount++
             }
             out.add(
@@ -209,7 +211,7 @@ object ElevationAnalytics {
                     timestamp = s.ts,
                     altitudeM = smoothed[i],
                     slope = slope,
-                    gapKmh = if (speedKmh > 1.0) gapKmh(speedKmh, slope) else 0.0,
+                    gapKmh = if (speedKmh > 1.0) gapKmh(speedKmh, slope * 100, s.speedMs) else 0.0,
                     bpm = nearestBpm(s.ts, hrSorted),
                     speedKmh = speedKmh,
                 ),
@@ -320,7 +322,7 @@ object ElevationAnalytics {
         val run = dist[hi] - dist[lo]
         if (run < 1.0) return 0.0
         val rise = smoothed[hi] - smoothed[lo]
-        return (rise / run).coerceIn(-MAX_SLOPE, MAX_SLOPE)
+        return (rise / run).coerceIn(-MAX_WALK_GRADE, MAX_WALK_GRADE)
     }
 
     private fun nearestBpm(ts: Long, hrSorted: List<HeartRateRecord>): Int {
