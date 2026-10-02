@@ -72,8 +72,9 @@ class ElevationAnalyticsTest {
         assertEquals(14, profile.points.size)
         assertEquals(30.0, profile.ascentM, 1.5)
         // ~10 m rise per ~100 m run → slope ≈ 0.05 over the 40 m slope window,
-        // GAP above the actual 5.4 km/h
-        assertTrue(profile.avgGapKmh!! > 5.4)
+        // GAP above the actual 3.6 km/h (1 m/s geometry)
+        assertTrue(profile.avgGapKmh!! > 3.6)
+        // first segment slope: edge artifact of one-sided smoothing (see hysteresisAscent notes)
         assertEquals(0.05, profile.points[1].slope, 0.01)
     }
 
@@ -126,7 +127,7 @@ class ElevationAnalyticsTest {
     @Test
     fun `flat route gives GAP equal to actual speed`() {
         val pts = (0 until 100).map { i ->
-            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0001, 37.60, 1.5f) // 1.5 m/s = 5.4 km/h, ~7.8 m apart
+            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0000674, 37.60, 1.5f) // geometry: 7.5 m / 5 s = 1.5 m/s; the speed field is ignored
         }
         val alts = List(100) { 150.0 }
         val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
@@ -138,24 +139,38 @@ class ElevationAnalyticsTest {
     fun `steady climb gives GAP faster than actual and correct ascent`() {
         // ~8% grade: +2 m altitude every ~27.8 m of track
         val pts = (0 until 200).map { i ->
-            GpsPointRecord(0L, i * 20000L, 55.70 + i * 0.00025, 37.60, 1.2f) // 4.32 km/h actual
+            GpsPointRecord(0L, i * 20000L, 55.70 + i * 0.0002515, 37.60, 1.2f) // geometry: 28.0 m / 20 s = 1.40 m/s = 5.04 km/h
         }
         val alts = pts.mapIndexed { i, _ -> 100.0 + i * 2.0 }
         val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
         assertTrue("ascent=${p.ascentM}", p.ascentM in 380.0..400.0)
-        assertTrue("gap=${p.avgGapKmh}", p.avgGapKmh!! > 4.6)
-        assertEquals(4.32, p.points[50].speedKmh, 0.05) // 1.2 m/s carried into the profile
+        assertTrue("gap=${p.avgGapKmh}", p.avgGapKmh!! in 8.5..9.5)
+        assertEquals(5.04, p.points[50].speedKmh, 0.05) // 1.40 m/s carried into the profile
     }
 
     @Test
-    fun `GAP average ignores glitch speeds above walking range`() {
-        // 95 normal points (1.5 m/s) + 5 relay glitches at 8 m/s (28.8 km/h)
+    fun `speed comes from GPS geometry, not the relay speed field`() {
+        // geometry: 7.5 m per 5 s (1.5 m/s); relay field screams 28.8 km/h — ignored
         val pts = (0 until 100).map { i ->
-            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0001, 37.60, if (i % 20 == 0) 8f else 1.5f)
+            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0000674, 37.60, 8f)
         }
-        val alts = List(100) { 150.0 }
-        val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
-        assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.6) // glitches excluded
+        val p = ElevationAnalytics.buildProfile(pts, List(100) { 150.0 }, emptyList())!!
+        assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.6)
+        // 742 m track / 30 m step -> 25 samples; index 12 is mid-track
+        assertEquals(5.4, p.points[12].speedKmh, 0.1)
+    }
+
+    @Test
+    fun `gps speed median filter absorbs a positional spike`() {
+        // one 50 m jump in 5 s (10 m/s) at i=50; median ±3 must absorb it
+        val pts = (0 until 100).map { i ->
+            val lat = 55.70 + i * 0.0000674 + if (i > 50) 0.0003862 else 0.0
+            GpsPointRecord(0L, i * 5000L, lat, 37.60, 1.5f)
+        }
+        val p = ElevationAnalytics.buildProfile(pts, List(100) { 150.0 }, emptyList())!!
+        assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.6)
+        // sample 13 sits at 390 m — inside the spike segment (i=50 is at 375 m)
+        assertTrue("speed13=${p.points[13].speedKmh}", p.points[13].speedKmh < 6.0)
     }
 
     @Test
@@ -179,10 +194,15 @@ class ElevationAnalyticsTest {
     @Test
     fun `GAP cap is median-based - mildly inflated speeds are cut too`() {
         // median moving speed 1.4 m/s (5.04 km/h) -> new cap 7.56 km/h;
-        // 10 points at 2.2 m/s (7.92 km/h) are phantom relay speeds: old cap
-        // 9.07 let them in (avg 5.33), new cap 7.56 cuts them (avg 5.04)
-        val pts = (0 until 100).map { i ->
-            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0001, 37.60, if (i >= 90) 2.2f else 1.4f)
+        // last 10 points at 13 m per 5 s (9.36 km/h) are a geometry breakaway:
+        // cap cuts them; the mixed segment [600,700] averages ~8.3 km/h — also
+        // excluded -> avgGap = clean 5.04
+        // cumulative lat: 7.0 m steps, last 10 segments 13.0 m (no discontinuity at the seam)
+        val pts = ArrayList<GpsPointRecord>()
+        var lat = 55.70
+        for (i in 0 until 100) {
+            pts.add(GpsPointRecord(0L, i * 5000L, lat, 37.60, if (i >= 90) 2.2f else 1.4f))
+            lat += if (i >= 89) 0.0001168 else 0.0000629
         }
         val alts = List(100) { 150.0 }
         val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!

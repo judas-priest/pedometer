@@ -183,8 +183,9 @@ object ElevationAnalytics {
     ): ElevationProfile? {
         if (points.size < 2 || points.size != altitudes.size) return null
         val sorted = points.sortedBy { it.timestamp }
+        val speeds = gpsSpeeds(sorted)
         val dist = cumulativeDistance(sorted)
-        val resampled = resampleByDistance(sorted, altitudes, dist, SAMPLE_STEP_M)
+        val resampled = resampleByDistance(sorted, altitudes, speeds, dist, SAMPLE_STEP_M)
         val smoothed = distanceSmooth(resampled, SMOOTH_WINDOW_M)
         val rdist = resampled.map { it.dist }
 
@@ -192,9 +193,10 @@ object ElevationAnalytics {
         val out = ArrayList<ProfilePoint>(resampled.size)
         var gapSum = 0.0
         var gapCount = 0
-        // Self-calibrating glitch cap: GPS relay emits phantom speeds while walking.
-        // Anything much above the median moving speed is a glitch, not movement.
-        val moving = sorted.map { it.speed * 3.6 }.filter { it > 1.0 }.sorted()
+        // Self-calibrating glitch cap: the watch relay speed field is corrupted
+        // (~km/h parsed as m/s). Cap honest GPS-derived speeds instead:
+        // anything much above the median moving speed is a glitch, not movement.
+        val moving = resampled.map { it.speedMs * 3.6 }.filter { it > 1.0 }.sorted()
         val median = if (moving.isEmpty()) 0.0
         else (moving[(moving.size - 1) / 2] + moving[moving.size / 2]) / 2.0
         val speedCap = (median * 1.5).coerceIn(7.0, 15.0)
@@ -244,13 +246,14 @@ object ElevationAnalytics {
     private fun resampleByDistance(
         sorted: List<GpsPointRecord>,
         altitudes: List<Double>,
+        speeds: List<Double>,
         dist: List<Double>,
         step: Double,
     ): List<Sample> {
         val out = ArrayList<Sample>()
         var target = 0.0
         var i = 1
-        out.add(Sample(sorted[0].timestamp, altitudes[0], 0.0, sorted[0].speed.toDouble()))
+        out.add(Sample(sorted[0].timestamp, altitudes[0], 0.0, speeds[0]))
         while (target + step <= dist.last()) {
             target += step
             while (dist[i] < target) i++
@@ -258,8 +261,8 @@ object ElevationAnalytics {
             val f = if (t1 > t0) (target - t0) / (t1 - t0) else 0.0
             val alt = altitudes[i - 1] + f * (altitudes[i] - altitudes[i - 1])
             val ts = sorted[i - 1].timestamp + (f * (sorted[i].timestamp - sorted[i - 1].timestamp)).toLong()
-            val speed = sorted[i - 1].speed + f * (sorted[i].speed - sorted[i - 1].speed)
-            out.add(Sample(ts, alt, target, speed.toDouble()))
+            val speed = speeds[i - 1] + f * (speeds[i] - speeds[i - 1])
+            out.add(Sample(ts, alt, target, speed))
         }
         return out
     }
@@ -307,6 +310,22 @@ object ElevationAnalytics {
         val dLat = (b.lat - a.lat) * 111_320.0
         val dLon = (b.lon - a.lon) * 111_320.0 * cos(Math.toRadians((a.lat + b.lat) / 2))
         return Math.hypot(dLat, dLon)
+    }
+
+    /** Ground-truth speed from point geometry: haversine/dt, median over ±3
+     *  points (median resists GPS outliers). The watch relay speed field is
+     *  corrupted (~km/h parsed as m/s, 3.35x high) and is never used. */
+    private fun gpsSpeeds(sorted: List<GpsPointRecord>): List<Double> {
+        val raw = DoubleArray(sorted.size)
+        for (i in 1 until sorted.size) {
+            val dt = (sorted[i].timestamp - sorted[i - 1].timestamp) / 1000.0
+            raw[i] = if (dt > 0) distanceMeters(sorted[i - 1], sorted[i]) / dt else 0.0
+        }
+        raw[0] = raw.getOrElse(1) { 0.0 }
+        return raw.indices.map { i ->
+            val w = (i - 3..i + 3).filter { it in raw.indices }
+            w.map { raw[it] }.sorted()[w.size / 2]
+        }
     }
 
     /** Slope over ±SLOPE_WINDOW_M of track: rise/run across the window. Sparse
