@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class, Supplement::class, SupplementIntake::class, WeightLog::class],
-    version = 14, // keep in sync with VERSION below
+    version = 15, // keep in sync with VERSION below
     exportSchema = true,
 )
 abstract class StepDatabase : RoomDatabase() {
@@ -17,7 +17,7 @@ abstract class StepDatabase : RoomDatabase() {
 
     companion object {
         /** Mirror of the @Database version. Room needs a literal in the annotation. */
-        const val VERSION = 14
+        const val VERSION = 15
 
         /** Oldest schema version any installed build can still be sitting on. */
         const val OLDEST_SUPPORTED = 7
@@ -89,6 +89,12 @@ abstract class StepDatabase : RoomDatabase() {
             object : Migration(13, 14) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `altitude` REAL")
+                }
+            },
+            object : Migration(14, 15) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // DEM cache invalidation: refetch with bilinear interpolation
+                    db.execSQL("UPDATE `gps_points` SET `altitude` = NULL")
                 }
             },
         )

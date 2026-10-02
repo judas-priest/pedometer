@@ -90,7 +90,8 @@ object ElevationAnalytics {
                             val locs = chunk.joinToString("%7C") {
                                 String.format(java.util.Locale.US, "%.6f,%.6f", it.lat, it.lon)
                             }
-                            val conn = URL("https://api.opentopodata.org/v1/srtm90m?locations=$locs")
+                            // bilinear — server default is nearest, which makes the DEM staircase
+                            val conn = URL("https://api.opentopodata.org/v1/srtm90m?locations=$locs&interpolation=bilinear")
                                 .openConnection() as HttpURLConnection
                             conn.connectTimeout = 10_000
                             conn.readTimeout = 15_000
