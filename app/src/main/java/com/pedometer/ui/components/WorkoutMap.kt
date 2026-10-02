@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -155,7 +156,8 @@ private fun OsmMapView(
 @Composable
 fun RouteScrubMap(geoPoints: List<GeoPoint>, markerPoint: GeoPoint?, modifier: Modifier = Modifier) {
     AndroidView(
-        modifier = modifier,
+        // MapView bleeds tiles/polyline past its bounds during zoom — clip hard
+        modifier = modifier.clipToBounds(),
         factory = { ctx ->
             MapView(ctx).apply {
                 setTileSource(TileSourceFactory.MAPNIK)
