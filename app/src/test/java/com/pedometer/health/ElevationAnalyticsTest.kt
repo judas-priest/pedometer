@@ -170,4 +170,15 @@ class ElevationAnalyticsTest {
         assertTrue("gap=${p.avgGapKmh}", p.avgGapKmh!! > 4.6)
         assertEquals(4.32, p.points[50].speedKmh, 0.05) // 1.2 m/s carried into the profile
     }
+
+    @Test
+    fun `GAP average ignores glitch speeds above walking range`() {
+        // 95 normal points (1.5 m/s) + 5 relay glitches at 8 m/s (28.8 km/h)
+        val pts = (0 until 100).map { i ->
+            GpsPointRecord(0L, i * 5000L, 55.70 + i * 0.0001, 37.60, if (i % 20 == 0) 8f else 1.5f)
+        }
+        val alts = List(100) { 150.0 }
+        val p = ElevationAnalytics.buildProfile(pts, alts, emptyList())!!
+        assertTrue("avgGap=${p.avgGapKmh}", p.avgGapKmh!! in 5.2..5.6) // glitches excluded
+    }
 }

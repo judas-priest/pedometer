@@ -197,7 +197,8 @@ object ElevationAnalytics {
                 if (rise > 0) ascent += rise
             }
             val speedKmh = sorted[i].speed * 3.6
-            if (speedKmh > 1.0) {
+            // GPS relay glitches (28+ km/h while walking) must not inflate the average
+            if (speedKmh in 1.0..15.0) {
                 gapSum += gapKmh(speedKmh, slope)
                 gapCount++
             }
