@@ -344,16 +344,19 @@ fun ElevationDetailDialog(
                 // hard bottom inset — Dialog windows report no navigation-bar insets,
                 // systemBarsPadding alone leaves the legend under the gesture pill
                 Column(Modifier.fillMaxSize().padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 48.dp)) {
-                    // keep clear of the floating close button (absolute, top-end)
-                    Row(Modifier.fillMaxWidth().padding(end = 48.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Профиль высоты", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        if (profile.avgGapKmh != null) {
-                            Text(
-                                "↑ ${profile.ascentM.toInt()} м · По равнине %.1f км/ч".format(profile.avgGapKmh),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = StepGreen,
-                            )
-                        }
+                    Text(
+                        "Профиль высоты",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(end = 48.dp), // clear of the floating close button
+                    )
+                    if (profile.avgGapKmh != null) {
+                        Text(
+                            "↑ ${profile.ascentM.toInt()} м · По равнине %.1f км/ч".format(profile.avgGapKmh),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = StepGreen,
+                            modifier = Modifier.padding(end = 48.dp),
+                        )
                     }
                     Spacer(Modifier.height(8.dp))
                     // Instant values for the scrubbed point (visible once the user scrubs)
