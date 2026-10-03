@@ -560,13 +560,13 @@ class WatchRepository(private val context: Context) {
                 Log.i(TAG, "Got ${samples.size} HR samples from activity sync")
                 scope.launch(Dispatchers.IO) {
                     try {
-                        for (s in samples) {
-                            dao.insertHeartRate(HeartRateRecord(
+                        dao.insertHeartRateAll(samples.map { s ->
+                            HeartRateRecord(
                                 timestamp = s.timestamp,
                                 bpm = s.bpm,
                                 source = "watch_history",
-                            ))
-                        }
+                            )
+                        })
                         Log.i(TAG, "Saved ${samples.size} HR samples to DB")
                         bumpRoom()
                     } catch (e: Exception) {

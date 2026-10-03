@@ -97,6 +97,9 @@ interface StepDao {
     @Insert
     suspend fun insertHeartRate(hr: HeartRateRecord)
 
+    @Insert
+    suspend fun insertHeartRateAll(hr: List<HeartRateRecord>)
+
     @Query("SELECT * FROM heart_rate WHERE timestamp > :since ORDER BY timestamp DESC")
     suspend fun getHeartRateSince(since: Long): List<HeartRateRecord>
 
