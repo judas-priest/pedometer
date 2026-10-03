@@ -112,6 +112,21 @@ interface StepDao {
     @Query("DELETE FROM heart_rate WHERE timestamp < :before")
     suspend fun cleanOldHeartRate(before: Long)
 
+    @Query("DELETE FROM heart_rate WHERE timestamp < :cutoff")
+    suspend fun deleteHrRawBefore(cutoff: Long)
+
+    @Query("SELECT * FROM heart_rate_archive WHERE day = :day")
+    suspend fun getHrArchive(day: Long): HeartRateArchive?
+
+    @Query("SELECT * FROM heart_rate_archive ORDER BY day")
+    suspend fun getAllHrArchive(): List<HeartRateArchive>
+
+    @Insert
+    suspend fun insertHrArchive(a: HeartRateArchive)
+
+    @Query("SELECT COUNT(*) FROM heart_rate WHERE timestamp < :cutoff")
+    suspend fun countOldHr(cutoff: Long): Int
+
     // Supplements
     @Insert
     suspend fun insertSupplement(s: Supplement)

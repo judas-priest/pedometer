@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.pedometer.data.HrCodec
 import com.pedometer.data.StepDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,9 +40,12 @@ object DataExporter {
                 // Heart rate — full history
                 w.write("\n=== HEART RATE ===\n")
                 w.write("timestamp,bpm,source\n")
-                val hr = dao.getHeartRateSince(0L)
-                for (r in hr) {
-                    w.write("${r.timestamp},${r.bpm},${r.source}\n")
+                val archived = dao.getAllHrArchive()
+                    .sortedBy { it.day }
+                    .flatMap { HrCodec.decompress(it.data).map { s -> Triple(s.timestamp, s.bpm, "archive") } }
+                val hr = dao.getHeartRateSince(0L).map { Triple(it.timestamp, it.bpm, it.source) }
+                for ((ts, bpm, src) in (archived + hr).sortedBy { it.first }) {
+                    w.write("$ts,$bpm,$src\n")
                 }
 
                 // Hourly steps — full history

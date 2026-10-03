@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class, Supplement::class, SupplementIntake::class, WeightLog::class],
-    version = 15, // keep in sync with VERSION below
+    entities = [DailySteps::class, HourlySteps::class, MinuteSteps::class, StepSnapshot::class, HeartRateRecord::class, HeartRateArchive::class, DailyHealth::class, SleepRecord::class, WorkoutRecord::class, GpsPointRecord::class, Supplement::class, SupplementIntake::class, WeightLog::class],
+    version = 16, // keep in sync with VERSION below
     exportSchema = true,
 )
 abstract class StepDatabase : RoomDatabase() {
@@ -17,7 +17,7 @@ abstract class StepDatabase : RoomDatabase() {
 
     companion object {
         /** Mirror of the @Database version. Room needs a literal in the annotation. */
-        const val VERSION = 15
+        const val VERSION = 16
 
         /** Oldest schema version any installed build can still be sitting on. */
         const val OLDEST_SUPPORTED = 7
@@ -95,6 +95,40 @@ abstract class StepDatabase : RoomDatabase() {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     // DEM cache invalidation: refetch with bilinear interpolation
                     db.execSQL("UPDATE `gps_points` SET `altitude` = NULL")
+                }
+            },
+            object : Migration(15, 16) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `heart_rate_archive` (`day` INTEGER NOT NULL, `data` BLOB NOT NULL, `samples` INTEGER NOT NULL, PRIMARY KEY(`day`))"
+                    )
+                    val cutoff = System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000
+                    // Backfill: group raw rows older than cutoff by day, compress, insert blobs,
+                    // then delete the raw rows. Room runs migrations in a transaction —
+                    // a failure here rolls the whole migration back (all-or-nothing).
+                    val rows = ArrayList<HrCodec.Sample>(8192)
+                    var currentDay = -1L
+                    fun flush() {
+                        if (rows.isEmpty()) return
+                        val blob = HrCodec.compress(rows)
+                        val cv = android.content.ContentValues()
+                        cv.put("day", currentDay)
+                        cv.put("data", blob)
+                        cv.put("samples", rows.size)
+                        db.insert("heart_rate_archive", android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE, cv)
+                        rows.clear()
+                    }
+                    db.query("SELECT timestamp, bpm FROM heart_rate WHERE timestamp < ? ORDER BY timestamp", arrayOf(cutoff)).use { c ->
+                        while (c.moveToNext()) {
+                            val ts = c.getLong(0)
+                            val bpm = c.getInt(1)
+                            val day = ts / 86_400_000L
+                            if (day != currentDay) { flush(); currentDay = day }
+                            rows.add(HrCodec.Sample(ts, bpm))
+                        }
+                    }
+                    flush()
+                    db.execSQL("DELETE FROM heart_rate WHERE timestamp < ?", arrayOf(cutoff))
                 }
             },
         )

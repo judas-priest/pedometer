@@ -61,6 +61,13 @@ data class HeartRateRecord(
     val source: String = "watch",            // "watch" or "phone"
 )
 
+@Entity(tableName = "heart_rate_archive", primaryKeys = ["day"])
+data class HeartRateArchive(
+    val day: Long,        // epoch day number (timestamp / 86_400_000)
+    val data: ByteArray,  // HrCodec-compressed samples for this day
+    val samples: Int,
+)
+
 @Entity(tableName = "sleep_records")
 data class SleepRecord(
     @PrimaryKey val bedTime: Long,           // epoch millis
