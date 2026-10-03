@@ -6,3 +6,9 @@ app/build/
 local.properties
 keystore.properties
 *.jks
+
+# plans and personal data - untracked
+docs/superpowers/plans/
+memory/
+docs/btsnoop_mi_fitness.cfa
+*.csv
