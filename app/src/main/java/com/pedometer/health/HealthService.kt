@@ -21,6 +21,9 @@ class HealthService(
     private val onHealthUpdate: (HealthData) -> Unit,
 ) {
     var onWorkoutEvent: ((WorkoutEvent) -> Unit)? = null
+
+    /** Fired when the watch reports its HR monitoring config (on every connect). */
+    var onHrConfigKnown: ((config: XiaomiProto.HeartRate) -> Unit)? = null
     var onGpsNeeded: ((Boolean) -> Unit)? = null
     private var workoutStarted = false
     private var gpsStarted = false
@@ -71,6 +74,7 @@ class HealthService(
         private const val TAG = "HealthService"
         const val CMD_CONFIG_SPO2_GET = 8
         const val CMD_CONFIG_HEART_RATE_GET = 10
+        const val CMD_CONFIG_HEART_RATE_SET = 11
         const val CMD_CONFIG_STANDING_REMINDER_GET = 12
         const val CMD_CONFIG_STRESS_GET = 14
         const val CMD_CONFIG_GOAL_NOTIFICATION_GET = 21
@@ -108,6 +112,24 @@ class HealthService(
             .setSubtype(subtype)
             .build()
         protocolHandler.sendCommand(cmd)
+    }
+
+    /** FULL config reported by the watch (cmd 10 response). null until received.
+     *  Kept whole: cmd 11 must echo ALL fields (interval, advancedMonitoring,
+     *  breathingScore, alarms, unknown7) — GB sends everything, fields absent
+     *  from the message may reset to firmware defaults. */
+    @Volatile var watchHrConfig: XiaomiProto.HeartRate? = null
+        private set
+
+    /** Push a full HR config to the watch (send config.toBuilder().setDisabled(x).build()). */
+    fun setHeartRateMonitoring(config: XiaomiProto.HeartRate) {
+        val cmd = XiaomiProto.Command.newBuilder()
+            .setType(CommandHelper.TYPE_HEALTH)
+            .setSubtype(CMD_CONFIG_HEART_RATE_SET)
+            .setHealth(XiaomiProto.Health.newBuilder().setHeartRate(config))
+            .build()
+        protocolHandler.sendCommand(cmd)
+        Log.i(TAG, "HR monitoring -> disabled=${config.disabled} interval=${config.interval}")
     }
 
     fun startRealtimeStats() {
@@ -179,7 +201,15 @@ class HealthService(
             CMD_CONFIG_STRESS_GET -> {
                 Log.i(TAG, "Stress config: ${cmd.health}")
             }
-            CMD_CONFIG_HEART_RATE_GET,
+            CMD_CONFIG_HEART_RATE_GET -> {
+                if (cmd.hasHealth() && cmd.health.hasHeartRate()) {
+                    val hr = cmd.health.heartRate
+                    watchHrConfig = hr
+                    Log.i(TAG, "HR config from watch: disabled=${hr.disabled} interval=${hr.interval} " +
+                        "advMon=${hr.hasAdvancedMonitoring()} breathing=${hr.breathingScore}")
+                    onHrConfigKnown?.invoke(hr)
+                }
+            }
             CMD_CONFIG_STANDING_REMINDER_GET,
             CMD_CONFIG_GOAL_NOTIFICATION_GET, CMD_CONFIG_GOALS_GET,
             CMD_CONFIG_VITALITY_SCORE_GET -> {
