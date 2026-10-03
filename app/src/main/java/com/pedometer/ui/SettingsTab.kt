@@ -369,6 +369,26 @@ fun SettingsTab(
                         PedometerApp.repository.onWifiGateChanged()
                     })
                 }
+                var hrWristOnly by remember { mutableStateOf(prefs.getBoolean("hr_sensors_wrist_only", true)) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Датчики только на руке", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Пульс/SpO2 молчат, когда часы отключены",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = hrWristOnly, onCheckedChange = { on ->
+                        hrWristOnly = on
+                        prefs.edit().putBoolean("hr_sensors_wrist_only", on).apply()
+                        PedometerApp.repository.setHrWristOnly(on)
+                    })
+                }
             }
         }
 
