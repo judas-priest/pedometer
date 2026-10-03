@@ -755,9 +755,11 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshCalendarEvents() {
-        val app = getApplication<Application>()
-        val events = CalendarService.readUpcomingEventsUI(app)
-        _state.update { it.copy(calendarEvents = events) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val events = CalendarService.readUpcomingEventsUI(app)
+            _state.update { it.copy(calendarEvents = events) }
+        }
     }
 
     fun getAlarms() = repo.getAlarms()
