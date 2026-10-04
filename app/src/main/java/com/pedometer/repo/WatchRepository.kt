@@ -606,7 +606,7 @@ class WatchRepository(private val context: Context) {
                         Log.i(TAG, "Saved ${samples.size} HR samples to DB")
                         // Archive raw rows older than 90 days into day-blobs (lossless).
                         val archiveCutoff = System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000
-                        if (dao.countOldHr(archiveCutoff) > 5000) {
+                        if (dao.countOldHr(archiveCutoff) > 100) {
                             val old = dao.getHeartRateBetween(0L, archiveCutoff)
                             if (old.isNotEmpty()) {
                                 val byDay = old.groupBy { it.timestamp / 86_400_000L }
