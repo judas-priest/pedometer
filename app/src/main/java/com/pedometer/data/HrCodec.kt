@@ -49,4 +49,14 @@ object HrCodec {
             return out
         }
     }
+
+    /** Merge archived + re-synced samples: dedupe by timestamp (LAST occurrence
+     *  wins — the freshest delivery), sorted ascending. Makes archival idempotent:
+     *  merging the same re-synced data twice yields the same result. */
+    fun mergeSamples(existing: List<Sample>, incoming: List<Sample>): List<Sample> {
+        val byTs = LinkedHashMap<Long, Sample>()
+        for (s in existing) byTs[s.timestamp] = s
+        for (s in incoming) byTs[s.timestamp] = s
+        return byTs.values.sortedBy { it.timestamp }
+    }
 }
