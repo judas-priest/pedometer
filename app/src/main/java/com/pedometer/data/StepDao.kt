@@ -121,7 +121,7 @@ interface StepDao {
     @Query("SELECT * FROM heart_rate_archive ORDER BY day")
     suspend fun getAllHrArchive(): List<HeartRateArchive>
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHrArchive(a: HeartRateArchive)
 
     @Query("SELECT COUNT(*) FROM heart_rate WHERE timestamp < :cutoff")

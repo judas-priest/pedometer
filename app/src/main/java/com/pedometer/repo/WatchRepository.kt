@@ -611,8 +611,14 @@ class WatchRepository(private val context: Context) {
                             if (old.isNotEmpty()) {
                                 val byDay = old.groupBy { it.timestamp / 86_400_000L }
                                 for ((day, rows) in byDay) {
-                                    val blob = HrCodec.compress(rows.map { HrCodec.Sample(it.timestamp, it.bpm) })
-                                    dao.insertHrArchive(HeartRateArchive(day, blob, rows.size))
+                                    // merge with the day's existing blob (watch re-sends
+                                    // already-archived history on every sync) — dedupe by ts
+                                    val raw = rows.map { HrCodec.Sample(it.timestamp, it.bpm) }
+                                    val existing = dao.getHrArchive(day)
+                                        ?.let { HrCodec.decompress(it.data) }
+                                        ?: emptyList()
+                                    val merged = HrCodec.mergeSamples(existing, raw)
+                                    dao.insertHrArchive(HeartRateArchive(day, HrCodec.compress(merged), merged.size))
                                 }
                                 dao.deleteHrRawBefore(archiveCutoff)
                             }
