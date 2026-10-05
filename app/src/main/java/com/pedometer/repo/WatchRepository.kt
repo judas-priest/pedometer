@@ -132,6 +132,11 @@ class WatchRepository(private val context: Context) {
 
     /** True when the phone sits on the home Wi-Fi — regime detector for supplement slots. */
     fun isAtHome(): Boolean = homeWifiConnected
+
+    /** True when scanning is pointless (home Wi-Fi + gate): the PresenceLoop sleeps until Wi-Fi drops. */
+    fun isScanSuppressed(): Boolean =
+        homeWifiConnected && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_WIFI_GATE, true)
     private var weatherJob: Job? = null
     private var initJob: Job? = null
     @Volatile private var lastHrSaveTime = 0L
