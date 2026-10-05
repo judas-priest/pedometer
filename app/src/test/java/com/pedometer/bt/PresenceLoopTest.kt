@@ -1,7 +1,7 @@
 package com.pedometer.bt
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -15,23 +15,27 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PresenceLoopTest {
 
-    private class Harness(scope: CoroutineScope, var suppressed: Boolean = false) {
+    private class Harness(scope: TestScope, var suppressed: Boolean = false) {
         var scans = 0
         var lastPresence: Boolean? = null
         var quietChanged = 0
         var quietHours: QuietHours = QuietHours.DISABLED
 
+        /** Виртуальный час суток для лупа (инъекция вместо реальных LocalTime.now()). */
+        var hour: Int = 12
+
         /** Что возвращает каждый скан: true = часы в эфире (каденс 60с), false = нет (бэкофф 5м → 10м). */
         var found: Boolean = false
 
         val loop = PresenceLoop(
-            scope = scope,
+            scope = scope.backgroundScope,
             quietHours = { quietHours },
             onQuietChanged = { quietChanged++ },
             onPresenceChanged = { lastPresence = it },
             connected = { false },
             scanSuppressed = { suppressed },
             scanOnce = { scans++; found },
+            now = { hour },
         )
     }
 
@@ -116,15 +120,15 @@ class PresenceLoopTest {
         assertEquals(2, h.scans) // дальше обычный бэкофф, никаких лишних сканов
     }
 
-    // 6. Тихие часы сильнее подавления Wi-Fi
+    // 6. Тихие часы сильнее подавления Wi-Fi (детерминированно: инъекция часа)
     @Test
     fun `quiet hours block scans even when not suppressed`() = runTest {
         val h = Harness(this)
-        h.quietHours = QuietHours(true, 0, 7)
+        h.quietHours = QuietHours(true, 12, 13)
         h.loop.start()
         advanceTimeBy(3 * 60_000L)
         assertEquals(0, h.scans)
-        h.quietHours = QuietHours.DISABLED
+        h.hour = 13 // окно кончилось
         h.loop.scanNow()
         runCurrent()
         assertEquals(1, h.scans)
