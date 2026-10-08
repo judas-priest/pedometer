@@ -181,7 +181,7 @@ class WatchRepository(private val context: Context) {
         scope.launch {
             delay(15_000)
             healthService?.closeKnockWindow()
-            if (!gpsRelayActive && !watchWorkoutActive) stopGpsRelayIfActive()
+            if (!gpsRelayActive) stopGpsRelayIfActive()
         }
     }
 
@@ -560,6 +560,15 @@ class WatchRepository(private val context: Context) {
                     ))
                 }
                 bumpRoom()
+                // Offline finish reconciliation: a workout summary means the workout ENDED.
+                // If the finish happened while the link was down, no live status-3 arrived —
+                // clear the stale flag/capsule/poller here.
+                if (watchWorkoutActive || workoutUi != null) {
+                    watchWorkoutActive = false
+                    workoutUi = null
+                    stopStepPoll()
+                    publishWorkoutState()
+                }
                 calibrateStepLength(w) // reads DB + EMA profile write, best effort — outside the transaction
             },
             onSleepData = { sleep ->
@@ -728,7 +737,6 @@ class WatchRepository(private val context: Context) {
     private fun stopStepPoll() {
         stepPollJob?.cancel()
         stepPollJob = null
-        _data.value = _data.value.copy(workout = null, daySteps = -1)
     }
 
     /** Настройки изменили флаг — перерисовать/погасить немедленно. */
