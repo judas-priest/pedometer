@@ -15,7 +15,7 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.pedometer"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.pedometer"
@@ -61,6 +61,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    packaging {
+        resources {
+            // bcprov-jdk18on and jspecify (transitive of core-ktx 1.17) both ship this
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
 }
 
 ksp {
@@ -83,7 +90,7 @@ protobuf {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
