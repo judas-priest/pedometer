@@ -118,6 +118,9 @@ class WatchRepository(private val context: Context) {
 
     /** Снимок тренировки для уведомлений — НЕ сбрасывается при обрыве связи. */
     @Volatile private var workoutUi: WorkoutUi? = null
+
+    /** Момент последнего живого события старта/возобновления тренировки (wall clock). */
+    @Volatile private var liveWorkoutStart = 0L
     private var stepPollJob: Job? = null
 
     /** Watch asked the phone to relay GPS — a workout is live even without a watch-side status. */
@@ -439,6 +442,9 @@ class WatchRepository(private val context: Context) {
         }
         health.onWorkoutEvent = { event ->
             watchWorkoutActive = event.status != 3 // 0=started,1=resumed,2=paused,3=finished
+            if (event.status == 0 || event.status == 1) {
+                liveWorkoutStart = System.currentTimeMillis()
+            }
             Log.i(TAG, "Workout event: ${event.sportName} status=${event.status}")
             val enabled = isWorkoutStatusEnabled()
             workoutUi = when (event.status) {
@@ -562,8 +568,10 @@ class WatchRepository(private val context: Context) {
                 bumpRoom()
                 // Offline finish reconciliation: a workout summary means the workout ENDED.
                 // If the finish happened while the link was down, no live status-3 arrived —
-                // clear the stale flag/capsule/poller here.
-                if (watchWorkoutActive || workoutUi != null) {
+                // clear the stale flag/capsule/poller here. Recency guard: a summary whose
+                // end predates our last seen live start cannot be the live workout (e.g.
+                // history re-delivery of old files during a live workout) — skip it.
+                if ((watchWorkoutActive || workoutUi != null) && w.endTime >= liveWorkoutStart) {
                     watchWorkoutActive = false
                     workoutUi = null
                     stopStepPoll()
