@@ -294,6 +294,9 @@ fun SettingsTab(
         var quietStartText by remember { mutableStateOf(prefs.getInt("quiet_start", 0).toString()) }
         var quietEndText by remember { mutableStateOf(prefs.getInt("quiet_end", 7).toString()) }
         var wifiGate by remember { mutableStateOf(prefs.getBoolean("wifi_gate_enabled", true)) }
+        var workoutStatus by remember {
+            mutableStateOf(prefs.getBoolean("workout_status_enabled", true))
+        }
 
         ElevatedCard {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -368,6 +371,28 @@ fun SettingsTab(
                         prefs.edit().putBoolean("wifi_gate_enabled", on).apply()
                         PedometerApp.repository.onWifiGateChanged()
                     })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Статус тренировки", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Ходьба/Пауза в уведомлении, капелька с шагами дня, вибро на старт/финиш",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = workoutStatus,
+                        onCheckedChange = { on ->
+                            workoutStatus = on
+                            prefs.edit().putBoolean("workout_status_enabled", on).apply()
+                            PedometerApp.repository.onWorkoutStatusChanged()
+                        },
+                    )
                 }
                 var hrWristOnly by remember { mutableStateOf(prefs.getBoolean("hr_sensors_wrist_only", true)) }
                 Row(
