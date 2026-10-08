@@ -88,6 +88,7 @@ class WatchConnectionService : Service() {
                 onQuietChanged = repo::onQuietHoursChanged,
                 onPresenceChanged = repo::onWatchPresence,
                 connected = { repo.data.value.connectionStatus == com.pedometer.vm.ConnectionStatus.Connected },
+                scanSuppressed = { repo.isScanSuppressed() },
             )
             presenceMonitor?.start()
         }
@@ -238,6 +239,7 @@ class WatchConnectionService : Service() {
             override fun onLost(network: Network) {
                 Log.i(TAG, "Wi-Fi lost")
                 repo.onHomeWifiChanged(false)
+                presenceMonitor?.scanNow()  // gate just opened — scan at once, don't wait a tick
             }
         }
         val request = NetworkRequest.Builder()

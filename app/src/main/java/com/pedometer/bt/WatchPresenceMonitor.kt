@@ -10,13 +10,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
-import java.time.LocalTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -30,21 +26,22 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * Reports every completed scan window (dedup happens upstream in the repository);
  * the interval backs off the longer the watch stays absent, and pauses entirely
- * during quiet hours.
+ * during quiet hours. When the home-Wi-Fi gate is active the loop sleeps;
+ * [scanNow] resumes it the moment Wi-Fi drops.
  */
 class WatchPresenceMonitor(
     context: Context,
     private val mac: String,
     private val scope: CoroutineScope,
-    private val quietHours: () -> QuietHours = { QuietHours.DISABLED },
-    private val onQuietChanged: () -> Unit = {},
-    private val onPresenceChanged: (present: Boolean) -> Unit,
-    private val connected: () -> Boolean = { false },
+    quietHours: () -> QuietHours = { QuietHours.DISABLED },
+    onQuietChanged: () -> Unit = {},
+    onPresenceChanged: (present: Boolean) -> Unit,
+    connected: () -> Boolean = { false },
+    private val scanSuppressed: () -> Boolean = { false },
 ) {
     companion object {
         private const val TAG = "WatchPresenceMonitor"
         private const val SCAN_WINDOW_MS = 3_000L
-        private const val BASE_INTERVAL_MS = 60_000L
     }
 
     private val appContext = context.applicationContext
@@ -52,52 +49,33 @@ class WatchPresenceMonitor(
         (appContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager)
             .adapter?.bluetoothLeScanner
 
-    private var loopJob: Job? = null
     @Volatile private var callback: ScanCallback? = null
-    @Volatile private var lastQuiet: Boolean? = null
-    private val intervalPolicy = ScanIntervalPolicy()
+
+    private val loop = PresenceLoop(
+        scope = scope,
+        quietHours = quietHours,
+        onQuietChanged = onQuietChanged,
+        onPresenceChanged = onPresenceChanged,
+        connected = connected,
+        scanSuppressed = scanSuppressed,
+        scanOnce = { scanOnce() },
+    )
 
     fun start() {
-        if (loopJob != null) return
         if (!hasPermission()) {
             Log.w(TAG, "BLUETOOTH_SCAN not granted — presence monitor idle")
             return
         }
-        loopJob = scope.launch {
-            while (true) {
-                val quiet = quietHours().isQuiet(LocalTime.now().hour)
-                if (quiet != lastQuiet) {
-                    lastQuiet = quiet
-                    onQuietChanged()
-                }
-                if (quiet) {
-                    // Night window: no scan at all. Re-assert the policy every tick so any
-                    // connect that slipped past the gate (or raced the last evaluation)
-                    // is torn down within a minute.
-                    onQuietChanged()
-                    delay(BASE_INTERVAL_MS)
-                    continue
-                }
-                if (connected()) {
-                    // Watch already linked — scanning is pure radio waste.
-                    delay(BASE_INTERVAL_MS)
-                    continue
-                }
-                val found = scanOnce()
-                if (found != null) {
-                    intervalPolicy.onScanResult(found)
-                    onPresenceChanged(found)
-                }
-                delay((intervalPolicy.nextIntervalMs() - SCAN_WINDOW_MS).coerceAtLeast(BASE_INTERVAL_MS / 2))
-            }
-        }
+        loop.start()
     }
 
     fun stop() {
-        loopJob?.cancel()
-        loopJob = null
+        loop.stop()
         stopScan()
     }
+
+    /** Wi-Fi gate just opened (onLost) — scan at once instead of waiting out the tick. */
+    fun scanNow() = loop.scanNow()
 
     private fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.BLUETOOTH_SCAN) ==

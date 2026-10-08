@@ -64,6 +64,7 @@ class WatchRepository(private val context: Context) {
         private const val KEY_QUIET_START = "quiet_start"
         private const val KEY_QUIET_END = "quiet_end"
         private const val KEY_WIFI_GATE = "wifi_gate_enabled"
+        private const val KEY_HR_WRIST_ONLY = "hr_sensors_wrist_only"
 
         @Volatile private var INSTANCE: WatchRepository? = null
 
@@ -131,6 +132,11 @@ class WatchRepository(private val context: Context) {
 
     /** True when the phone sits on the home Wi-Fi — regime detector for supplement slots. */
     fun isAtHome(): Boolean = homeWifiConnected
+
+    /** True when scanning is pointless (home Wi-Fi + gate): the PresenceLoop sleeps until Wi-Fi drops. */
+    fun isScanSuppressed(): Boolean =
+        homeWifiConnected && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_WIFI_GATE, true)
     private var weatherJob: Job? = null
     private var initJob: Job? = null
     @Volatile private var lastHrSaveTime = 0L
@@ -258,6 +264,16 @@ class WatchRepository(private val context: Context) {
         applyConnectionPolicy("wifi gate edited")
     }
 
+    /** Wrist-only mode: HR monitoring auto-off when the watch link drops, back on at connect. */
+    fun isHrWristOnly(): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_HR_WRIST_ONLY, true)
+
+    fun setHrWristOnly(on: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_HR_WRIST_ONLY, on).apply()
+        applyConnectionPolicy("hr wrist only=$on")
+    }
+
     /**
      * THE single decision point for holding or dropping the watch link.
      *
@@ -277,10 +293,26 @@ class WatchRepository(private val context: Context) {
             "workout=$workoutActive present=$lastKnownPresent -> suppress=$suppress status=$status")
         when {
             workoutActive -> Unit // never tear down a live workout, whatever the scenario says
-            suppress -> if (status != ConnectionStatus.Disconnected) link.disconnect()
+            suppress -> {
+                // healthService is NULLABLE (assigned in buildServices, cleared on cleanup).
+                // Echo the watch's FULL config with disabled=true — missing fields may
+                // reset to firmware defaults (GB sets every field for this reason).
+                // If no config snapshot yet (GET response not arrived) — skip; the next
+                // policy pass / connect will handle it.
+                healthService?.watchHrConfig?.let { cfg ->
+                    healthService?.setHeartRateMonitoring(cfg.toBuilder().setDisabled(true).build())
+                }
+                if (status != ConnectionStatus.Disconnected) link.disconnect()
+            }
             lastKnownPresent && status == ConnectionStatus.Disconnected &&
                 hasCredentials && !userDisconnected -> connect()
             !lastKnownPresent && status != ConnectionStatus.Connected -> link.disconnect()
+        }
+        if (!suppress && !isHrWristOnly() && status == ConnectionStatus.Connected) {
+            // setting turned off while connected — restore watch defaults immediately
+            healthService?.watchHrConfig?.let { cfg ->
+                if (cfg.disabled) healthService?.setHeartRateMonitoring(cfg.toBuilder().setDisabled(false).build())
+            }
         }
     }
 
@@ -414,6 +446,13 @@ class WatchRepository(private val context: Context) {
                         activitySync?.requestPast()
                     }
                 }
+            }
+        }
+        health.onHrConfigKnown = { cfg ->
+            if (isHrWristOnly()) {
+                // Watch reported its FULL config on connect — ensure monitoring is ON,
+                // every other field (alarms, sleep detection, breathing) untouched.
+                health.setHeartRateMonitoring(cfg.toBuilder().setDisabled(false).build())
             }
         }
         healthService = health
@@ -572,13 +611,19 @@ class WatchRepository(private val context: Context) {
                         Log.i(TAG, "Saved ${samples.size} HR samples to DB")
                         // Archive raw rows older than 90 days into day-blobs (lossless).
                         val archiveCutoff = System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000
-                        if (dao.countOldHr(archiveCutoff) > 5000) {
+                        if (dao.countOldHr(archiveCutoff) > 100) {
                             val old = dao.getHeartRateBetween(0L, archiveCutoff)
                             if (old.isNotEmpty()) {
                                 val byDay = old.groupBy { it.timestamp / 86_400_000L }
                                 for ((day, rows) in byDay) {
-                                    val blob = HrCodec.compress(rows.map { HrCodec.Sample(it.timestamp, it.bpm) })
-                                    dao.insertHrArchive(HeartRateArchive(day, blob, rows.size))
+                                    // merge with the day's existing blob (watch re-sends
+                                    // already-archived history on every sync) — dedupe by ts
+                                    val raw = rows.map { HrCodec.Sample(it.timestamp, it.bpm) }
+                                    val existing = dao.getHrArchive(day)
+                                        ?.let { HrCodec.decompress(it.data) }
+                                        ?: emptyList()
+                                    val merged = HrCodec.mergeSamples(existing, raw)
+                                    dao.insertHrArchive(HeartRateArchive(day, HrCodec.compress(merged), merged.size))
                                 }
                                 dao.deleteHrRawBefore(archiveCutoff)
                             }
