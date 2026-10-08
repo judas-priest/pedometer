@@ -6,7 +6,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
@@ -16,6 +19,9 @@ import android.net.NetworkRequest
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -26,6 +32,7 @@ import com.pedometer.bt.ConnectionStatus
 import com.pedometer.bt.WatchPresenceMonitor
 import com.pedometer.health.StepCollector
 import com.pedometer.health.SupplementScheduler
+import com.pedometer.health.UserProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -72,10 +79,19 @@ class WatchConnectionService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        screenOn = getSystemService(PowerManager::class.java).isInteractive
+        ContextCompat.registerReceiver(
+            this,
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED, // системные broadc'ы доставляются и так
+        )
+        repo.onWorkoutVibrate = { vibrateTriole() }
         scope.launch {
-            repo.data.collect { data ->
-                statusText(data.connectionStatus)?.let { updateNotification(it) }
-            }
+            repo.data.collect { data -> renderNotification(data) }
         }
         stepCollector.start()
         SupplementScheduler.start(this, scope)
@@ -100,7 +116,7 @@ class WatchConnectionService : Service() {
         try {
             ServiceCompat.startForeground(
                 this, NOTIFICATION_ID,
-                buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
+                buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1),
                 foregroundTypes(),
             )
         } catch (e: SecurityException) {
@@ -110,7 +126,7 @@ class WatchConnectionService : Service() {
             try {
                 ServiceCompat.startForeground(
                     this, NOTIFICATION_ID,
-                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: SecurityException) {
@@ -122,7 +138,7 @@ class WatchConnectionService : Service() {
             try {
                 ServiceCompat.startForeground(
                     this, NOTIFICATION_ID,
-                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: IllegalArgumentException) {
@@ -186,18 +202,50 @@ class WatchConnectionService : Service() {
      * showing "Подключение..." for each attempt just makes the notification flap.
      * A hung attempt is capped by WatchLink's 30s watchdog, which lands on Disconnected.
      */
+    private var screenOn = true
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            screenOn = intent?.action == Intent.ACTION_SCREEN_ON
+            if (screenOn) renderNotification(repo.data.value) // доехать накопленное при включении
+        }
+    }
+
+    private fun renderNotification(data: com.pedometer.repo.WatchData) {
+        if (!screenOn) return // выключенный экран — шторку не дёргаем; SCREEN_ON доедет ресивером
+        val enabled = repo.isWorkoutStatusEnabled()
+        val w = data.workout
+        val ui = WorkoutStatusUi.resolve(
+            event = null,
+            sport = w?.sport ?: "",
+            paused = w?.paused ?: false,
+            connected = data.connectionStatus == com.pedometer.vm.ConnectionStatus.Connected,
+            active = w != null,
+            enabled = enabled,
+        )
+        // Текст: workout-текст или дефолт статуса линка.
+        // Транзиентные состояния (Connecting/Authenticating) НЕ постим — анти-флаттер как было.
+        val text = ui.notificationText ?: statusText(data.connectionStatus) ?: return
+        val capsuleVisible = ui.showLiveUpdate &&
+            WorkoutStatusUi.shouldShowCapsule(data.daySteps, UserProfile.load(this).stepGoal) &&
+            WorkoutStatusUi.promotionSupported() &&
+            notificationManagerCanPromote()
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, buildNotification(text, capsuleVisible, data.daySteps))
+    }
+
+    /** NotificationManager.canPostPromotedNotifications() — платформенный API 36, прямой вызов (compileSdk 36). */
+    private fun notificationManagerCanPromote(): Boolean =
+        if (Build.VERSION.SDK_INT >= 36) {
+            getSystemService(NotificationManager::class.java).canPostPromotedNotifications()
+        } else false
+
     private fun statusText(status: ConnectionStatus): String? = when (status) {
         ConnectionStatus.Connected -> "Часы подключены"
         ConnectionStatus.Disconnected -> "Часы отключены"
         ConnectionStatus.Connecting, ConnectionStatus.Authenticating -> null
     }
 
-    private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, buildNotification(text))
-    }
-
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(text: String, capsule: Boolean, daySteps: Int): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -205,14 +253,42 @@ class WatchConnectionService : Service() {
             this, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val goal = UserProfile.load(this).stepGoal
+        val b = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Шагомер")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
-            .build()
+            .setOnlyAlertOnce(true)
+        if (capsule) {
+            // Promoted ongoing (Android 16): капелька с дневным прогрессом шагов.
+            // MetricStyle — это API 37 (Android 17), на 36 его нет; ProgressStyle — штатный
+            // promoted-стиль API 36 (NotificationCompat, core 1.17).
+            val safeGoal = goal.coerceAtLeast(1)
+            b.setRequestPromotedOngoing(true)
+                .setStyle(
+                    NotificationCompat.ProgressStyle()
+                        // Compat-стиль не имеет 3-арг setProgress: max задаётся суммой сегментов.
+                        .addProgressSegment(NotificationCompat.ProgressStyle.Segment(safeGoal))
+                        .setProgress(daySteps.coerceIn(0, safeGoal))
+                        .setStyledByProgress(true),
+                )
+        }
+        return b.build()
+    }
+
+    private fun vibrateTriole() {
+        if (!repo.isWorkoutStatusEnabled()) return
+        val effect = VibrationEffect.createWaveform(WorkoutStatusUi.TRIOLE_TIMINGS, -1)
+        if (Build.VERSION.SDK_INT >= 31) {
+            val vm = getSystemService(VibratorManager::class.java)
+            vm.defaultVibrator.vibrate(effect)
+        } else {
+            @Suppress("DEPRECATION")
+            (getSystemService(VIBRATOR_SERVICE) as android.os.Vibrator).vibrate(effect)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -269,6 +345,7 @@ class WatchConnectionService : Service() {
             try { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) } catch (_: Exception) {}
         }
         wifiCallback = null
+        unregisterReceiver(screenReceiver)
         super.onDestroy()
     }
 }
