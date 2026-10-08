@@ -44,6 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -64,6 +65,7 @@ class WatchRepository(private val context: Context) {
         private const val KEY_QUIET_START = "quiet_start"
         private const val KEY_QUIET_END = "quiet_end"
         private const val KEY_WIFI_GATE = "wifi_gate_enabled"
+        private const val KEY_WORKOUT_STATUS = "workout_status_enabled"
         private const val KEY_HR_WRIST_ONLY = "hr_sensors_wrist_only"
 
         @Volatile private var INSTANCE: WatchRepository? = null
@@ -114,6 +116,10 @@ class WatchRepository(private val context: Context) {
     /** Watch-side workout in progress (status 0=started,1=resumed,2=paused,3=finished). */
     @Volatile private var watchWorkoutActive = false
 
+    /** Снимок тренировки для уведомлений — НЕ сбрасывается при обрыве связи. */
+    @Volatile private var workoutUi: WorkoutUi? = null
+    private var stepPollJob: Job? = null
+
     /** Watch asked the phone to relay GPS — a workout is live even without a watch-side status. */
     @Volatile private var gpsRelayActive = false
 
@@ -137,6 +143,11 @@ class WatchRepository(private val context: Context) {
     fun isScanSuppressed(): Boolean =
         homeWifiConnected && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_WIFI_GATE, true)
+
+    /** Мастер-выключатель статуса тренировки в уведомлении (default: on). */
+    fun isWorkoutStatusEnabled(): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_WORKOUT_STATUS, true)
     private var weatherJob: Job? = null
     private var initJob: Job? = null
     @Volatile private var lastHrSaveTime = 0L
@@ -147,6 +158,9 @@ class WatchRepository(private val context: Context) {
 
     /** Set by the ViewModel; the watch asks for phone GPS during workouts. */
     var onGpsRelayNeeded: ((Boolean) -> Unit)? = null
+
+    /** Сервис подписывается: триоль на старте/финише тренировки. null = тишина. */
+    var onWorkoutVibrate: (() -> Unit)? = null
 
     /** ViewModel relays fused-location fixes here while the watch workout requests GPS. */
     fun sendGpsLocation(lat: Double, lon: Double, alt: Double, speed: Float, bearing: Float) {
@@ -362,7 +376,7 @@ class WatchRepository(private val context: Context) {
     }
 
     private fun onLinkDropped() {
-        watchWorkoutActive = false
+        publishWorkoutState()   // пересчитает текст: «Ходьба · нет связи»
         gpsRelayActive = false
         manualOverride = false
         WatchNotificationBridge.protocolHandler = null
@@ -426,6 +440,16 @@ class WatchRepository(private val context: Context) {
         health.onWorkoutEvent = { event ->
             watchWorkoutActive = event.status != 3 // 0=started,1=resumed,2=paused,3=finished
             Log.i(TAG, "Workout event: ${event.sportName} status=${event.status}")
+            val enabled = isWorkoutStatusEnabled()
+            workoutUi = when (event.status) {
+                3 -> null
+                2 -> workoutUi?.copy(paused = true) ?: WorkoutUi(event.sportName, paused = true)
+                else -> WorkoutUi(event.sportName, paused = false)
+            }
+            publishWorkoutState()
+            if (enabled && (event.status == 0 || event.status == 3)) {
+                onWorkoutVibrate?.invoke() // триоль: старт и финиш
+            }
             applyConnectionPolicy("workout status=${event.status}")
             when (event.status) {
                 0 -> { // started
@@ -436,8 +460,10 @@ class WatchRepository(private val context: Context) {
                         title = event.sportName,
                         body = "Начата",
                     )
+                    startStepPoll()
                 }
                 3 -> { // finished
+                    stopStepPoll()
                     // Fetch activity data to get workout results + GPS track
                     scope.launch(Dispatchers.IO) {
                         delay(5000) // wait for watch to save files
@@ -672,6 +698,47 @@ class WatchRepository(private val context: Context) {
             }
         }
         notificationService = notif
+    }
+
+    /** Опубликовать текущее состояние тренировки в WatchData (сервис перерисует). */
+    private fun publishWorkoutState() {
+        _data.value = _data.value.copy(workout = workoutUi)
+    }
+
+    /** Живой поллинг дневных шагов на время тренировки; изменение публикуем, повторы — нет. */
+    private fun startStepPoll() {
+        if (stepPollJob?.isActive == true) return
+        stepPollJob = scope.launch(Dispatchers.IO) {
+            var last = -1
+            while (isActive && workoutUi != null) {
+                try {
+                    val today = com.pedometer.health.StepProviderReader.readToday(context)
+                    val steps = today?.totalSteps ?: -1
+                    if (steps != last) {
+                        last = steps
+                        _data.value = _data.value.copy(daySteps = steps)
+                    }
+                } catch (_: Exception) {
+                }
+                delay(30_000)
+            }
+        }
+    }
+
+    private fun stopStepPoll() {
+        stepPollJob?.cancel()
+        stepPollJob = null
+        _data.value = _data.value.copy(workout = null, daySteps = -1)
+    }
+
+    /** Настройки изменили флаг — перерисовать/погасить немедленно. */
+    fun onWorkoutStatusChanged() {
+        if (!isWorkoutStatusEnabled()) {
+            stopStepPoll()
+        } else if (watchWorkoutActive) {
+            startStepPoll()
+        }
+        publishWorkoutState()
     }
 
     private fun startPostAuthInit() {

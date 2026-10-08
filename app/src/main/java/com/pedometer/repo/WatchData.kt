@@ -16,6 +16,9 @@ import com.pedometer.watchface.WatchfaceInfo
  * the repository writes it to the database and bumps roomRevision, and the ViewModel
  * re-reads Room in response.
  */
+/** Снимок живой тренировки для уведомления. */
+data class WorkoutUi(val sport: String, val paused: Boolean)
+
 data class WatchData(
     val connectionStatus: ConnectionStatus = ConnectionStatus.Disconnected,
     val serialNumber: String = "",
@@ -28,6 +31,10 @@ data class WatchData(
     val heartRate: Int = 0,
     val standingHours: Int = 0,
     val activeMinutes: Int = 0,
+    /** Живая тренировка: null = нет; иначе спорт + пауза. Переживает обрыв связи. */
+    val workout: WorkoutUi? = null,
+    /** Шаги за сегодня из StepProvider (тот же источник, что кольцо); -1 = данных нет. */
+    val daySteps: Int = -1,
     val watchDistanceM: Int = 0,
     val findPhoneActive: Boolean = false,
     val watchfaces: List<WatchfaceInfo> = emptyList(),
