@@ -116,7 +116,7 @@ class WatchConnectionService : Service() {
         try {
             ServiceCompat.startForeground(
                 this, NOTIFICATION_ID,
-                buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1),
+                buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1, goal = UserProfile.load(this).stepGoal),
                 foregroundTypes(),
             )
         } catch (e: SecurityException) {
@@ -126,7 +126,7 @@ class WatchConnectionService : Service() {
             try {
                 ServiceCompat.startForeground(
                     this, NOTIFICATION_ID,
-                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1),
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1, goal = UserProfile.load(this).stepGoal),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: SecurityException) {
@@ -138,7 +138,7 @@ class WatchConnectionService : Service() {
             try {
                 ServiceCompat.startForeground(
                     this, NOTIFICATION_ID,
-                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1),
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1, goal = UserProfile.load(this).stepGoal),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: IllegalArgumentException) {
@@ -225,14 +225,14 @@ class WatchConnectionService : Service() {
         // Текст: workout-текст или дефолт статуса линка.
         // Транзиентные состояния (Connecting/Authenticating) НЕ постим — анти-флаттер как было.
         val text = ui.notificationText ?: statusText(data.connectionStatus) ?: return
+        val goal = UserProfile.load(this).stepGoal
         val capsuleVisible = ui.showLiveUpdate &&
-            WorkoutStatusUi.shouldShowCapsule(data.daySteps, UserProfile.load(this).stepGoal) &&
-            WorkoutStatusUi.promotionSupported() &&
+            WorkoutStatusUi.shouldShowCapsule(data.daySteps, goal) &&
             notificationManagerCanPromote()
         Log.d(TAG, "Render: text='$text' capsule=$capsuleVisible daySteps=${data.daySteps} " +
             "workout=${w?.sport} status=${data.connectionStatus}")
         getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, buildNotification(text, capsuleVisible, data.daySteps))
+            .notify(NOTIFICATION_ID, buildNotification(text, capsuleVisible, data.daySteps, goal))
     }
 
     /** NotificationManager.canPostPromotedNotifications() — платформенный API 36, прямой вызов (compileSdk 36). */
@@ -247,7 +247,7 @@ class WatchConnectionService : Service() {
         ConnectionStatus.Connecting, ConnectionStatus.Authenticating -> null
     }
 
-    private fun buildNotification(text: String, capsule: Boolean, daySteps: Int): Notification {
+    private fun buildNotification(text: String, capsule: Boolean, daySteps: Int, goal: Int): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -255,7 +255,6 @@ class WatchConnectionService : Service() {
             this, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val goal = UserProfile.load(this).stepGoal
         val b = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Шагомер")
             .setContentText(text)
@@ -282,7 +281,6 @@ class WatchConnectionService : Service() {
     }
 
     private fun vibrateTriole() {
-        if (!repo.isWorkoutStatusEnabled()) return
         Log.d(TAG, "Workout triole vibration")
         val effect = VibrationEffect.createWaveform(WorkoutStatusUi.TRIOLE_TIMINGS, -1)
         if (Build.VERSION.SDK_INT >= 31) {
