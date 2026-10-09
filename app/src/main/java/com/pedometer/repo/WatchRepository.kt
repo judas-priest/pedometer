@@ -488,7 +488,7 @@ class WatchRepository(private val context: Context) {
                         title = event.sportName,
                         body = "Начата",
                     )
-                    startStepPoll()
+                    if (enabled) startStepPoll()
                 }
                 3 -> { // finished
                     stopStepPoll()
@@ -500,6 +500,7 @@ class WatchRepository(private val context: Context) {
                         activitySync?.requestPast()
                     }
                 }
+                1 -> if (enabled) startStepPoll() // подключились посреди тренировки
             }
         }
         health.onHrConfigKnown = { cfg ->
