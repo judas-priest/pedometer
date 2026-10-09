@@ -19,8 +19,7 @@
 # Compose
 -dontwarn androidx.compose.**
 
-# Strip verbose/info/debug logging from release builds. Debug builds are unaffected
-# (this file is only wired into the release proguardFiles chain).
+# Logs live only in debug builds: strip Log.d/i/v from release (AOSP best practice)
 -assumenosideeffects class android.util.Log {
     public static int v(...);
     public static int d(...);
