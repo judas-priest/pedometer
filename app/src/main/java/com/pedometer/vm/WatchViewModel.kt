@@ -184,6 +184,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         repo.onGpsRelayNeeded = { needed -> if (needed) startGpsRelay() else stopGpsRelay() }
+        repo.rearmGpsRelayIfNeeded()
 
         viewModelScope.launch {
             PedometerApp.foreground.drop(1).collect { inForeground ->

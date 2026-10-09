@@ -229,6 +229,8 @@ class WatchConnectionService : Service() {
             WorkoutStatusUi.shouldShowCapsule(data.daySteps, UserProfile.load(this).stepGoal) &&
             WorkoutStatusUi.promotionSupported() &&
             notificationManagerCanPromote()
+        Log.d(TAG, "Render: text='$text' capsule=$capsuleVisible daySteps=${data.daySteps} " +
+            "workout=${w?.sport} status=${data.connectionStatus}")
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(text, capsuleVisible, data.daySteps))
     }

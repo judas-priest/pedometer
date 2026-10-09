@@ -147,6 +147,15 @@ class WatchRepository(private val context: Context) {
         homeWifiConnected && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_WIFI_GATE, true)
 
+    /**
+     * GPS-релей живёт в ViewModel и умирает с Activity (ColorOS может убить её под
+     * light-doze — 08.10 потеряли 52 минуты дорожки). Новый ViewModel перев Wiring
+     * вызывает это: если часы всё ещё просят GPS — релей перезапускается.
+     */
+    fun rearmGpsRelayIfNeeded() {
+        if (gpsRelayActive) onGpsRelayNeeded?.invoke(true)
+    }
+
     /** Мастер-выключатель статуса тренировки в уведомлении (default: on). */
     fun isWorkoutStatusEnabled(): Boolean =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
