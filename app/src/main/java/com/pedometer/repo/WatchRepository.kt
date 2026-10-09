@@ -25,6 +25,7 @@ import com.pedometer.notification.NotificationService
 import com.pedometer.notification.WatchNotificationBridge
 import com.pedometer.proto.CommandHelper
 import com.pedometer.proto.XiaomiProto
+import com.pedometer.service.WorkoutStatusUi
 import com.pedometer.util.AlarmService
 import com.pedometer.util.CalendarService
 import com.pedometer.util.ReminderService
@@ -391,6 +392,11 @@ class WatchRepository(private val context: Context) {
     }
 
     private fun onLinkDropped() {
+        // Флаг тренировки НЕ переживает обрыв: stale-true навсегда блокирует коннект-ветку
+        // policy (workoutActive -> Unit — первая ветка). UI держит workoutUi — текст
+        // «Ходьба · нет связи» публикуется независимо; офлайн-финир сверяется через
+        // (watchWorkoutActive || workoutUi != null) — вторая часть остаётся рабочей.
+        watchWorkoutActive = false
         publishWorkoutState()   // пересчитает текст: «Ходьба · нет связи»
         gpsRelayActive = false
         manualOverride = false
