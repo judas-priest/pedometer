@@ -267,6 +267,9 @@ class WatchRepository(private val context: Context) {
 
     /** Wi-Fi transport became available/unavailable (home scenario). */
     fun onHomeWifiChanged(connected: Boolean) {
+        // Ушёл из дома = собирается на прогулку: ручной дисконнект в прошлом,
+        // автоконнект должен работать (иначе wifi-off → scan → policy упирается в latch).
+        if (!connected) userDisconnected = false
         homeWifiConnected = connected
         applyConnectionPolicy("wifi=$connected")
     }
@@ -407,6 +410,10 @@ class WatchRepository(private val context: Context) {
         startPostAuthInit()
         startWeatherLoop()
         sendGpsKnock()
+        // Orphaned-reconnect guard: WatchLink's own retry loop может коннектить в обход
+        // policy (armed retry сработал уже дома). Факт коннекта — сам по себе триггер
+        // policy: если мы дома/в тихих часах — линк здесь же разрывается.
+        applyConnectionPolicy("authenticated")
     }
 
     private fun buildServices(handler: ProtocolHandler) {
