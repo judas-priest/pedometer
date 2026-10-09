@@ -311,13 +311,13 @@ class WatchRepository(private val context: Context) {
      * behave like the plain presence logic: present → connect when idle, absent → stop
      * retrying. A manual disconnect still wins over auto-reconnect.
      */
-    private fun applyConnectionPolicy(reason: String) {
+    private fun applyConnectionPolicy(reason: String, statusOverride: ConnectionStatus? = null) {
         val quiet = quietHours.isQuiet(java.time.LocalTime.now().hour)
         val wifiGate = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_WIFI_GATE, true)
         val suppress = quiet || (homeWifiConnected && wifiGate)
         val workoutActive = watchWorkoutActive || gpsRelayActive
-        val status = _data.value.connectionStatus
+        val status = statusOverride ?: _data.value.connectionStatus
         Log.i(TAG, "Policy[$reason]: quiet=$quiet wifi=$homeWifiConnected(gate=$wifiGate) " +
             "workout=$workoutActive present=$lastKnownPresent -> suppress=$suppress status=$status")
         when {
@@ -422,7 +422,7 @@ class WatchRepository(private val context: Context) {
         // Orphaned-reconnect guard: WatchLink's own retry loop может коннектить в обход
         // policy (armed retry сработал уже дома). Факт коннекта — сам по себе триггер
         // policy: если мы дома/в тихих часах — линк здесь же разрывается.
-        applyConnectionPolicy("authenticated")
+        applyConnectionPolicy("authenticated", link.status.value)
     }
 
     private fun buildServices(handler: ProtocolHandler) {
