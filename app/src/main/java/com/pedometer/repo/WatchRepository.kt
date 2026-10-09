@@ -475,8 +475,16 @@ class WatchRepository(private val context: Context) {
                 else -> WorkoutUi(event.sportName, paused = false)
             }
             publishWorkoutState()
-            if (enabled && (event.status == 0 || event.status == 3)) {
-                onWorkoutVibrate?.invoke() // триоль: старт и финиш
+            if (enabled) {
+                val resolved = WorkoutStatusUi.resolve(
+                    event = event.status,
+                    sport = event.sportName,
+                    paused = event.status == 2,
+                    connected = true,
+                    active = watchWorkoutActive,
+                    enabled = true,
+                )
+                if (resolved.vibration != null) onWorkoutVibrate?.invoke() // триоль: старт и финиш
             }
             applyConnectionPolicy("workout status=${event.status}")
             when (event.status) {
@@ -758,7 +766,8 @@ class WatchRepository(private val context: Context) {
                         last = steps
                         _data.value = _data.value.copy(daySteps = steps)
                     }
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    Log.d(TAG, "Step poll failed: ${e.message}")
                 }
                 delay(30_000)
             }
