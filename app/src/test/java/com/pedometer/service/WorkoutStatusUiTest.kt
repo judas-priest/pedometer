@@ -93,7 +93,7 @@ class WorkoutStatusUiTest {
         assertEquals("Бег", ui.notificationText)
     }
 
-    // 9. Форма триоли: три равных вибро + равные паузы, уплотнённые (2/3 обычного тика)
+    // 9. Форма триоли: три равных импульса, равные паузы, уплотнение 2/3, И ощутимость (vib >= 100мс)
     @Test
     fun `triole waveform is three equal pulses in the time of two`() {
         val t = WorkoutStatusUi.TRIOLE_TIMINGS
@@ -107,6 +107,8 @@ class WorkoutStatusUiTest {
         // уплотнение: (vib+pause) = 2/3 (TICK_VIB+TICK_PAUSE) обычного тика
         assertEquals(WorkoutStatusUi.TICK_VIB_MS + WorkoutStatusUi.TICK_PAUSE_MS,
             (vibs[0] + pauses[0]) * 3 / 2)
+        // ощутимость в кармане при ходьбе: импульс не короче 100 мс
+        assertTrue("vib ${vibs[0]}ms слишком слабый", vibs[0] >= 100L)
     }
 
     // 10. Капелька без данных шагов не показывается

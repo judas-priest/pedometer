@@ -19,15 +19,16 @@ data class WorkoutStatusUi(
 ) {
     companion object {
 
-        /** Обычный одиночный тик (для сравнения; сам не используется). */
-        const val TICK_VIB_MS = 90L
-        const val TICK_PAUSE_MS = 90L
+        /** Обычный одиночный тик (референс для уплотнения триоли). */
+        const val TICK_VIB_MS = 150L
+        const val TICK_PAUSE_MS = 150L
 
         /**
          * Триоль: три равных импульса в длительности двух обычных тиков —
-         * (vib+pause) = 2/3 (TICK_VIB+TICK_PAUSE).
+         * (vib+pause) = 2/3 (TICK_VIB+TICK_PAUSE) = 200 мс.
+         * Импульс 120 мс — ощутим в кармане при ходьбе (60 мс не чувствовались).
          */
-        val TRIOLE_TIMINGS = longArrayOf(0L, 60L, 60L, 60L, 60L, 60L)
+        val TRIOLE_TIMINGS = longArrayOf(0L, 120L, 80L, 120L, 80L, 120L)
 
         /**
          * Чистая логика (без Android, кроме констант): текст, капелька, вибро.

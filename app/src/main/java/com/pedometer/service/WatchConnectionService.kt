@@ -281,6 +281,7 @@ class WatchConnectionService : Service() {
 
     private fun vibrateTriole() {
         if (!repo.isWorkoutStatusEnabled()) return
+        Log.d(TAG, "Workout triole vibration")
         val effect = VibrationEffect.createWaveform(WorkoutStatusUi.TRIOLE_TIMINGS, -1)
         if (Build.VERSION.SDK_INT >= 31) {
             val vm = getSystemService(VibratorManager::class.java)
