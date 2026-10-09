@@ -1,13 +1,11 @@
 package com.pedometer.service
 
-import android.os.Build
-
 /**
  * Результат разрешения статуса тренировки в UI-эффекты.
  *
  * Содержит companion-объект с чистой логикой (текст, капелька, вибро).
- * NOTE: Kotlin запрещает top-level `data class` и `object` с одним именем в одном пакете
- * (JVM name clash), поэтому логика живёт в companion.
+ * NOTE: data class + companion (а не top-level object) — Kotlin запрещает top-level
+ * class и object с одним именем (redeclaration).
  */
 data class WorkoutStatusUi(
     /** Текст FGS-нотификации; null = вернуть дефолтный текст статуса линка. */
@@ -64,9 +62,6 @@ data class WorkoutStatusUi(
 
         /** Капсула показывается только с валидными данными — никаких пустых состояний. */
         fun shouldShowCapsule(daySteps: Int, goal: Int): Boolean = daySteps >= 0 && goal > 0
-
-        /** Требование платформы: promoted возможен только на API 36+. */
-        fun promotionSupported(): Boolean = Build.VERSION.SDK_INT >= 36
     }
 }
 
