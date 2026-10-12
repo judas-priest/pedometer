@@ -760,8 +760,13 @@ class WatchRepository(private val context: Context) {
             var last = -1
             while (isActive && workoutUi != null) {
                 try {
-                    val today = com.pedometer.health.StepProviderReader.readToday(context)
-                    val steps = today?.totalSteps ?: -1
+                    // Свой счётчик (minute_steps, пишется сервисом каждую минуту) —
+                    // StepProvider отдаёт null при выключенном экране (ColorOS режет
+                    // доступ из фонаря; живой лог 12.10: -1 всю прогулку, 8351 при экране on).
+                    val since = java.time.LocalDate.now()
+                        .atStartOfDay(java.time.ZoneId.systemDefault())
+                        .toInstant().toEpochMilli()
+                    val steps = dao.sumPhoneStepsSince(since)
                     if (steps != last) {
                         last = steps
                         _data.value = _data.value.copy(daySteps = steps)
