@@ -44,6 +44,10 @@ class CommandReceiver : BroadcastReceiver() {
                 Log.i(TAG, "Find watch triggered via ADB")
                 // Will be handled if someone wires it
             }
+            "com.pedometer.VIBRO" -> {
+                Log.i(TAG, "Vibro test triggered via ADB")
+                TriolePlayer.play(context)
+            }
             "com.pedometer.REFRESH" -> {
                 Log.i(TAG, "Refresh triggered via ADB")
             }

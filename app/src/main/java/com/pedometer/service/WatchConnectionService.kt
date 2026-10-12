@@ -20,8 +20,6 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -282,14 +280,7 @@ class WatchConnectionService : Service() {
 
     private fun vibrateTriole() {
         Log.d(TAG, "Workout triole vibration")
-        val effect = VibrationEffect.createWaveform(WorkoutStatusUi.TRIOLE_TIMINGS, -1)
-        if (Build.VERSION.SDK_INT >= 31) {
-            val vm = getSystemService(VibratorManager::class.java)
-            vm.defaultVibrator.vibrate(effect)
-        } else {
-            @Suppress("DEPRECATION")
-            (getSystemService(VIBRATOR_SERVICE) as android.os.Vibrator).vibrate(effect)
-        }
+        TriolePlayer.play(this)
     }
 
     private fun createNotificationChannel() {
