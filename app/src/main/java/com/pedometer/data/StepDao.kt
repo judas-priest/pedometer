@@ -37,6 +37,9 @@ interface StepDao {
     @Query("SELECT * FROM minute_steps WHERE minute >= :from AND minute < :to ORDER BY minute")
     suspend fun getMinuteStepsBetween(from: Long, to: Long): List<MinuteSteps>
 
+    @Query("SELECT COALESCE(SUM(steps), 0) FROM minute_steps WHERE minute >= :since AND source = 'phone'")
+    suspend fun sumPhoneStepsSince(since: Long): Int
+
     // Step snapshots (for reboot delta computation)
     @Insert
     suspend fun insertSnapshot(snapshot: StepSnapshot)
