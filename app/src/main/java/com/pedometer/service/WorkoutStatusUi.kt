@@ -1,17 +1,13 @@
 package com.pedometer.service
 
 /**
- * Результат разрешения статуса тренировки в UI-эффекты.
- *
- * Содержит companion-объект с чистой логикой (текст, капелька, вибро).
+ * Результат разрешения статуса тренировки в UI-эффекты (текст + вибро).
  * NOTE: data class + companion (а не top-level object) — Kotlin запрещает top-level
  * class и object с одним именем (redeclaration).
  */
 data class WorkoutStatusUi(
     /** Текст FGS-нотификации; null = вернуть дефолтный текст статуса линка. */
     val notificationText: String?,
-    /** Показывать ли promoted-капсулу (при живой тренировке и валидных данных). */
-    val showLiveUpdate: Boolean,
     /** Вибро-паттерн для этого события; null = тишина. */
     val vibration: VibrationKind?,
 ) {
@@ -29,10 +25,10 @@ data class WorkoutStatusUi(
         val TRIOLE_TIMINGS = longArrayOf(0L, 120L, 80L, 120L, 80L, 120L)
 
         /**
-         * Чистая логика (без Android, кроме констант): текст, капелька, вибро.
+         * Чистая логика (без Android, кроме констант): текст, вибро.
          *
          * event: 0 старт, 1 продолжение, 2 пауза, 3 финиш; null = живого события нет
-         * (рендер на обрыве/реконнекте/обновлении шагов).
+         * (рендер на обрыве/реконнекте).
          */
         fun resolve(
             event: Int?,
@@ -50,18 +46,15 @@ data class WorkoutStatusUi(
             }
             // Финиш — терминальное событие: дефолтный UI даже если active ещё не сбросился.
             if (!enabled || !active || event == 3) {
-                return WorkoutStatusUi(notificationText = null, showLiveUpdate = false, vibration = vibration)
+                return WorkoutStatusUi(notificationText = null, vibration = vibration)
             }
             val text = when {
                 !connected -> "$sport · нет связи"
                 paused -> "$sport · Пауза"
                 else -> sport
             }
-            return WorkoutStatusUi(notificationText = text, showLiveUpdate = true, vibration = vibration)
+            return WorkoutStatusUi(notificationText = text, vibration = vibration)
         }
-
-        /** Капсула показывается только с валидными данными — никаких пустых состояний. */
-        fun shouldShowCapsule(daySteps: Int, goal: Int): Boolean = daySteps >= 0 && goal > 0
     }
 }
 

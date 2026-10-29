@@ -1,25 +1,23 @@
 package com.pedometer.service
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * Требование: «{имя тренировки} обычно; {имя} · Пауза при паузе; {имя} · нет связи при обрыве;
- * на финише — дефолтный статус линка; триоль на старте и финише; капелька = дневные шаги к цели;
- * выключатель возвращает старое поведение».
+ * на финише — дефолтный статус линка; триоль на старте и финише; выключатель возвращает
+ * старое поведение». Капсула дневных шагов удалена из требования 2026-10-29 (requirement-change).
  */
 class WorkoutStatusUiTest {
 
     // 1. Старт, связь жива
     @Test
-    fun `start shows sport name with capsule and triole`() {
+    fun `start shows sport name with triole`() {
         val ui = WorkoutStatusUi.resolve(event = 0, sport = "Ходьба", paused = false,
             connected = true, active = true, enabled = true)
         assertEquals("Ходьба", ui.notificationText)
-        assertTrue(ui.showLiveUpdate)
         assertEquals(VibrationKind.TRIOLE, ui.vibration)
     }
 
@@ -29,7 +27,6 @@ class WorkoutStatusUiTest {
         val ui = WorkoutStatusUi.resolve(event = 1, sport = "Ходьба", paused = false,
             connected = true, active = true, enabled = true)
         assertEquals("Ходьба", ui.notificationText)
-        assertTrue(ui.showLiveUpdate)
         assertNull(ui.vibration)
     }
 
@@ -39,17 +36,15 @@ class WorkoutStatusUiTest {
         val ui = WorkoutStatusUi.resolve(event = 2, sport = "Ходьба", paused = true,
             connected = true, active = true, enabled = true)
         assertEquals("Ходьба · Пауза", ui.notificationText)
-        assertTrue(ui.showLiveUpdate)
         assertNull(ui.vibration)
     }
 
-    // 4. Финиш — дефолт, триоль
+    // 4. Финиш — дефолтный текст линка, триоль
     @Test
-    fun `finish clears text and capsule with triole`() {
+    fun `finish falls back to default with triole`() {
         val ui = WorkoutStatusUi.resolve(event = 3, sport = "Ходьба", paused = false,
             connected = true, active = false, enabled = true)
         assertNull(ui.notificationText)
-        assertFalse(ui.showLiveUpdate)
         assertEquals(VibrationKind.TRIOLE, ui.vibration)
     }
 
@@ -59,7 +54,6 @@ class WorkoutStatusUiTest {
         val ui = WorkoutStatusUi.resolve(event = null, sport = "Ходьба", paused = false,
             connected = false, active = true, enabled = true)
         assertEquals("Ходьба · нет связи", ui.notificationText)
-        assertTrue(ui.showLiveUpdate)
         assertNull(ui.vibration)
     }
 
@@ -69,7 +63,6 @@ class WorkoutStatusUiTest {
         val ui = WorkoutStatusUi.resolve(event = null, sport = "Ходьба", paused = false,
             connected = true, active = true, enabled = true)
         assertEquals("Ходьба", ui.notificationText)
-        assertTrue(ui.showLiveUpdate)
         assertNull(ui.vibration)
     }
 
@@ -80,7 +73,6 @@ class WorkoutStatusUiTest {
             val ui = WorkoutStatusUi.resolve(event, "Ходьба", paused = false,
                 connected = true, active = true, enabled = false)
             assertNull(ui.notificationText)
-            assertFalse(ui.showLiveUpdate)
             assertNull(ui.vibration)
         }
     }
@@ -111,25 +103,11 @@ class WorkoutStatusUiTest {
         assertTrue("vib ${vibs[0]}ms слишком слабый", vibs[0] >= 100L)
     }
 
-    // 10. Капелька без данных шагов не показывается
-    @Test
-    fun `capsule hidden without step data`() {
-        assertFalse(WorkoutStatusUi.shouldShowCapsule(daySteps = -1, goal = 8000))
-        assertTrue(WorkoutStatusUi.shouldShowCapsule(daySteps = 0, goal = 8000))
-    }
-
-    // 11. Кривая цель — капельки нет
-    @Test
-    fun `capsule hidden with nonpositive goal`() {
-        assertFalse(WorkoutStatusUi.shouldShowCapsule(daySteps = 5000, goal = 0))
-    }
-
-    // 12. Дубликат старта — тот же текст
+    // 10. Дубликат старта — тот же текст
     @Test
     fun `duplicate start events produce same text`() {
         val a = WorkoutStatusUi.resolve(0, "Ходьба", false, true, true, true)
         val b = WorkoutStatusUi.resolve(0, "Ходьба", false, true, true, true)
         assertEquals(a.notificationText, b.notificationText)
-        assertEquals(a.showLiveUpdate, b.showLiveUpdate)
     }
 }
