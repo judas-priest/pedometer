@@ -277,11 +277,18 @@ class WatchRepository(private val context: Context) {
 
     /** Wi-Fi transport became available/unavailable (home scenario). */
     fun onHomeWifiChanged(connected: Boolean) {
+        val wasHome = homeWifiConnected
         // Ушёл из дома = собирается на прогулку: ручной дисконнект в прошлом,
         // автоконнект должен работать (иначе wifi-off → scan → policy упирается в latch).
         if (!connected) userDisconnected = false
         homeWifiConnected = connected
         applyConnectionPolicy("wifi=$connected")
+        // Сценарий «Дома — без связи»: на выходе из дома дозваниваемся СРАЗУ, не дожидаясь
+        // BLE-отклика. Часы после домашнего teardown молчат в эфире (2026-11-05), presence-
+        // гейт никогда не срабатывает; прямой dial по MAC доходит всегда. Ретраи с backoff
+        // делает ReconnectPolicy WatchLink'а (12 попыток, 2с→5мин); connect() сам гейтится
+        // quiet/gate/workout и идемпотентен при живом линке.
+        if (wasHome && !connected) connect()
     }
 
     /** Settings changed the quiet-hours values — re-evaluate immediately. */
