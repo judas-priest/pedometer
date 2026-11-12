@@ -30,7 +30,6 @@ import com.pedometer.bt.ConnectionStatus
 import com.pedometer.bt.WatchPresenceMonitor
 import com.pedometer.health.StepCollector
 import com.pedometer.health.SupplementScheduler
-import com.pedometer.health.UserProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -114,7 +113,7 @@ class WatchConnectionService : Service() {
         try {
             ServiceCompat.startForeground(
                 this, NOTIFICATION_ID,
-                buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1, goal = UserProfile.load(this).stepGoal),
+                buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
                 foregroundTypes(),
             )
         } catch (e: SecurityException) {
@@ -124,7 +123,7 @@ class WatchConnectionService : Service() {
             try {
                 ServiceCompat.startForeground(
                     this, NOTIFICATION_ID,
-                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1, goal = UserProfile.load(this).stepGoal),
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: SecurityException) {
@@ -136,7 +135,7 @@ class WatchConnectionService : Service() {
             try {
                 ServiceCompat.startForeground(
                     this, NOTIFICATION_ID,
-                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT, capsule = false, daySteps = -1, goal = UserProfile.load(this).stepGoal),
+                    buildNotification(statusText(repo.data.value.connectionStatus) ?: DISCONNECTED_TEXT),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
             } catch (retry: IllegalArgumentException) {
@@ -223,21 +222,10 @@ class WatchConnectionService : Service() {
         // Текст: workout-текст или дефолт статуса линка.
         // Транзиентные состояния (Connecting/Authenticating) НЕ постим — анти-флаттер как было.
         val text = ui.notificationText ?: statusText(data.connectionStatus) ?: return
-        val goal = UserProfile.load(this).stepGoal
-        val capsuleVisible = ui.showLiveUpdate &&
-            WorkoutStatusUi.shouldShowCapsule(data.daySteps, goal) &&
-            notificationManagerCanPromote()
-        Log.d(TAG, "Render: text='$text' capsule=$capsuleVisible daySteps=${data.daySteps} " +
-            "workout=${w?.sport} status=${data.connectionStatus}")
+        Log.d(TAG, "Render: text='$text' workout=${w?.sport} status=${data.connectionStatus}")
         getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, buildNotification(text, capsuleVisible, data.daySteps, goal))
+            .notify(NOTIFICATION_ID, buildNotification(text))
     }
-
-    /** NotificationManager.canPostPromotedNotifications() — платформенный API 36, прямой вызов (compileSdk 36). */
-    private fun notificationManagerCanPromote(): Boolean =
-        if (Build.VERSION.SDK_INT >= 36) {
-            getSystemService(NotificationManager::class.java).canPostPromotedNotifications()
-        } else false
 
     private fun statusText(status: ConnectionStatus): String? = when (status) {
         ConnectionStatus.Connected -> "Часы подключены"
@@ -245,7 +233,7 @@ class WatchConnectionService : Service() {
         ConnectionStatus.Connecting, ConnectionStatus.Authenticating -> null
     }
 
-    private fun buildNotification(text: String, capsule: Boolean, daySteps: Int, goal: Int): Notification {
+    private fun buildNotification(text: String): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -253,7 +241,7 @@ class WatchConnectionService : Service() {
             this, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val b = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Шагомер")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
@@ -261,21 +249,7 @@ class WatchConnectionService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)
-        if (capsule) {
-            // Promoted ongoing (Android 16): капелька с дневным прогрессом шагов.
-            // MetricStyle — это API 37 (Android 17), на 36 его нет; ProgressStyle — штатный
-            // promoted-стиль API 36 (NotificationCompat, core 1.17).
-            val safeGoal = goal.coerceAtLeast(1)
-            b.setRequestPromotedOngoing(true)
-                .setStyle(
-                    NotificationCompat.ProgressStyle()
-                        // Compat-стиль не имеет 3-арг setProgress: max задаётся суммой сегментов.
-                        .addProgressSegment(NotificationCompat.ProgressStyle.Segment(safeGoal))
-                        .setProgress(daySteps.coerceIn(0, safeGoal))
-                        .setStyledByProgress(true),
-                )
-        }
-        return b.build()
+            .build()
     }
 
     private fun vibrateTriole() {

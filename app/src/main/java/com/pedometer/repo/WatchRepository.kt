@@ -45,7 +45,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -122,7 +121,6 @@ class WatchRepository(private val context: Context) {
 
     /** Момент последнего живого события старта/возобновления тренировки (wall clock). */
     @Volatile private var liveWorkoutStart = 0L
-    private var stepPollJob: Job? = null
 
     /** Watch asked the phone to relay GPS — a workout is live even without a watch-side status. */
     @Volatile private var gpsRelayActive = false
@@ -496,10 +494,8 @@ class WatchRepository(private val context: Context) {
                         title = event.sportName,
                         body = "Начата",
                     )
-                    if (enabled) startStepPoll()
                 }
                 3 -> { // finished
-                    stopStepPoll()
                     // Fetch activity data to get workout results + GPS track
                     scope.launch(Dispatchers.IO) {
                         delay(5000) // wait for watch to save files
@@ -508,7 +504,6 @@ class WatchRepository(private val context: Context) {
                         activitySync?.requestPast()
                     }
                 }
-                1 -> if (enabled) startStepPoll() // подключились посреди тренировки
             }
         }
         health.onHrConfigKnown = { cfg ->
@@ -599,13 +594,12 @@ class WatchRepository(private val context: Context) {
                 bumpRoom()
                 // Offline finish reconciliation: a workout summary means the workout ENDED.
                 // If the finish happened while the link was down, no live status-3 arrived —
-                // clear the stale flag/capsule/poller here. Recency guard: a summary whose
-                // end predates our last seen live start cannot be the live workout (e.g.
-                // history re-delivery of old files during a live workout) — skip it.
+                // clear the stale flag here. Recency guard: a summary whose end predates our
+                // last seen live start cannot be the live workout (e.g. history re-delivery of
+                // old files during a live workout) — skip it.
                 if ((watchWorkoutActive || workoutUi != null) && w.endTime >= liveWorkoutStart) {
                     watchWorkoutActive = false
                     workoutUi = null
-                    stopStepPoll()
                     publishWorkoutState()
                 }
                 calibrateStepLength(w) // reads DB + EMA profile write, best effort — outside the transaction
@@ -753,44 +747,8 @@ class WatchRepository(private val context: Context) {
         _data.value = _data.value.copy(workout = workoutUi)
     }
 
-    /** Живой поллинг дневных шагов на время тренировки; изменение публикуем, повторы — нет. */
-    private fun startStepPoll() {
-        if (stepPollJob?.isActive == true) return
-        stepPollJob = scope.launch(Dispatchers.IO) {
-            var last = -1
-            while (isActive && workoutUi != null) {
-                try {
-                    // Свой счётчик (minute_steps, пишется сервисом каждую минуту) —
-                    // StepProvider отдаёт null при выключенном экране (ColorOS режет
-                    // доступ из фонаря; живой лог 12.10: -1 всю прогулку, 8351 при экране on).
-                    val since = java.time.LocalDate.now()
-                        .atStartOfDay(java.time.ZoneId.systemDefault())
-                        .toInstant().toEpochMilli()
-                    val steps = dao.sumPhoneStepsSince(since)
-                    if (steps != last) {
-                        last = steps
-                        _data.value = _data.value.copy(daySteps = steps)
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Step poll failed: ${e.message}")
-                }
-                delay(30_000)
-            }
-        }
-    }
-
-    private fun stopStepPoll() {
-        stepPollJob?.cancel()
-        stepPollJob = null
-    }
-
     /** Настройки изменили флаг — перерисовать/погасить немедленно. */
     fun onWorkoutStatusChanged() {
-        if (!isWorkoutStatusEnabled()) {
-            stopStepPoll()
-        } else if (watchWorkoutActive) {
-            startStepPoll()
-        }
         publishWorkoutState()
     }
 

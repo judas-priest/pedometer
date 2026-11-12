@@ -380,7 +380,7 @@ fun SettingsTab(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Статус тренировки", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "Ходьба/Пауза в уведомлении, капелька с шагами дня, вибро на старт/финиш",
+                            "Ходьба/Пауза в уведомлении, вибро на старт/финиш",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

@@ -33,8 +33,6 @@ data class WatchData(
     val activeMinutes: Int = 0,
     /** Живая тренировка: null = нет; иначе спорт + пауза. Переживает обрыв связи. */
     val workout: WorkoutUi? = null,
-    /** Шаги за сегодня из StepProvider (тот же источник, что кольцо); -1 = данных нет. */
-    val daySteps: Int = -1,
     val watchDistanceM: Int = 0,
     val findPhoneActive: Boolean = false,
     val watchfaces: List<WatchfaceInfo> = emptyList(),
